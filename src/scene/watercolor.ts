@@ -834,24 +834,32 @@ export function makeDeepSoil(seed: number, W: number, H: number, u: number, band
   const rnd = new Rand(seed * 7 + 3);
   const poly: number[] = [];
   const N = 28;
-  for (let k = 0; k <= N; k++) poly.push(W * (0.02 + 0.96 * (k / N)), bandH * (0.25 + 0.05 * Math.sin(k * 1.7)));
-  for (let k = 0; k <= N; k++) {
-    const t = k / N;
-    poly.push(W * (0.985 + 0.012 * Math.sin(t * 11)), bandH * 0.3 + (H * 1.05 - bandH * 0.3) * t);
-  }
-  for (let k = N; k >= 0; k--) {
-    const t = k / N;
-    poly.push(W * (0.015 - 0.012 * Math.sin(t * 9)), bandH * 0.3 + (H * 1.05 - bandH * 0.3) * t);
-  }
+  for (let k = 0; k <= N; k++) poly.push(W * (-0.06 + 1.12 * (k / N)), bandH * (0.05 + 0.03 * Math.sin(k * 1.7)));
+  poly.push(W * 1.06, H * 1.08, W * -0.06, H * 1.08);
   const body = deform(poly, rnd, 3, 0.03);
   ctx.globalCompositeOperation = 'multiply';
-  const layers: Array<[string, number, number]> = [['#EBD8B2', 0.16, 5], ['#DEC497', 0.1, 5], ['#CFAE7C', 0.06, 4]];
+  const layers: Array<[string, number, number]> = [['#E9D3A8', 0.2, 5], ['#DCC093', 0.12, 5], ['#CDA979', 0.07, 4]];
   for (const [c, a, n] of layers) {
     ctx.fillStyle = rgba(c, a);
     for (let i = 0; i < n; i++) {
-      tracePoly(ctx, deform(xform(body, W / 2, H / 2, rnd.range(0.97, 1.01), 1, rnd.range(-0.01, 0.01) * W, 0), rnd, 2, 0.04));
+      tracePoly(ctx, deform(xform(body, W / 2, H / 2, 1, 1, rnd.range(-0.01, 0.01) * W, 0), rnd, 2, 0.02));
       ctx.fill();
     }
+  }
+  // broad wet-in-wet blooms: warmer and cooler patches across the whole field
+  for (let i = 0; i < 26; i++) {
+    const bx = rnd.range(0, 1) * W;
+    const by = bandH * 0.6 + rnd.range(0, 1) * (H - bandH * 0.6);
+    const br = rnd.range(0.05, 0.14) * W;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+    const col = rnd.chance(0.5) ? '#C79E68' : rnd.chance(0.5) ? '#B98A5C' : '#D9BE8C';
+    g.addColorStop(0, rgba(col, rnd.range(0.08, 0.16)));
+    g.addColorStop(0.7, rgba(col, rnd.range(0.03, 0.07)));
+    g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, br, br * rnd.range(0.35, 0.6), rnd.range(-0.2, 0.2), 0, Math.PI * 2);
+    ctx.fill();
   }
   // faint strata: soil layers drawn as soft wavy washes
   ctx.lineCap = 'round';
@@ -890,20 +898,12 @@ export function makeDeepSoil(seed: number, W: number, H: number, u: number, band
   ctx.globalCompositeOperation = 'destination-in';
   const vg = ctx.createLinearGradient(0, 0, 0, H);
   vg.addColorStop(0, 'rgba(0,0,0,1)');
-  vg.addColorStop(Math.min(0.9, (bandH * 1.5) / H), 'rgba(0,0,0,0.95)');
-  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.88)');
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
-  const hg = ctx.createLinearGradient(0, 0, W, 0);
-  hg.addColorStop(0, 'rgba(0,0,0,0)');
-  hg.addColorStop(0.07, 'rgba(0,0,0,1)');
-  hg.addColorStop(0.93, 'rgba(0,0,0,1)');
-  hg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = hg;
-  ctx.fillRect(0, 0, W, H);
-  // the richer root band on top
+  // the richer root band on top; drawn wider than the canvas so its rounded ends stay off-page
   ctx.globalCompositeOperation = 'multiply';
-  ctx.drawImage(makeSoilSprite(seed, W, bandH, u), 0, 0);
+  ctx.drawImage(makeSoilSprite(seed, Math.round(W * 1.3), bandH, u), -Math.round(W * 0.15), 0);
   ctx.globalCompositeOperation = 'source-over';
   return cv;
 }

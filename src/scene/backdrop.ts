@@ -44,7 +44,7 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   const d = cam.dpr;
   // soil cut-away (under the ground line, fading downward and at the ends)
   const soilH = Math.round(SOIL_DEPTH * 1.2 * cam.s * d);
-  const soilW = Math.round(Math.min(cam.cssW, WORLD.width * cam.s * 0.97) * d);
+  const soilW = Wd; // the soil fills the whole underground, edge to edge
   const gy = cam.oyGround * d;
   const soilTop = Math.round(gy - 6 * cam.s * d); // tucked under the meadow so no paper shows between them
   // the soil runs from just under the meadow to the bottom of the page
