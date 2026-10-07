@@ -189,10 +189,15 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     if (secs > GROW_S + 0.5) resolveGrown();
   };
 
+  /** motion is capped at 30 fps (with slack so 60/120 Hz displays land on every 2nd/4th refresh) */
+  const FRAME_MS = 1000 / 30 - 4;
+  let lastFrame = -Infinity;
   const frame = (now: number) => {
     raf = 0;
     if (destroyed || !visible || reduced()) return;
     raf = requestAnimationFrame(frame);
+    if (now - lastFrame < FRAME_MS) return;
+    lastFrame = now;
     draw(now);
   };
   const kick = () => {
