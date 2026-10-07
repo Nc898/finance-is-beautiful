@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Time to Grow - tree slice (Phase 1b)</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#E9E0CB; color:var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+  header { padding:14px 20px 4px; }
+  h1 { margin:0; font: italic 22px Georgia, serif; }
+  header p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+  .row { display:flex; gap:12px; padding:10px 20px; flex-wrap:wrap; align-items:flex-start; }
+  figure { margin:0; background:var(--paper); box-shadow:0 1px 4px rgba(60,40,10,.25); }
+  figcaption { padding:4px 10px 6px; font: italic 13px Georgia, serif; color:var(--muted); }
+  canvas { display:block; }
+  .controls { min-width:280px; max-width:340px; background:var(--paper); padding:14px; box-shadow:0 1px 4px rgba(60,40,10,.25); }
+  .controls label { display:block; margin:10px 0 2px; font-weight:600; font-size:12px; }
+  .controls input[type=range] { width:100%; }
+  .controls output { font-variant-numeric: tabular-nums; color:var(--muted); }
+  button { margin:6px 6px 0 0; padding:6px 10px; border:1px solid var(--ink); background:var(--shade); font:inherit; cursor:pointer; }
+  #check { font-weight:700; }
+  .pass { color:#1E7F5C; font-weight:700; } .fail { color:#B3261E; font-weight:700; }
+  pre { white-space:pre-wrap; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Time to Grow &mdash; one tree, crown-space slice</h1>
+  <p>Same scale and ground line in every panel. The crown envelope depends on m only; the seed changes internal character.</p>
+</header>
+<div class="row" id="small">
+  <figure><canvas id="p1"></canvas><figcaption>m = 0.08 &middot; sapling</figcaption></figure>
+  <figure><canvas id="p2"></canvas><figcaption>m = 0.20 &middot; young</figcaption></figure>
+  <figure><canvas id="p3"></canvas><figcaption>m = 0.45 &middot; adolescent</figcaption></figure>
+  <figure><canvas id="p4"></canvas><figcaption>m = 1.00 &middot; mature</figcaption></figure>
+</div>
+<div class="row">
+  <figure><canvas id="big"></canvas><figcaption id="bigcap">scrub panel</figcaption></figure>
+  <div class="controls">
+    <label for="mat">maturity m <output id="matOut">0.450</output></label>
+    <input id="mat" type="range" min="0" max="1" step="0.001" value="0.45" />
+    <label for="mon">monthsSincePlanting <output id="monOut">12.00</output></label>
+    <input id="mon" type="range" min="0" max="12" step="0.01" value="12" />
+    <label for="seed">seed</label>
+    <input id="seed" type="number" value="1337" style="width:100%" />
+    <label><input id="wind" type="checkbox" /> wind (decorative)</label>
+    <div>
+      <button id="check">Self-check scrub</button><span id="checkOut"></span>
+    </div>
+    <div><button id="perf">Measure render</button></div>
+    <pre id="info"></pre>
+  </div>
+</div>
+<script type="module" src="/src/slice.ts"></script>
+</body>
+</html>

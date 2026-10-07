@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="Two trees grow from the same monthly contribution but different starting ages. An illustration of how time gives compound growth room to branch." />
+<title>Time to Grow</title>
+</head>
+<body>
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two trees, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <span class="seedmark" id="seed-A" data-tree="A" aria-hidden="true"></span>
+        <span class="seedmark" id="seed-B" data-tree="B" aria-hidden="true"></span>
+
+        <div class="plate" id="plate-A" data-tree="A">
+          <p class="plate-id"><span data-mark="A"></span><span class="plate-name"></span></p>
+          <p class="plate-balance"></p>
+          <p class="plate-split"><span class="ps-a"></span><span class="ps-dot"></span><span class="ps-b"></span></p>
+        </div>
+        <div class="plate" id="plate-B" data-tree="B">
+          <p class="plate-id"><span data-mark="B"></span><span class="plate-name"></span></p>
+          <p class="plate-balance"></p>
+          <p class="plate-split"><span class="ps-a"></span><span class="ps-dot"></span><span class="ps-b"></span></p>
+        </div>
+        <div class="diff" id="diff">
+          <p class="diff-label">Difference</p>
+          <p class="diff-value" id="diff-value"></p>
+        </div>
+      </div>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title">Time to Grow</h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-replay">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Replay<span class="long"> story</span></span>
+          </button>
+          <button type="button" class="btn quiet" id="btn-skip">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Skip<span class="long"> to explore</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <section class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play story</span>
+          </button>
+
+          <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
+            <label class="speed"><input type="radio" name="speed" value="0.5" /><span>0.5×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="1" checked /><span>1×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="2" /><span>2×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="4" /><span>4×</span></label>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Age 25 y</output>
+
+          <div class="scale" id="scale">
+            <div class="scale-markers" id="scale-markers" aria-hidden="true"></div>
+            <input type="range" id="timeline" min="300" max="780" step="1" value="300" aria-label="Timeline age" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field" data-field="startAgeA">
+            <label for="f-startAgeA"><span data-mark="A"></span>Tree A starts</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease Tree A starting age">−</button>
+              <input id="f-startAgeA" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-startAgeA" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase Tree A starting age">+</button>
+            </div>
+            <p class="field-error" id="err-startAgeA" hidden></p>
+          </div>
+          <div class="field" data-field="startAgeB">
+            <label for="f-startAgeB"><span data-mark="B"></span>Tree B starts</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease Tree B starting age">−</button>
+              <input id="f-startAgeB" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-startAgeB" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase Tree B starting age">+</button>
+            </div>
+            <p class="field-error" id="err-startAgeB" hidden></p>
+          </div>
+          <div class="field" data-field="endAge">
+            <label for="f-endAge">Ends at</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease ending age">−</button>
+              <input id="f-endAge" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-endAge" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase ending age">+</button>
+            </div>
+            <p class="field-error" id="err-endAge" hidden></p>
+          </div>
+          <div class="field" data-field="monthlyContribution">
+            <label for="f-monthlyContribution">Monthly contribution ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease monthly contribution">−</button>
+              <input id="f-monthlyContribution" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-monthlyContribution" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase monthly contribution">+</button>
+            </div>
+            <p class="field-error" id="err-monthlyContribution" hidden></p>
+          </div>
+          <div class="field" data-field="annualReturn">
+            <label for="f-annualReturn">Assumed annual return (%)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease assumed annual return">−</button>
+              <input id="f-annualReturn" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-annualReturn" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase assumed annual return">+</button>
+            </div>
+            <p class="field-error" id="err-annualReturn" hidden></p>
+          </div>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: a constant hypothetical return with growth reinvested. No taxes, fees, or inflation. Actual returns vary and aren't guaranteed. Tree size illustrates growth; it isn't a literal dollar scale.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        </div>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">At <span id="how-age">age 25</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare">
+                <caption class="sr-only">Comparison of Tree A and Tree B at the current age</caption>
+                <thead>
+                  <tr><th scope="col"><span class="sr-only">Measure</span></th><th scope="col" id="th-A"><span data-mark="A"></span>Tree A</th><th scope="col" id="th-B"><span data-mark="B"></span>Tree B</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Started at</th><td data-cell="A.start"></td><td data-cell="B.start"></td></tr>
+                  <tr><th scope="row">Contributions made</th><td data-cell="A.count"></td><td data-cell="B.count"></td></tr>
+                  <tr><th scope="row">Total contributed</th><td data-cell="A.contributed"></td><td data-cell="B.contributed"></td></tr>
+                  <tr><th scope="row">Modeled growth</th><td data-cell="A.growth"></td><td data-cell="B.growth"></td></tr>
+                  <tr class="strong"><th scope="row">Balance</th><td data-cell="A.balance"></td><td data-cell="B.balance"></td></tr>
+                </tbody>
+                <tbody class="gap">
+                  <tr class="strong"><th scope="row" data-cell="gap.label">Difference</th><td colspan="2" data-cell="gap.balance"></td></tr>
+                  <tr><th scope="row">From extra contributions</th><td colspan="2" data-cell="gap.contributions"></td></tr>
+                  <tr><th scope="row">From extra modeled growth</th><td colspan="2" data-cell="gap.growth"></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <ul class="conventions">
+              <li id="conv-count"></li>
+              <li>Contributions are made at the end of each month. The monthly rate is (1 + r)<sup>1/12</sup> − 1, where r is the assumed annual return, so twelve months compound to exactly r.</li>
+              <li>The return is a constant hypothetical rate. There are no taxes, fees, or inflation, and real returns vary.</li>
+              <li>Canopy area grows roughly in proportion to balance. Both trees share one scale, which adjusts smoothly when you change inputs.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </main>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

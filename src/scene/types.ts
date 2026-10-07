@@ -1,0 +1,83 @@
+/**
+ * Scene rendering contract. Owned by the coordinator — the renderer worker
+ * implements it, the app worker consumes it. Escalate any change.
+ *
+ * The scene never computes money. It receives a maturity (0…1) per tree that the
+ * app derived from the financial state via engine/mapping.ts, and draws a
+ * deterministic tree for that maturity.
+ */
+import type { TreeId } from '../engine/types';
+
+/**
+ * World coordinates: x right, y UP, ground line at y = 0. Units are arbitrary
+ * but shared by both trees — the trees are never scaled independently.
+ */
+export const WORLD = {
+  width: 1000,
+  treeX: { A: 300, B: 700 } as Record<TreeId, number>,
+  /** Height of a maturity-1 tree from ground to canopy top. */
+  matureHeight: 560,
+  /** Max canopy width of a maturity-1 tree. */
+  matureSpread: 400,
+  /** Visible band the camera must always contain (y-up). */
+  viewTop: 640,
+  viewBottom: -150,
+} as const;
+
+export interface TreeVisualState {
+  id: TreeId;
+  planted: boolean;
+  /**
+   * Monotonic, deterministic growth parameter from the financial mapping.
+   * Same value ⇒ identical structure (branches, leaves, washes) every time.
+   */
+  maturity: number;
+  /** Months since planting (from the shared clock); drives sprout emergence in the first months. */
+  monthsSincePlanting: number;
+  /** 0…1 phase of a restrained contribution pulse travelling roots → trunk, or −1 for none. */
+  pulse: number;
+  /** Planting age, for the unplanted marker ("Plants at 35"). */
+  startAge: number;
+}
+
+export interface SceneFrame {
+  /** Wall-clock ms. Used ONLY for decorative wind; never for growth. */
+  timeMs: number;
+  trees: [TreeVisualState, TreeVisualState];
+  reducedMotion: boolean;
+  /**
+   * Optional close-detail loupe (inset magnifier) that reveals craftsmanship without
+   * moving the camera. strength 0…1 fades it in/out.
+   */
+  loupe?: { tree: TreeId; target: 'roots' | 'branches' | 'canopy'; strength: number };
+}
+
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+export interface TreeAnchors {
+  /** Base of trunk at ground line, CSS px relative to the canvas. */
+  base: ScreenPoint;
+  /** Approximate canopy top for the given maturity, CSS px. */
+  top: ScreenPoint;
+}
+
+export interface SceneAPI {
+  /** Resolves once textures and sprites are generated. */
+  ready: Promise<void>;
+  /** Call on container resize. Rebuilds cached paper/background at the new size. */
+  resize(cssWidth: number, cssHeight: number, devicePixelRatio: number): void;
+  render(frame: SceneFrame): void;
+  worldToScreen(x: number, y: number): ScreenPoint;
+  anchorsFor(id: TreeId, maturity: number): TreeAnchors;
+  destroy(): void;
+}
+
+export interface SceneOptions {
+  /** Distinct seeds give each tree its own individual character. Defaults are fixed. */
+  seeds?: Partial<Record<TreeId, number>>;
+}
+
+/** Implemented in src/scene/index.ts:  createScene(canvas: HTMLCanvasElement, opts?: SceneOptions): SceneAPI */

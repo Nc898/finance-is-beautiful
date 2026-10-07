@@ -42,3 +42,5 @@ Synthesis: ink-drawn skeleton (outline + brown wash + highlight + hatching) unde
 ## Decisions log
 - Canvas 2D single scene canvas + DOM overlay for labels/controls (crisp accessible text). Expensive watercolor clump sprites pre-rendered once into offscreen canvases; per frame only skeleton paths + drawImage.
 - Vanilla TypeScript, no UI framework: UI is small; the scene loop is the hard part.
+- Slice review 1 (art director): mechanics PASS (determinism, backward scrub), art FAIL — branch-anchored foliage made young trees look damaged (bare pole) and the mature crown tiered/conifer-like. Redirected to a crown-space foliage model (clumps in normalized dome coordinates, envelope a function of maturity only), layer order back-masses → skeleton → mid → front-lit so limbs show through gaps, crown-scale light modeling, clean (non-multiplied) warm glazes, dry-brush broken ink contours, static background layer, baked sprite atlas.
+- UI worker started in parallel with the art rework: the scene contract is stable and the UI is independent of art internals.
