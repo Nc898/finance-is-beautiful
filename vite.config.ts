@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         slice: 'slice.html',
+        sceneTest: 'scene-test.html',
       },
     },
   },

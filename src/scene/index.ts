@@ -12,7 +12,7 @@ import { TreePainter } from './treePainter';
 import { ensureSprites, type Sprites } from './sprites';
 import { applyBackdrop, fitCamera, type Camera, type Insets } from './backdrop';
 import { getModel } from './treeView';
-import { H, YB0 } from './treeModel';
+import { H } from './treeModel';
 import { clamp, smoothstep } from './prng';
 
 export { TreeView, getModel } from './treeView';
@@ -125,9 +125,12 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       lx = 0;
     } else if (l.target === 'branches') {
       // the Y-fork and scaffold limbs just under the crown
-      lx = apex.x * 0.1;
-      ly = (YB0 - 24) * mEff;
-      S = clamp(2.6 * c.s * (mEff < 0.4 ? 1.3 : 1), 2.6 * c.s, 3.6 * c.s);
+      // the fork collar + ~40 % up the scaffolds: limbs enter the first clumps, leaf marks visible
+      const mm = Math.max(mEff, 0.12);
+      const fc = painter.forkCenter(mEff);
+      lx = fc.x;
+      ly = fc.y + 34 * mEff;
+      S = clamp(d / (100 * Math.pow(mm, 0.85)), 1.3 * c.s, 9 * c.s);
     } else {
       lx = apex.x - (0.22 + 0.5 * (1 - smoothstep(mEff / 0.3))) * mEff * 0.5 * 400;
       ly = apex.y * 0.8;

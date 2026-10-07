@@ -124,6 +124,29 @@ export class TreePainter {
     return { depth, spread };
   }
 
+  /** world point framed by the 'branches' loupe: the fork collar + ~40 % up the scaffold limbs (and their first clumps) */
+  forkCenter(m: number): { x: number; y: number } {
+    const cm = crownMap(Math.max(m, 0.004), this.model.tanLean);
+    const br = this.model.branches;
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    const take = (b: Branch, s: number) => {
+      let i = 1;
+      while (i < b.n - 1 && b.cum[i]! < s) i++;
+      const wy = mapY(b.py[i]!, cm);
+      sx += b.px[i]! * cm.kx + wy * cm.tanLean;
+      sy += wy;
+      n++;
+    };
+    const trunk = br[0]!;
+    let sFork = 1e9;
+    for (const b of br) if (b.depth === 1 && b.parent === 0) sFork = Math.min(sFork, b.tAttach * trunk.len);
+    for (const b of br) if (b.depth === 1 && b.parent === 0 && b.tAttach * trunk.len < sFork + 10) take(b, 20);
+    take(trunk, sFork + 20);
+    return { x: sx / n, y: sy / n };
+  }
+
   /** screen-space crown apex (for anchorsFor): world coordinates of the crown top at maturity m */
   apexWorld(m: number): { x: number; y: number } {
     const cm = crownMap(Math.max(m, 0.004), this.model.tanLean);
@@ -159,7 +182,7 @@ export class TreePainter {
     const lv = g * b.len;
     let k = 0;
     const X = this.X, Y = this.Y, R = this.R, IM = this.IM;
-    const rs = Math.pow(cm.m, 0.9) * kappa;
+    const rs = Math.pow(cm.m, 0.9) * kappa * (b.depth <= 1 && !b.isRoot ? 1 + 0.35 * smoothstep((cm.m - 0.22) / 0.78) : 1);
     const tl = Math.min(15, lv * 0.55);
     const step = b.n > 20 ? 2 : 1;
     this.step = step;
@@ -232,19 +255,24 @@ export class TreePainter {
       // layered watercolor wash (no hard gradient seams): sienna base, tan on the lit side, umber -> violet-brown on the shadow side
       ctx.fillStyle = this.baseCol[bi]!;
       ctx.fill(sil);
-      ctx.fillStyle = 'rgba(230,196,140,0.13)';
-      for (const f of [0.82, 0.62, 0.42, 0.22, 0.02]) ctx.fill(this.band(b, k, litS, 0.98, f, 0.07));
-      ctx.fillStyle = 'rgba(86,52,40,0.13)';
-      for (const f of [0.0, -0.2, -0.4, -0.58, -0.76]) ctx.fill(this.band(b, k, litS, -0.98, f, 0.07));
-      ctx.fillStyle = 'rgba(66,46,78,0.14)';
-      for (const f of [-0.5, -0.7]) ctx.fill(this.band(b, k, litS, -0.98, f, 0.06));
+      const trunkClass = rMax > 6;
+      ctx.fillStyle = trunkClass ? 'rgba(230,196,140,0.13)' : 'rgba(230,196,140,0.2)';
+      for (const f of trunkClass ? [0.82, 0.62, 0.42, 0.22, 0.02] : [0.7, 0.3]) ctx.fill(this.band(b, k, litS, 0.98, f, 0.07));
+      ctx.fillStyle = trunkClass ? 'rgba(86,52,40,0.13)' : 'rgba(86,52,40,0.2)';
+      for (const f of trunkClass ? [0.0, -0.2, -0.4, -0.58, -0.76] : [-0.05, -0.4, -0.7]) ctx.fill(this.band(b, k, litS, -0.98, f, 0.07));
+      if (trunkClass) {
+        ctx.fillStyle = 'rgba(66,46,78,0.14)';
+        for (const f of [-0.5, -0.7]) ctx.fill(this.band(b, k, litS, -0.98, f, 0.06));
+      }
       // granulation / striated paper-tooth texture
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = barkPattern(ctx);
-      ctx.fill(sil);
-      ctx.restore();
+      if (rMax > 4.5) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = barkPattern(ctx);
+        ctx.fill(sil);
+        ctx.restore();
+      }
       // wet edge: darker contour pooled on the shadow side
       ctx.strokeStyle = 'rgba(58,34,36,0.32)';
       ctx.lineWidth = Math.max(0.8, rMax * 0.12);
@@ -310,7 +338,8 @@ export class TreePainter {
         const ii = Math.floor((b.hatch[5 * h]! * (b.n - 1)) / this.step);
         if (ii >= k - 1 || ii < 0) continue;
         const off = b.hatch[5 * h + 1]!;
-        const ln = b.hatch[5 * h + 2]! * v.s;
+        if (R[ii]! < 2.2) continue; // thin parts of a long chain carry no bark marks
+        const ln = Math.min(b.hatch[5 * h + 2]! * v.s, R[ii]! * 5);
         const ang = b.hatch[5 * h + 3]!;
         const cx = X[ii]! - NX[ii]! * R[ii]! * litS * off * 0.9;
         const cy = Y[ii]! - NY[ii]! * R[ii]! * litS * off * 0.9;
@@ -444,7 +473,7 @@ export class TreePainter {
       if (b.isRoot) continue;
       const g = st.g[b.idx]!;
       if (g <= 0.0005) continue;
-      if (b.rad[0]! * Math.pow(cm.m, 0.9) * st.kappa[b.idx]! * v.s >= 1.6) continue;
+      if (b.rad[0]! * Math.pow(cm.m, 0.9) * st.kappa[b.idx]! * (b.depth <= 1 ? 1 + 0.35 * smoothstep((cm.m - 0.22) / 0.78) : 1) * v.s >= 1.6) continue;
       const k = this.prep(b, g, st.kappa[b.idx]!, v, g >= 0.999);
       if (k < 2 || this.outside(k)) continue;
       for (let i = 0; i < k; i++) {
@@ -464,7 +493,7 @@ export class TreePainter {
     for (let oi = 0; oi < this.order.length; oi++) {
       const b = br[this.order[oi]!]!;
       if (!b.isRoot) continue;
-      const g = st.g[b.idx]!;
+      const g = st.g[b.idx]! * smoothstep((mEff - 0.09) / 0.14);
       if (g <= 0.0005) continue;
       const k = this.prep(b, g, st.kappa[b.idx]!, v, g >= 0.999);
       if (k < 2 || this.outside(k)) continue;
@@ -488,7 +517,7 @@ export class TreePainter {
       if (b.isRoot) continue;
       const g = st.g[b.idx]!;
       if (g <= 0.0005) continue;
-      if (b.rad[0]! * Math.pow(cm.m, 0.9) * st.kappa[b.idx]! * v.s < 1.6) continue;
+      if (b.rad[0]! * Math.pow(cm.m, 0.9) * st.kappa[b.idx]! * (b.depth <= 1 ? 1 + 0.35 * smoothstep((cm.m - 0.22) / 0.78) : 1) * v.s < 1.6) continue;
       const k = this.prep(b, g, st.kappa[b.idx]!, v, g >= 0.999);
       if (k < 2 || this.outside(k)) continue;
       this.drawRibbon(ctx, b, k, -b.lightSign, v);
@@ -523,8 +552,16 @@ export class TreePainter {
     const roots = this.model.roots;
     const st = this.state;
     const rs = Math.pow(Math.max(m, 0.02), 0.78);
+    // roots are static for a given (maturity, view): reuse the built paths (two slots: scene + loupe)
+    const key = `${m}|${v.ox}|${v.oy}|${v.s}`;
+    let hit = this.rootCache.find((c) => c.key === key);
+    if (hit) {
+      this.strokeRoots(ctx, v, hit);
+      return;
+    }
     const fill = new Path2D();
     const line = new Path2D();
+    const fine = new Path2D();
     const edge = new Path2D();
     let any = false;
     for (let ri = 0; ri < roots.length; ri++) {
@@ -582,21 +619,37 @@ export class TreePainter {
           else edge.lineTo(x, y);
         }
       }
+      const tgt = r.depth === 0 ? line : fine;
       for (let i = 0; i < k; i++) {
-        if (i === 0) line.moveTo(RX[i]!, RY[i]!);
-        else line.lineTo(RX[i]!, RY[i]!);
+        if (i === 0) tgt.moveTo(RX[i]!, RY[i]!);
+        else tgt.lineTo(RX[i]!, RY[i]!);
       }
     }
-    if (!any) return;
-    ctx.fillStyle = 'rgba(128,92,60,0.62)';
+    hit = { key, any, fill, line, fine, edge };
+    this.rootCache.unshift(hit);
+    if (this.rootCache.length > 3) this.rootCache.pop();
+    this.strokeRoots(ctx, v, hit);
+  }
+
+  private rootCache: Array<{ key: string; any: boolean; fill: Path2D; line: Path2D; fine: Path2D; edge: Path2D }> = [];
+  private strokeRoots(ctx: CanvasRenderingContext2D, v: View, c: { any: boolean; fill: Path2D; line: Path2D; fine: Path2D; edge: Path2D }): void {
+    if (!c.any) return;
+    const { fill, line, fine, edge } = c;
+    ctx.fillStyle = 'rgba(146,112,78,0.3)';
     ctx.fill(fill);
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(70,46,32,0.5)';
-    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = 'rgba(96,66,46,0.2)';
+    ctx.lineWidth = 0.6;
     ctx.stroke(edge);
-    ctx.strokeStyle = 'rgba(47,42,34,0.55)';
-    ctx.lineWidth = 0.5;
+    const zoomK = Math.max(1, v.s / 1.2);
+    ctx.strokeStyle = zoomK > 2 ? 'rgba(70,52,36,0.55)' : 'rgba(70,52,36,0.34)';
+    ctx.lineWidth = Math.min(1.8, 0.5 * Math.sqrt(zoomK));
+    ctx.setLineDash(zoomK > 2 ? [] : [9, 4, 3, 5]);
     ctx.stroke(line);
+    ctx.setLineDash([]);
+    ctx.strokeStyle = zoomK > 2 ? 'rgba(100,74,50,0.6)' : 'rgba(118,90,62,0.42)';
+    ctx.lineWidth = Math.min(1.4, 0.45 * Math.sqrt(zoomK));
+    ctx.stroke(fine);
   }
 
   /** Luminous golden droplet travelling from the pulse root's tip to the trunk base, fading as it enters. */
@@ -613,7 +666,7 @@ export class TreePainter {
     const x = v.ox + wx * v.s;
     const y = v.oy - wy * v.s;
     const fade = pulse > 0.85 ? clamp((1 - pulse) / 0.15, 0, 1) : 1;
-    const rad = Math.min(6, 4.6 + 2 * Math.min(1, m * 3)) * v.s;
+    const rad = Math.max(3.4, Math.min(6, 4.6 + 2 * Math.min(1, m * 3)) * v.s);
     const gr = ctx.createRadialGradient(x, y, 0, x, y, rad);
     gr.addColorStop(0, `rgba(255,236,160,${0.95 * fade})`);
     gr.addColorStop(0.35, `rgba(244,190,60,${0.55 * fade})`);
@@ -624,7 +677,7 @@ export class TreePainter {
     ctx.fill();
     ctx.fillStyle = `rgba(255,248,214,${0.9 * fade})`;
     ctx.beginPath();
-    ctx.arc(x, y, Math.max(1, rad * 0.32), 0, Math.PI * 2);
+    ctx.arc(x, y, Math.max(1.1, rad * 0.3), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -751,7 +804,7 @@ export class TreePainter {
     const mt = clamp(p.months, 0, 12);
     const mound = 1 - 0.8 * smoothstep((mEff - 0.1) / 0.35);
     if (mound > 0.01) {
-      const w = (28 + 10 * smoothstep(mt / 2)) * (1 + 0.5 * smoothstep((mEff - 0.05) / 0.4));
+      const w = (16 + 8 * smoothstep(mt / 2)) * (1 + 0.8 * smoothstep((mEff - 0.05) / 0.4));
       const h = w * 0.4 * (1 + 0.28 * (1 - plantK));
       ctx.globalAlpha = mound;
       const s = sp.mound;

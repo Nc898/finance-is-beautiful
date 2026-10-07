@@ -229,7 +229,8 @@ export function domeHalf(v: number, u = 0): number {
 /** the lower crown edge lifts in places so limbs show underneath (ref 6) */
 function lowerLift(u: number): number {
   const s = (1 + Math.sin(4.6 * u + liftPhase)) / 2;
-  return 0.2 * Math.pow(s, 1.6) * (0.4 + 0.6 * Math.abs(u));
+  const fork = 0.095 * Math.exp(-Math.pow(u / 0.5, 2));
+  return Math.max(0.2 * Math.pow(s, 1.6) * (0.4 + 0.6 * Math.abs(u)), fork);
 }
 
 const LIGHT_X = -0.55;
@@ -251,15 +252,16 @@ export function generateTree(seed: number): TreeModel {
 
   // ------------------------------------------------------------------ gaps (limbs read through)
   const gaps: Array<{ x: number; y: number; r: number; x2: number; y2: number; r2: number }> = [];
-  for (let i = 0; i < 5; i++) {
+  // interior holes were removed: a limb glimpsed through a hole read as a torn fragment (audit across seeds)
+  for (let i = 0; i < 0; i++) {
     for (let t = 0; t < 60; t++) {
-      const u = rnd.range(-0.55, 0.55);
+      const u = rnd.range(-0.5, 0.5);
       const v = rnd.range(0.3, 0.7);
       if (Math.abs(u) > domeHalf(v, u) * 0.6) continue; // interior only: never a bite out of the silhouette
       const gx = u * SXD;
       const gy = YB0 + v * SYD;
       if (gaps.every((g) => Math.hypot(g.x - gx, g.y - gy) > 105)) {
-        const r = rnd.range(15, 22);
+        const r = rnd.range(11, 16);
         const a = rnd.range(0, 6.28);
         gaps.push({ x: gx, y: gy, r, x2: gx + Math.cos(a) * r * 1.1, y2: gy + Math.sin(a) * r * 0.9, r2: r * rnd.range(0.55, 0.8) });
         break;
@@ -357,7 +359,6 @@ export function generateTree(seed: number): TreeModel {
   // ------------------------------------------------------------------ anchors for the skeleton
   const A: Pt[] = [];
   for (const c of clumps) if (!c.mass) A.push({ x: c.x0, y: c.y0 });
-  for (const g of gaps) A.push({ x: g.x + rnd.range(-g.r * 0.5, g.r * 0.5), y: g.y + rnd.range(-g.r * 0.5, g.r * 0.5) });
   for (let k = 0; k < 18; k++) {
     const c = sampleDome();
     A.push({ x: c.u * SXD * 0.75, y: YB0 + c.v * SYD * 0.8 + 8 });
@@ -656,7 +657,7 @@ export function generateTree(seed: number): TreeModel {
   };
 
   // trunk (limb 0): gentle S-curve up to the fork just below the crown base
-  const trunkTop = YB0 - 42;
+  const trunkTop = YB0 - 48;
   const wob = rnd.range(0, 6.28);
   const wobA = rnd.range(7, 13);
   const tx: number[] = [];
@@ -872,18 +873,19 @@ export function generateTree(seed: number): TreeModel {
     for (let i = 1; i < n; i++) cum[i] = cum[i - 1]! + Math.hypot(px[i]! - px[i - 1]!, py[i]! - py[i - 1]!);
     const len = cum[n - 1]!;
     const rad = new Float32Array(n);
-    for (let i = 0; i < n; i++) rad[i] = Math.max(0.3, r0 * Math.pow(1 - cum[i]! / Math.max(1, len), 0.9) + 0.3);
+    for (let i = 0; i < n; i++) rad[i] = Math.max(0.28, r0 * Math.pow(1 - cum[i]! / Math.max(1, len), 1.5) + 0.28);
     roots.push({ n, px, py, cum, len, rad, birth, end: Math.min(1, birth + span), depth, parent });
     return roots.length - 1;
   };
-  const growRoot = (x0: number, y0: number, th0: number, L: number, r0: number, depth: number, parent: number, birth: number, span: number): number => {
+  const growRoot = (x0: number, y0: number, th0: number, L: number, r0: number, depth: number, parent: number, birth: number, span: number, maxDepth = 3): number => {
     const xs = [x0];
     const ys = [y0];
     let th = th0;
     const n = Math.max(3, Math.ceil(L / 5));
     const k0 = rnd.gauss() * 0.01;
     for (let i = 1; i <= n; i++) {
-      th += k0 + rnd.gauss() * 0.06 + 0.035 * Math.sin(i * 0.45 + depth + L * 0.1);
+      th += k0 + rnd.gauss() * 0.05 + 0.05 * Math.sin(i * 0.33 + depth * 1.7 + L * 0.1);
+      if (Math.abs(xs[xs.length - 1]!) > 138) th += (xs[xs.length - 1]! > 0 ? 1 : -1) * (Math.cos(th) * (xs[xs.length - 1]! > 0 ? 1 : -1) > 0 ? 0.35 : 0);
       const yc = ys[ys.length - 1]!;
       if (yc < -SOIL_DEPTH * 0.42) {
         // deep: relax toward horizontal so roots spread inside the soil band
@@ -894,11 +896,12 @@ export function generateTree(seed: number): TreeModel {
       }
       xs.push(xs[xs.length - 1]! + Math.cos(th) * 5);
       ys.push(Math.min(-1.5, Math.max(-SOIL_DEPTH * 0.9, ys[ys.length - 1]! + Math.sin(th) * 5)));
+      if (Math.abs(xs[xs.length - 1]!) > 146) break;
     }
     const me = packRoot(xs, ys, r0, depth, parent, birth, span);
     const R = roots[me]!;
-    if (depth < 3) {
-      const nk = depth === 0 ? rnd.int(1, 3) : depth === 1 ? rnd.int(1, 2) : rnd.int(0, 1);
+    if (depth < maxDepth) {
+      const nk = depth === 0 ? rnd.int(1, 2) : depth === 1 ? rnd.int(0, 2) : rnd.int(0, 1);
       let prevT = 0.15;
       for (let k = 0; k < nk; k++) {
         const t = clamp(prevT + rnd.range(0.12, 0.28), 0.2, 0.88);
@@ -908,21 +911,66 @@ export function generateTree(seed: number): TreeModel {
         const side = rnd.sign();
         const ang = tt + side * rnd.range(0.45, 0.95);
         const cl = L * rnd.range(0.32, 0.55) * (1 - t * 0.4);
-        const b2 = depth === 0 ? rnd.range(0.2, 0.45) : rnd.range(0.4, 0.7);
-        growRoot(R.px[j]!, R.py[j]!, ang, Math.max(18, cl), r0 * rnd.range(0.3, 0.5), depth + 1, me, Math.min(0.75, b2 + t * 0.15), depth === 0 ? 0.3 : 0.25);
+        let lo = 0;
+        let hi = 1;
+        for (let q = 0; q < 18; q++) {
+          const mid = (lo + hi) / 2;
+          if (smoothstep(mid) < t) lo = mid;
+          else hi = mid;
+        }
+        const cb = birth + span * ((lo + hi) / 2) + rnd.range(0.004, 0.03);
+        growRoot(R.px[j]!, R.py[j]!, ang, Math.max(18, cl), r0 * rnd.range(0.3, 0.5), depth + 1, me, Math.min(0.85, cb), depth === 0 ? 0.3 : 0.25);
+      }
+    }
+    if (depth >= 1 && depth < 4 && (depth >= 2 || rnd.chance(0.6))) {
+      // fine fibrous hair-roots at the tip
+      const nh = rnd.int(2, 3);
+      const last = R.n - 1;
+      const tt = Math.atan2(R.py[last]! - R.py[last - 1]!, R.px[last]! - R.px[last - 1]!);
+      for (let h = 0; h < nh; h++) {
+        const hx = [R.px[last]!];
+        const hy = [R.py[last]!];
+        let a = tt + rnd.range(-0.9, 0.9);
+        const hl = rnd.range(7, 16);
+        for (let q = 1; q <= 3; q++) {
+          a += rnd.gauss() * 0.28;
+          hx.push(hx[q - 1]! + Math.cos(a) * (hl / 3));
+          hy.push(Math.min(-1.5, Math.max(-SOIL_DEPTH * 0.92, hy[q - 1]! + Math.sin(a) * (hl / 3))));
+        }
+        packRoot(hx, hy, 0.45, 4, me, Math.min(0.93, birth + span - 0.01), 0.16);
       }
     }
     return me;
   };
+  // seedling threads: a taproot and 3 fine laterals, all BELOW the soil line (nothing radiates above ground)
+  const tap = growRoot(0, -2, -Math.PI / 2 + rnd.range(-0.12, 0.12), 52, 2.4, 0, -1, 0, 0.12, 0);
+  {
+    const R = roots[tap]!;
+    const ts = [0.2, 0.34, 0.48];
+    for (let k = 0; k < ts.length; k++) {
+      const j = Math.min(R.n - 2, Math.round(ts[k]! * (R.n - 1)));
+      const sd = k % 2 === 0 ? 1 : -1;
+      const tq = ts[k]!;
+      let lo = 0;
+      let hi = 1;
+      for (let q = 0; q < 18; q++) {
+        const mid = (lo + hi) / 2;
+        if (smoothstep(mid) < tq) lo = mid;
+        else hi = mid;
+      }
+      growRoot(R.px[j]!, R.py[j]!, -Math.PI / 2 + sd * rnd.range(1.0, 1.25), rnd.range(30, 48), 1.1, 1, tap, 0.12 * ((lo + hi) / 2) + 0.004 + k * 0.006, 0.09, 1);
+    }
+  }
   const nMain = 6;
   let pulseRoot = 0;
   let pulseLen = 0;
   for (let k = 0; k < nMain; k++) {
     const sd = k % 2 === 0 ? 1 : -1;
-    const down = rnd.range(0.1, 0.42);
+    const bin = Math.floor(k / 2); // 0..2: distinct descent bands per side -> few crossings
+    const down = 0.1 + bin * 0.16 + rnd.range(0, 0.07);
     const th = sd > 0 ? -down : -Math.PI + down;
-    const L = rnd.range(120, 190);
-    const me = growRoot(sd * rnd.range(2, 6), -3, th, L, rnd.range(4.4, 6), 0, -1, rnd.range(0, 0.04), 0.9);
+    const L = rnd.range(95, 140);
+    const me = growRoot(sd * rnd.range(3, 6), -3, th, L, rnd.range(3.8, 5), 0, -1, rnd.range(0.12, 0.22), 0.8);
     if (roots[me]!.len > pulseLen) {
       pulseLen = roots[me]!.len;
       pulseRoot = me;
