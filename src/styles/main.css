@@ -82,8 +82,10 @@ input {
 }
 
 .stage {
+  container: stage / inline-size;
   position: relative;
-  height: max(440px, calc(100svh - var(--dock-h, 300px)));
+  height: 100svh;
+  min-height: 420px;
   overflow: hidden;
   background: var(--paper);
 }
@@ -387,17 +389,112 @@ input {
 
 /* ---------- Dock ---------- */
 
+/* Side panel: fixed to the right edge, slides out of view when collapsed. On wide screens the
+   stage makes room for it; on narrow screens it overlays the scene. */
+:root {
+  --panel-w: 372px;
+}
+
 .dock {
-  border-top: 1px solid var(--rule);
+  container: dock / inline-size;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(var(--panel-w), 92vw);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--rule);
   background: var(--paper);
-  padding: 12px var(--gutter) 14px;
+  padding: 18px 20px 20px;
+  transform: translateX(0);
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 0s;
+}
+
+.app:not(.panel-open) .dock {
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 260ms;
+}
+
+/* Wide screens: the camera always reserves the panel's width, so opening the panel only slides the scene
+   left by half of it (a compositor transform, no re-layout or repaint). */
+@media (min-width: 900px) {
+  #scene,
+  .overlay {
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .caption {
+    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 340px));
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .story-actions {
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .app.panel-open #scene,
+  .app.panel-open .overlay {
+    transform: translateX(calc(var(--panel-w) / -2));
+  }
+
+  .app.panel-open .caption {
+    transform: translateX(calc(-50% - var(--panel-w) / 2));
+  }
+
+  .app.panel-open .story-actions {
+    transform: translateX(calc(var(--panel-w) * -1));
+  }
 }
 
 .dock-inner {
-  max-width: 1180px;
-  margin: 0 auto;
   display: grid;
-  gap: 8px;
+  gap: 14px;
+}
+
+.panel-toggle {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 21;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 64px;
+  margin-top: -32px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: right 260ms cubic-bezier(0.2, 0.7, 0.2, 1), background-color 150ms;
+}
+
+.panel-toggle:hover {
+  background: rgba(30, 127, 92, 0.08);
+}
+
+.panel-toggle .ico {
+  width: 20px;
+  height: 20px;
+  transform: rotate(180deg);
+  transition: transform 260ms;
+}
+
+.app.panel-open .panel-toggle {
+  right: min(var(--panel-w), 92vw);
+}
+
+.app.panel-open .panel-toggle .ico {
+  transform: none;
+}
+
+.panel-toggle.hl {
+  animation: soft-wash 1.5s ease-out 2;
 }
 
 .dock.hl .transport,
@@ -871,7 +968,7 @@ input {
 }
 
 /* Mid-width desktops: shorter header buttons so the caption keeps one line per paragraph. */
-@media (min-width: 1180px) and (max-width: 1520px) {
+@container stage (min-width: 1000px) and (max-width: 1520px) {
   .story-actions .long {
     position: absolute;
     width: 1px;
@@ -881,35 +978,78 @@ input {
     white-space: nowrap;
   }
   .caption {
-    width: min(880px, calc(100% - 2 * var(--gutter) - 400px));
+    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 340px));
   }
 }
 
 /* Wide screens: the caption shares the masthead row, clear of the canopy. */
-@media (min-width: 1180px) {
+@container stage (min-width: 1000px) {
   .caption {
     top: 10px;
   }
 }
 
-@media (min-width: 1521px) {
+@container stage (min-width: 1521px) {
   .caption {
-    width: min(880px, calc(100% - 2 * var(--gutter) - 560px));
+    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 400px));
   }
 }
 
 /* ---------- Narrow screens ---------- */
 
-@media (max-width: 899px) {
+@container dock (max-width: 699px) {
   .transport {
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
   }
+
+  .transport .btn.play {
+    justify-self: start;
+  }
+
+  .age-readout {
+    justify-self: end;
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    min-width: 0;
+  }
+
+  .speeds {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: space-between;
+  }
+
+  .speed {
+    flex: 1;
+  }
+
+  .speed span {
+    width: 100%;
+  }
+
   .scale {
     grid-column: 1 / -1;
+    grid-row: 3;
   }
+
   .inputs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+  }
+
+  .field[data-field='annualReturn'] {
+    grid-column: 1 / -1;
+  }
+
+  .foot {
+    grid-template-columns: 1fr;
+    row-gap: 6px;
+  }
+
+  .how[open] {
+    grid-row: auto;
   }
 }
 
@@ -919,7 +1059,6 @@ input {
   }
 
   .stage {
-    height: 58svh;
     min-height: 380px;
   }
 
@@ -959,64 +1098,17 @@ input {
   }
 
   .dock {
-    padding-top: 8px;
+    padding: 14px 16px 18px;
+    box-shadow: -12px 0 32px rgba(47, 42, 34, 0.12);
   }
 
-  .dock-inner {
-    gap: 6px;
-  }
-
-  .transport {
-    grid-template-columns: 1fr 1fr;
-    row-gap: 2px;
-  }
-
-  .transport .btn.play {
-    justify-self: start;
-  }
-
-  .age-readout {
-    justify-self: end;
-    grid-column: 2;
-    grid-row: 1;
-    text-align: right;
-    min-width: 0;
-  }
-
-  .speeds {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-content: space-between;
-  }
-
-  .speed {
-    flex: 1;
-  }
-
-  .speed span {
-    width: 100%;
-  }
-
-  .scale {
-    grid-row: 3;
-  }
-
-  .inputs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px 14px;
-  }
-
-  .field[data-field='annualReturn'] {
-    grid-column: 1 / -1;
-  }
-
-  .foot {
-    grid-template-columns: 1fr;
-    row-gap: 0;
-  }
-
-  .how[open] {
-    grid-row: auto;
+  /* Below the specimen labels, clear of the crowns. */
+  .panel-toggle {
+    top: auto;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    margin-top: 0;
+    width: 44px;
+    height: 56px;
   }
 
   .plate-id {

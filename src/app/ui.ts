@@ -26,7 +26,7 @@ export interface UIHooks {
   /** Screen-space base points of both trees, from scene.anchorsFor(id, 0).base. */
   getBases(): Record<TreeId, Point>;
   /** Reserve stable bands at the top (header + caption) and bottom (plates + difference). Optional until the scene supports it. */
-  setInsets?(insets: { top: number; bottom: number }): void;
+  setInsets?(insets: { top: number; bottom: number; side: number }): void;
 }
 
 export interface UI {
@@ -248,7 +248,13 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const ghostCap = $('cap-ghost');
   const ghostPlate = $('plate-ghost');
   const BEATS: StoryBeat[] = ['planting', 'contribute', 'bBegins', 'reinvest', 'difference', 'handoff'];
-  let lastInsets = { top: -1, bottom: -1 };
+  let lastInsets = { top: -1, bottom: -1, side: -1 };
+
+  /** Wide screens reserve the side panel's width whether it is open or not, so toggling it only slides the scene. */
+  function sideReserve(): number {
+    if (stageW < 900) return 0;
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+  }
 
   /** Tallest caption this scenario can produce, at the current width (measured in a hidden twin). */
   function tallestCaption(): number {
@@ -269,9 +275,10 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     const top = Math.ceil(Math.max(masthead + 4, capTop + tallestCaption() + 4));
     const band = WORLD.viewTop - WORLD.viewBottom;
     const dh = diffEl.offsetHeight || 44;
+    const side = sideReserve();
     let bottom = 8;
     for (let i = 0; i < 3; i++) {
-      const s = Math.min(stageW / WORLD.width, Math.max(1, stageH - top - bottom) / band);
+      const s = Math.min((stageW - side) / WORLD.fitWidth, Math.max(1, stageH - top - bottom) / band);
       const spacing = (WORLD.treeX.B - WORLD.treeX.A) * s;
       const { plateW, columns } = plateGeometry(spacing);
       stage.style.setProperty('--plate-w', plateW + 'px');
@@ -280,9 +287,9 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       const sameRow = !columns;
       bottom = Math.ceil(Math.max(8, 6 + ph + (sameRow ? 0 : dh + 6) + 8 - (columns ? 0 : SOIL_OVERLAP * s)));
     }
-    if (top !== lastInsets.top || bottom !== lastInsets.bottom) {
-      lastInsets = { top, bottom };
-      hooks.setInsets?.({ top, bottom });
+    if (top !== lastInsets.top || bottom !== lastInsets.bottom || side !== lastInsets.side) {
+      lastInsets = { top, bottom, side };
+      hooks.setInsets?.({ top, bottom, side });
     }
   }
 
@@ -577,11 +584,37 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   }
 
   function highlight(): void {
-    dock.classList.remove('hl');
-    void dock.offsetWidth;
-    dock.classList.add('hl');
-    window.setTimeout(() => dock.classList.remove('hl'), HIGHLIGHT_MS);
+    // Draw the eye to the controls, or to the toggle that reveals them when the panel is closed.
+    const el = panelOpen() ? dock : panelToggle;
+    el.classList.remove('hl');
+    void el.offsetWidth;
+    el.classList.add('hl');
+    window.setTimeout(() => el.classList.remove('hl'), HIGHLIGHT_MS * 2);
   }
+
+  /* ---------------- side panel ---------------- */
+
+  const appEl = $('app');
+  const panelToggle = $<HTMLButtonElement>('panel-toggle');
+  const panelToggleLabel = $('panel-toggle-label');
+  const wide = window.matchMedia('(min-width: 900px)');
+  const panelOpen = () => appEl.classList.contains('panel-open');
+  function setPanel(open: boolean): void {
+    appEl.classList.toggle('panel-open', open);
+    panelToggle.setAttribute('aria-expanded', String(open));
+    panelToggleLabel.textContent = open ? 'Hide controls' : 'Show controls';
+    panelToggle.title = open ? 'Hide controls' : 'Show controls';
+    dock.inert = !open;
+  }
+  // Open beside the scene on wide screens; on phones it overlays the scene, so start closed.
+  setPanel(wide.matches);
+  panelToggle.addEventListener('click', () => setPanel(!panelOpen()));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelOpen() && !wide.matches) {
+      setPanel(false);
+      panelToggle.focus();
+    }
+  });
 
   playBtn.addEventListener('click', () => actions.togglePlay());
   replayBtn.addEventListener('click', () => actions.replayStory());

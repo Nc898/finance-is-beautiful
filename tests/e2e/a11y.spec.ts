@@ -65,6 +65,7 @@ test.describe('accessibility', () => {
 
     const expected = [
       'btn-replay',
+      'panel-toggle',
       'btn-play',
       'radio:1',
       'timeline',

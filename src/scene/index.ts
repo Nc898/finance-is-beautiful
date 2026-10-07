@@ -40,7 +40,8 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
 
   const layout = () => {
     if (size.w <= 0 || size.h <= 0) return;
-    const c = fitCamera(size.w, size.h, size.ratio, WORLD.width, insets);
+    const c = fitCamera(size.w, size.h, size.ratio, WORLD.fitWidth, insets);
+    c.ox0 = (size.w - WORLD.width * c.s) / 2; // keep the world centred while fitting the narrower span
     cam = c;
     canvas.width = Math.round(size.w * c.dpr);
     canvas.height = Math.round(size.h * c.dpr);
@@ -57,11 +58,11 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     layout();
   };
   const setInsets = (i: Insets) => {
-    insets = { top: Math.max(0, i.top), bottom: Math.max(0, i.bottom) };
+    insets = { top: Math.max(0, i.top), bottom: Math.max(0, i.bottom), side: Math.max(0, i.side ?? 0) };
     layout();
   };
 
-  const camNow = (): Camera => cam ?? fitCamera(WORLD.width, WORLD.viewTop - WORLD.viewBottom, 1, WORLD.width, insets);
+  const camNow = (): Camera => cam ?? fitCamera(WORLD.fitWidth, WORLD.viewTop - WORLD.viewBottom, 1, WORLD.fitWidth, insets);
   const worldToScreen = (x: number, y: number): ScreenPoint => {
     const c = camNow();
     return { x: c.ox0 + x * c.s, y: c.oyGround - y * c.s };

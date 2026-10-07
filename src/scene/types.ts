@@ -19,6 +19,11 @@ export const WORLD = {
   matureHeight: 560,
   /** Max canopy width of a maturity-1 tree. */
   matureSpread: 400,
+  /**
+   * Horizontal span (centered on x = width / 2) the camera fits. Narrower than `width` so both mature
+   * crowns (A ≈ 110–490, B ≈ 510–890) fill the frame instead of leaving dead margins.
+   */
+  fitWidth: 840,
   /** Visible band the camera must always contain (y-up). */
   viewTop: 615,
   viewBottom: -80,
@@ -72,9 +77,11 @@ export interface SceneAPI {
   /**
    * Reserve CSS-px bands at the top (header + caption) and bottom (specimen labels)
    * of the canvas. The camera fits the WORLD view band into the remaining area.
+   * `side` reserves CSS px of width (a side panel) when choosing the scale only — the world stays centred on
+   * the canvas, so the app can slide the canvas by side / 2 when the panel opens without any re-layout.
    * Call on layout changes only (not per frame); the paper backdrop still fills the whole canvas.
    */
-  setInsets(insets: { top: number; bottom: number }): void;
+  setInsets(insets: { top: number; bottom: number; side?: number }): void;
   render(frame: SceneFrame): void;
   worldToScreen(x: number, y: number): ScreenPoint;
   anchorsFor(id: TreeId, maturity: number): TreeAnchors;

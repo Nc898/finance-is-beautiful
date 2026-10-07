@@ -59,7 +59,12 @@
       </header>
     </div>
 
-    <section class="dock" id="dock" aria-label="Controls">
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
       <div class="dock-inner">
         <div class="transport" role="group" aria-label="Playback and timeline">
           <button type="button" class="btn play" id="btn-play">
@@ -169,7 +174,7 @@
         </details>
         </div>
       </div>
-    </section>
+    </aside>
 
   </main>
   <p class="sr-only" id="summary"></p>

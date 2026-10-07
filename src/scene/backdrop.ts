@@ -11,6 +11,8 @@ import { SOIL_DEPTH } from './treeModel';
 export interface Insets {
   top: number;
   bottom: number;
+  /** Width reserved for a side panel when choosing the scale; centring is unaffected. */
+  side?: number;
 }
 export interface Camera {
   cssW: number;
@@ -27,7 +29,7 @@ export interface Camera {
 export function fitCamera(cssW: number, cssH: number, dpr: number, viewWidth: number, insets: Insets = { top: 0, bottom: 0 }): Camera {
   const band = WORLD.viewTop - WORLD.viewBottom;
   const availH = Math.max(40, cssH - insets.top - insets.bottom);
-  const s = Math.min(cssW / viewWidth, availH / band);
+  const s = Math.min(Math.max(40, cssW - (insets.side ?? 0)) / viewWidth, availH / band);
   const oyGround = insets.top + (availH - band * s) / 2 + WORLD.viewTop * s;
   return { cssW, cssH, dpr: Math.min(2, dpr || 1), s, oyGround, ox0: (cssW - viewWidth * s) / 2 };
 }

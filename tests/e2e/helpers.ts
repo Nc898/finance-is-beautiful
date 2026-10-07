@@ -29,8 +29,8 @@ export interface TtgState {
 export const STORY_DURATION = 54;
 
 /** Load the app and wait for the scene to be ready. By default the autoplaying story is paused so tests are deterministic. */
-export async function gotoReady(page: Page, opts: { pause?: boolean; query?: string } = {}): Promise<void> {
-  const { pause = true, query = '' } = opts;
+export async function gotoReady(page: Page, opts: { pause?: boolean; query?: string; panel?: boolean } = {}): Promise<void> {
+  const { pause = true, query = '', panel = true } = opts;
   // Swallow Vite's HMR websocket: if source files are edited while the suite runs (other workers, editors), the dev
   // server would push a full-reload and wipe the in-memory app state mid-test. The app itself does not use websockets.
   await page.routeWebSocket(/.*/, () => {});
@@ -41,6 +41,18 @@ export async function gotoReady(page: Page, opts: { pause?: boolean; query?: str
     await page.evaluate(() => window.__ttg.actions.pause());
     await frames(page, 2);
   }
+  // The controls live in a collapsible side panel (closed by default on phones).
+  await setPanel(page, panel);
+}
+
+/** Open or close the controls side panel and wait for its slide transition to settle. */
+export async function setPanel(page: Page, open: boolean): Promise<void> {
+  const toggle = page.locator('#panel-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) !== String(open)) {
+    await toggle.click();
+    await page.waitForTimeout(320);
+  }
+  await frames(page, 2);
 }
 
 /** Resolve after n animation frames (the app updates its DOM inside rAF). */

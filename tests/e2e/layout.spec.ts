@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { annuityFV, frames, gotoReady, intersects, scrub, seek, setField, skipToExplore, state } from './helpers';
+import { annuityFV, frames, gotoReady, intersects, scrub, seek, setField, setPanel, skipToExplore, state } from './helpers';
 import type { Box } from './helpers';
 
 const SCREEN_DIR = 'docs/screens/e2e';
@@ -125,17 +125,26 @@ test.describe('layout', () => {
     await expectNoHorizontalOverflow(page, 'extreme values (seven-digit balances)');
   });
 
-  test('stage and dock fill the viewport sensibly', async ({ page }, info) => {
+  test('stage fills the viewport height and the side panel sits beside or over it', async ({ page }, info) => {
     await gotoReady(page);
     const r = await measure(page);
-    expect(r.canvas.w).toBeGreaterThan(r.vw * 0.95);
-    expect(r.dock.y).toBeGreaterThanOrEqual(r.stage.y + r.stage.h - 1);
+    expect(Math.abs(r.canvas.w - r.stage.w)).toBeLessThan(1);
+    expect(r.stage.h / r.vh, `${info.project.name}: stage height`).toBeGreaterThan(0.98);
     if (r.vw >= 900) {
-      expect(r.stage.h, `${info.project.name}: stage height`).toBeGreaterThanOrEqual(440);
+      // Wide: the panel docks to the right edge and the scene slides left by half its width (no re-layout),
+      // so the canvas keeps its size whether the panel is open or closed.
+      expect(Math.abs(r.dock.x + r.dock.w - r.vw)).toBeLessThan(1);
+      expect(Math.abs(r.stage.w - r.vw)).toBeLessThan(1);
+      const w0 = await page.locator('#scene').evaluate((c) => (c as HTMLCanvasElement).width);
+      await setPanel(page, false);
+      expect(await page.locator('#scene').evaluate((c) => (c as HTMLCanvasElement).width)).toBe(w0);
     } else {
-      // Phones: scene ~58 svh.
-      expect(r.stage.h / r.vh).toBeGreaterThan(0.45);
-      expect(r.stage.h / r.vh).toBeLessThan(0.72);
+      // Phones: panel overlays the scene and closes to give the trees the full screen.
+      expect(r.dock.w).toBeLessThanOrEqual(r.vw * 0.92 + 1);
+      await setPanel(page, false);
+      const closed = await measure(page);
+      expect(closed.dock.x).toBeGreaterThanOrEqual(closed.vw - 1);
+      expect(await page.locator('#dock').evaluate((d) => (d as HTMLElement).inert)).toBe(true);
     }
   });
 
@@ -187,7 +196,8 @@ test.describe('layout', () => {
   });
 
   test('specimen plates do not overlap each other, the difference label, or the dock', async ({ page }) => {
-    await gotoReady(page);
+    // On phones the panel overlays the scene by design, so measure with it closed.
+    await gotoReady(page, { panel: (page.viewportSize()?.width ?? 0) >= 900 });
     const moments: Array<[string, () => Promise<void>]> = [
       ['planting t=3', () => seek(page, 3)],
       ['growing t=26', () => seek(page, 26)],
@@ -223,6 +233,7 @@ test.describe('layout', () => {
     await setField(page, 'monthlyContribution', '5000');
     await setField(page, 'annualReturn', '12');
     await skipToExplore(page);
+    if ((page.viewportSize()?.width ?? 0) < 900) await setPanel(page, false);
     await page.waitForTimeout(500);
     const r = await measure(page);
     expect(intersects(r.plateA, r.plateB)).toBe(false);
