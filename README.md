@@ -85,7 +85,7 @@ not a literal dollar scale, so exact amounts are always shown as text.
 - **Reusable illustration assets** (`public/assets/`): `foliage-atlas.png` + `foliage-atlas.json` (watercolor clump
   sprites) and `paper-tile.png`, baked from the procedural generators with `node scripts/bake-assets.mjs` (needs the
   dev server on :5174). At runtime the atlas is used when present, and the app falls back to procedural generation.
-- **UI** (`index.html`, `src/app/ui.ts`, `src/styles/main.css`): semantic native controls, DOM labels positioned with
+- **UI** (`time-to-grow.html`, `src/app/ui.ts`, `src/styles/main.css`): semantic native controls, DOM labels positioned with
   `scene.anchorsFor`, one polite live region for discrete events only, a non-live text summary, and the details table.
   Fonts are self-hosted with @fontsource (Libre Caslon Display/Text, Figtree).
 

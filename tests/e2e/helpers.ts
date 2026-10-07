@@ -34,7 +34,7 @@ export async function gotoReady(page: Page, opts: { pause?: boolean; query?: str
   // Swallow Vite's HMR websocket: if source files are edited while the suite runs (other workers, editors), the dev
   // server would push a full-reload and wipe the in-memory app state mid-test. The app itself does not use websockets.
   await page.routeWebSocket(/.*/, () => {});
-  await page.goto('/' + query);
+  await page.goto('/time-to-grow.html' + query);
   await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 45_000 });
   await frames(page, 2);
   if (pause) {

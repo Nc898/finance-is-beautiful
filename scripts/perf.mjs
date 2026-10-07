@@ -44,7 +44,7 @@ async function startServer() {
   const build = spawnSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], { stdio: 'inherit', shell: true });
   if (build.status !== 0) throw new Error('vite build failed');
   server = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(PORT), '--strictPort'], { stdio: 'ignore', shell: true });
-  baseUrl = `http://localhost:${PORT}/`;
+  baseUrl = `http://localhost:${PORT}/time-to-grow.html`;
   await waitForHttp(baseUrl);
 }
 

@@ -6,7 +6,7 @@ const PW = process.env.PLAYWRIGHT_PATH ?? 'playwright';
 const { chromium } = createRequire(import.meta.url)(PW);
 
 const port = process.argv[2] ?? '5175';
-const url = `http://localhost:${port}/`;
+const url = `http://localhost:${port}/time-to-grow.html`;
 const out = 'docs/screens/app';
 mkdirSync(out, { recursive: true });
 

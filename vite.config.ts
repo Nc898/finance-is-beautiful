@@ -7,6 +7,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         main: 'index.html',
+        timeToGrow: 'time-to-grow.html',
         slice: 'slice.html',
         sceneTest: 'scene-test.html',
       },
