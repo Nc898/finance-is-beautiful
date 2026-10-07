@@ -822,3 +822,88 @@ export function makeSoilSprite(seed: number, W: number, H: number, u: number): H
   ctx.globalCompositeOperation = 'source-over';
   return cv;
 }
+
+/**
+ * Soil cut-away that continues from the rich band under the meadow all the way down the page:
+ * lighter ochre washes with faint strata and pebbles, feathered at the sides, easing lighter with depth.
+ * `bandH` is the height of the richer root band at the top (drawn with makeSoilSprite on top).
+ */
+export function makeDeepSoil(seed: number, W: number, H: number, u: number, bandH: number): HTMLCanvasElement {
+  const cv = makeCanvas(W, H);
+  const ctx = cv.getContext('2d')!;
+  const rnd = new Rand(seed * 7 + 3);
+  const poly: number[] = [];
+  const N = 28;
+  for (let k = 0; k <= N; k++) poly.push(W * (0.02 + 0.96 * (k / N)), bandH * (0.25 + 0.05 * Math.sin(k * 1.7)));
+  for (let k = 0; k <= N; k++) {
+    const t = k / N;
+    poly.push(W * (0.985 + 0.012 * Math.sin(t * 11)), bandH * 0.3 + (H * 1.05 - bandH * 0.3) * t);
+  }
+  for (let k = N; k >= 0; k--) {
+    const t = k / N;
+    poly.push(W * (0.015 - 0.012 * Math.sin(t * 9)), bandH * 0.3 + (H * 1.05 - bandH * 0.3) * t);
+  }
+  const body = deform(poly, rnd, 3, 0.03);
+  ctx.globalCompositeOperation = 'multiply';
+  const layers: Array<[string, number, number]> = [['#EBD8B2', 0.16, 5], ['#DEC497', 0.1, 5], ['#CFAE7C', 0.06, 4]];
+  for (const [c, a, n] of layers) {
+    ctx.fillStyle = rgba(c, a);
+    for (let i = 0; i < n; i++) {
+      tracePoly(ctx, deform(xform(body, W / 2, H / 2, rnd.range(0.97, 1.01), 1, rnd.range(-0.01, 0.01) * W, 0), rnd, 2, 0.04));
+      ctx.fill();
+    }
+  }
+  // faint strata: soil layers drawn as soft wavy washes
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 7; i++) {
+    const y0 = bandH + rnd.range(0.05, 0.95) * (H - bandH);
+    ctx.strokeStyle = rgba(rnd.chance(0.5) ? '#B8925E' : '#C9A877', rnd.range(0.05, 0.1));
+    ctx.lineWidth = rnd.range(2, 6) * u;
+    ctx.beginPath();
+    for (let k = 0; k <= 40; k++) {
+      const x = W * (0.03 + 0.94 * (k / 40));
+      const y = y0 + Math.sin(k * 0.45 + i) * 3 * u + rnd.gauss() * 0.5 * u;
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // granulation and pebbles, denser near the top
+  for (let i = 0; i < 900; i++) {
+    const x = rnd.range(0.03, 0.97) * W;
+    const y = bandH * 0.4 + Math.pow(rnd.next(), 1.6) * (H - bandH * 0.4);
+    const r = rnd.range(0.6, 1.5) * u;
+    ctx.fillStyle = rgba('#A9824E', 0.07);
+    ctx.fillRect(x, y, r, r);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < 70; i++) {
+    const x = rnd.range(0.05, 0.95) * W;
+    const y = bandH + Math.pow(rnd.next(), 1.3) * (H - bandH);
+    const r = rnd.range(1, 3.2) * u;
+    ctx.fillStyle = rgba(rnd.chance(0.5) ? '#C9B08A' : '#8A6A47', rnd.range(0.14, 0.3));
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * rnd.range(0.55, 0.85), rnd.range(0, Math.PI), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // ease lighter with depth, and feather the sides into the paper
+  ctx.globalCompositeOperation = 'destination-in';
+  const vg = ctx.createLinearGradient(0, 0, 0, H);
+  vg.addColorStop(0, 'rgba(0,0,0,1)');
+  vg.addColorStop(Math.min(0.9, (bandH * 1.5) / H), 'rgba(0,0,0,0.95)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  const hg = ctx.createLinearGradient(0, 0, W, 0);
+  hg.addColorStop(0, 'rgba(0,0,0,0)');
+  hg.addColorStop(0.07, 'rgba(0,0,0,1)');
+  hg.addColorStop(0.93, 'rgba(0,0,0,1)');
+  hg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, 0, W, H);
+  // the richer root band on top
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(makeSoilSprite(seed, W, bandH, u), 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  return cv;
+}

@@ -5,7 +5,7 @@
  */
 import { WORLD } from './types';
 import { ensurePaperTile } from './sprites';
-import { makeCanvas, makeGroundSprite, makeSoilSprite, paintPaperBackdrop } from './watercolor';
+import { makeCanvas, makeDeepSoil, makeGroundSprite, paintPaperBackdrop } from './watercolor';
 import { SOIL_DEPTH } from './treeModel';
 
 export interface Insets {
@@ -45,9 +45,11 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   // soil cut-away (under the ground line, fading downward and at the ends)
   const soilH = Math.round(SOIL_DEPTH * 1.2 * cam.s * d);
   const soilW = Math.round(Math.min(cam.cssW, WORLD.width * cam.s * 0.97) * d);
-  const soil = makeSoilSprite(53, soilW, soilH, (cam.s * d) / 1.2);
   const gy = cam.oyGround * d;
-  ctx.drawImage(soil, Math.round((Wd - soilW) / 2), Math.round(gy + 2 * cam.s * d));
+  const soilTop = Math.round(gy - 6 * cam.s * d); // tucked under the meadow so no paper shows between them
+  // the soil runs from just under the meadow to the bottom of the page
+  const soil = makeDeepSoil(53, soilW, Math.max(soilH, Hd - soilTop), (cam.s * d) / 1.2, soilH);
+  ctx.drawImage(soil, Math.round((Wd - soilW) / 2), soilTop);
   // meadow wash across the whole width
   const gh = Math.round(78 * cam.s * d);
   const ground = makeGroundSprite(31, Wd, gh, (cam.s * d) / 1.2);

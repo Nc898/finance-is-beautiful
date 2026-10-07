@@ -8,11 +8,14 @@
  */
 import { clamp, smoothstep } from './prng';
 import {
-  H, WE, createState, crownMap, evalState, mapY, rootG,
+  H, SOIL_DEPTH, WE, createState, crownMap, evalState, mapY, rootG,
   type Branch, type CrownMap, type TreeModel, type TreeState,
 } from './treeModel';
 import { PAL, makeBarkTile, mixHex, rgba } from './watercolor';
 import type { Sprites, Spr } from './sprites';
+
+/** Main roots are drawn thicker than the model's pipe radius so they read as part of the trunk. */
+const ROOT_THICK = 1.7;
 
 export interface View {
   /** screen px of world (0,0) = trunk base */
@@ -523,6 +526,8 @@ export class TreePainter {
       this.drawRibbon(ctx, b, k, -b.lightSign, v);
     }
 
+    this.drawBaseBlend(ctx, v, mEff);
+
     if (p.pulse !== undefined && p.pulse >= 0) this.drawPulse(ctx, v, p.pulse, mEff);
 
     for (let i = 0; i < L[2].length; i++) this.drawClump(ctx, v, L[2][i]!, sp);
@@ -581,13 +586,13 @@ export class TreePainter {
           rd = r.rad[i - 1]! + (rd - r.rad[i - 1]!) * a;
           RX[k] = v.ox + px * v.s;
           RY[k] = v.oy - py * v.s;
-          RR[k] = Math.max(0.25, rd * rs * 0.45) * v.s;
+          RR[k] = Math.max(0.25, rd * rs * 0.45 * (r.depth === 0 ? ROOT_THICK : 1)) * v.s;
           k++;
           break;
         }
         RX[k] = v.ox + px * v.s;
         RY[k] = v.oy - py * v.s;
-        RR[k] = Math.max(0.25, rd * rs) * v.s * (r.cum[i]! > lv - 12 ? 0.6 : 1);
+        RR[k] = Math.max(0.25, rd * rs * (r.depth === 0 ? ROOT_THICK : 1.15)) * v.s * (r.cum[i]! > lv - 12 ? 0.6 : 1);
         k++;
       }
       if (k < 2) continue;
@@ -603,7 +608,8 @@ export class TreePainter {
         RNX[i] = -ty;
         RNY[i] = tx;
       }
-      if (RR[0]! >= 1.2) {
+      const filled = RR[0]! >= 1.2;
+      if (filled) {
         for (let i = 0; i < k; i++) {
           const px2 = RX[i]! + RNX[i]! * RR[i]!;
           const py2 = RY[i]! + RNY[i]! * RR[i]!;
@@ -620,6 +626,7 @@ export class TreePainter {
         }
       }
       const tgt = r.depth === 0 ? line : fine;
+      if (filled && r.depth === 0) continue;
       for (let i = 0; i < k; i++) {
         if (i === 0) tgt.moveTo(RX[i]!, RY[i]!);
         else tgt.lineTo(RX[i]!, RY[i]!);
@@ -635,20 +642,32 @@ export class TreePainter {
   private strokeRoots(ctx: CanvasRenderingContext2D, v: View, c: { any: boolean; fill: Path2D; line: Path2D; fine: Path2D; edge: Path2D }): void {
     if (!c.any) return;
     const { fill, line, fine, edge } = c;
-    ctx.fillStyle = 'rgba(146,112,78,0.3)';
-    ctx.fill(fill);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(96,66,46,0.2)';
-    ctx.lineWidth = 0.6;
-    ctx.stroke(edge);
     const zoomK = Math.max(1, v.s / 1.2);
-    ctx.strokeStyle = zoomK > 2 ? 'rgba(70,52,36,0.55)' : 'rgba(70,52,36,0.34)';
-    ctx.lineWidth = Math.min(1.8, 0.5 * Math.sqrt(zoomK));
-    ctx.setLineDash(zoomK > 2 ? [] : [9, 4, 3, 5]);
-    ctx.stroke(line);
+    // Bark wash in the trunk's colours, strongest where the roots leave the trunk, easing into the soil with depth.
+    const depthPx = SOIL_DEPTH * v.s;
+    const gr = ctx.createLinearGradient(0, v.oy, 0, v.oy + depthPx);
+    gr.addColorStop(0, 'rgba(92,63,41,0.97)');
+    gr.addColorStop(0.35, 'rgba(108,77,50,0.88)');
+    gr.addColorStop(1, 'rgba(140,108,74,0.5)');
+    ctx.fillStyle = gr;
+    ctx.fill(fill);
+    // lit upper side (light from the upper left), like the trunk's tan band
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(196,152,98,0.5)';
+    ctx.lineWidth = Math.min(2, 0.9 * Math.sqrt(zoomK));
+    ctx.stroke(edge);
+    // broken sepia contour, as on the trunk
+    ctx.strokeStyle = 'rgba(47,34,24,0.62)';
+    ctx.lineWidth = Math.min(1.6, 0.75 * Math.sqrt(zoomK));
+    ctx.setLineDash([18, 3, 7, 2]);
+    ctx.stroke(fill);
     ctx.setLineDash([]);
-    ctx.strokeStyle = zoomK > 2 ? 'rgba(100,74,50,0.6)' : 'rgba(118,90,62,0.42)';
-    ctx.lineWidth = Math.min(1.4, 0.45 * Math.sqrt(zoomK));
+    // thin roots: drawn lines in the same umber
+    ctx.strokeStyle = 'rgba(78,56,38,0.72)';
+    ctx.lineWidth = Math.min(1.8, 0.85 * Math.sqrt(zoomK));
+    ctx.stroke(line);
+    ctx.strokeStyle = 'rgba(96,70,48,0.55)';
+    ctx.lineWidth = Math.min(1.4, 0.55 * Math.sqrt(zoomK));
     ctx.stroke(fine);
   }
 
@@ -789,6 +808,110 @@ export class TreePainter {
     ctx.drawImage(spr.src, spr.sx, spr.sy, spr.sw, spr.sh, -0.5 * dw, -PIVOT * dh, dw, dh);
     ctx.globalAlpha = 1;
     ctx.setTransform(dp, 0, 0, dp, 0, 0);
+  }
+
+  /** Trunk radius at the ground (world units) at maturity m, matching the girth rule in prep(). */
+  private trunkBaseR(m: number): number {
+    const b = this.model.branches[0]!;
+    return b.rad[0]! * Math.pow(m, 0.9) * this.state.kappa[0]! * (1 + 0.35 * smoothstep((m - 0.22) / 0.78));
+  }
+
+  /**
+   * Seat the trunk in the ground: a bark-coloured root crown continuing below the ground line into the
+   * roots, a soft soil bank washed over the join, and a few grass blades and soil crumbs in front of it.
+   * Deterministic (index hash, no PRNG) and scaled by maturity.
+   */
+  private drawBaseBlend(ctx: CanvasRenderingContext2D, v: View, m: number): void {
+    const k = smoothstep((m - 0.05) / 0.12);
+    if (k <= 0.01) return;
+    const r0 = this.trunkBaseR(m) * 1.25;
+    const s = v.s;
+    const x0 = v.ox;
+    const y0 = v.oy;
+    const seed = this.model.tanLean * 7919;
+    const hash = (i: number) => {
+      const t = Math.sin(i * 12.9898 + seed) * 43758.5453;
+      return t - Math.floor(t);
+    };
+    ctx.save();
+    ctx.globalAlpha = k;
+
+    // 1. root crown: the trunk carries on under the ground as a tapering wedge that pinches into the roots
+    const d = Math.min(SOIL_DEPTH * 0.5, r0 * 1.3);
+    const w = r0 * 0.8;
+    const L0 = x0 - w * s, R0 = x0 + w * s;
+    const crown = new Path2D();
+    crown.moveTo(L0, y0 - 1);
+    crown.bezierCurveTo(x0 - w * 0.62 * s, y0 + d * 0.18 * s, x0 - w * 0.34 * s, y0 + d * 0.5 * s, x0 - w * 0.16 * s, y0 + d * s);
+    crown.quadraticCurveTo(x0 + w * 0.02 * s, y0 + d * 1.06 * s, x0 + w * 0.18 * s, y0 + d * 0.94 * s);
+    crown.bezierCurveTo(x0 + w * 0.38 * s, y0 + d * 0.48 * s, x0 + w * 0.66 * s, y0 + d * 0.16 * s, R0, y0 - 1);
+    crown.closePath();
+    // outline only the sides, so no hard line runs along the ground
+    const sides = new Path2D();
+    sides.moveTo(L0, y0 + 1);
+    sides.bezierCurveTo(x0 - w * 0.62 * s, y0 + d * 0.18 * s, x0 - w * 0.34 * s, y0 + d * 0.5 * s, x0 - w * 0.16 * s, y0 + d * s);
+    sides.moveTo(R0, y0 + 1);
+    sides.bezierCurveTo(x0 + w * 0.66 * s, y0 + d * 0.16 * s, x0 + w * 0.38 * s, y0 + d * 0.48 * s, x0 + w * 0.18 * s, y0 + d * 0.94 * s);
+    const cg = ctx.createLinearGradient(x0 - r0 * s, 0, x0 + r0 * s, 0);
+    cg.addColorStop(0, 'rgba(150,112,72,0.95)');
+    cg.addColorStop(0.45, 'rgba(104,73,47,0.97)');
+    cg.addColorStop(1, 'rgba(66,45,31,0.97)');
+    ctx.fillStyle = cg;
+    ctx.fill(crown);
+    // fade the crown into the soil towards its bottom
+    const fade = ctx.createLinearGradient(0, y0, 0, y0 + d * 1.1 * s);
+    fade.addColorStop(0, 'rgba(202,170,124,0)');
+    fade.addColorStop(1, 'rgba(202,170,124,0.55)');
+    ctx.fillStyle = fade;
+    ctx.fill(crown);
+    ctx.strokeStyle = 'rgba(47,34,24,0.55)';
+    ctx.lineWidth = Math.max(0.6, 0.7 * Math.sqrt(s));
+    ctx.setLineDash([14, 3, 5, 2]);
+    ctx.stroke(sides);
+    ctx.setLineDash([]);
+
+    // 2. soil bank washed across the join, kept below the grass line so nothing hazes the trunk
+    const bw = r0 * 3.2 * s;
+    const bh = Math.max(3, r0 * 0.5 * s);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0 - bw, y0 - 1, bw * 2, bh * 3);
+    ctx.clip();
+    const bank = ctx.createRadialGradient(x0, y0, 0, x0, y0, bw * 0.5);
+    bank.addColorStop(0, 'rgba(104,74,48,0.45)');
+    bank.addColorStop(0.5, 'rgba(132,98,62,0.22)');
+    bank.addColorStop(1, 'rgba(160,124,84,0)');
+    ctx.fillStyle = bank;
+    ctx.beginPath();
+    ctx.ellipse(x0, y0, bw * 0.5, bh, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 3. crumbs of soil and a few grass blades in front of the trunk foot
+    for (let i = 0; i < 14; i++) {
+      const u = hash(i) * 2 - 1;
+      const x = x0 + u * r0 * 1.7 * s;
+      const y = y0 + (hash(i + 31) * 0.9 - 0.25) * bh;
+      const rr = (0.6 + hash(i + 57) * 1.2) * Math.max(0.6, Math.sqrt(s));
+      ctx.fillStyle = hash(i + 7) < 0.5 ? 'rgba(92,64,42,0.55)' : 'rgba(170,136,92,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(x, y, rr, rr * 0.7, hash(i + 3) * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 16; i++) {
+      const u = hash(i + 101) * 2 - 1;
+      const x = x0 + u * r0 * 1.9 * s;
+      const len = (3 + hash(i + 131) * 5) * Math.max(0.8, Math.sqrt(s)) * (0.6 + 0.4 * k);
+      const lean = (hash(i + 151) - 0.5) * 0.9;
+      ctx.strokeStyle = hash(i + 171) < 0.6 ? 'rgba(98,142,62,0.8)' : 'rgba(132,166,78,0.75)';
+      ctx.lineWidth = Math.max(0.6, 0.7 * Math.sqrt(s));
+      ctx.beginPath();
+      ctx.moveTo(x, y0 + 1);
+      ctx.quadraticCurveTo(x + lean * len * 0.3, y0 - len * 0.6, x + lean * len, y0 - len);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawGroundDetail(ctx: CanvasRenderingContext2D, v: View, p: PaintParams, sp: Sprites, mEff: number, plantK: number): void {
