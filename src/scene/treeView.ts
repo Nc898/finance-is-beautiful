@@ -56,6 +56,7 @@ export class TreeView {
   /** Sizes the canvas, loads sprites (async) and paints the static backdrop. */
   async init(cssW: number, cssH: number, dpr: number): Promise<void> {
     const cam = fitCamera(cssW, cssH, dpr, this.viewWidth);
+    cam.ox0 = 0;
     this.cam = cam;
     this.canvas.width = Math.round(cssW * cam.dpr);
     this.canvas.height = Math.round(cssH * cam.dpr);
@@ -73,7 +74,7 @@ export class TreeView {
     ctx.setTransform(cam.dpr, 0, 0, cam.dpr, 0, 0);
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, cam.cssW, cam.cssH);
-    this.painter.paint(ctx, { ox: cam.cssW / 2, oy: cam.oyGround, s: cam.s }, p, this.sprites);
+    this.painter.paint(ctx, { ox: cam.cssW / 2, oy: cam.oyGround, s: cam.s, dpr: cam.dpr }, p, this.sprites);
     this.lastMs = performance.now() - t0;
   }
 }

@@ -644,3 +644,181 @@ export function paintPaperBackdrop(ctx: CanvasRenderingContext2D, W: number, H: 
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, W, H);
 }
+
+/** Soft emerald/blue-green under-shadow blob, drawn beneath front clumps (source-atop, low alpha). */
+export function makeUnderSprite(seed: number, W: number, H: number): HTMLCanvasElement {
+  const cv = makeCanvas(W, H);
+  const ctx = cv.getContext('2d')!;
+  const rnd = new Rand(seed);
+  const poly: number[] = [];
+  const N = 16;
+  for (let k = 0; k < N; k++) {
+    const th = (k / N) * Math.PI * 2;
+    const r = 1 + 0.14 * Math.sin(5 * th + 1.1) + 0.08 * Math.sin(3 * th);
+    poly.push(W * 0.5 + Math.cos(th) * W * 0.42 * r, H * 0.5 + Math.sin(th) * H * 0.4 * r);
+  }
+  for (let i = 0; i < 5; i++) {
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.52, 0, W * 0.5, H * 0.52, W * 0.5);
+    g.addColorStop(0, 'rgba(14,74,60,0.22)');
+    g.addColorStop(0.7, 'rgba(18,86,70,0.1)');
+    g.addColorStop(1, 'rgba(18,86,70,0)');
+    ctx.fillStyle = g;
+    tracePoly(ctx, deform(poly, rnd, 2, 0.1));
+    ctx.fill();
+  }
+  return cv;
+}
+
+function tileNoiseRect(seed: number, cx: number, cy: number): (x: number, y: number) => number {
+  const r = new Rand(seed);
+  const g = new Float32Array(cx * cy);
+  for (let i = 0; i < g.length; i++) g[i] = r.next();
+  return (x: number, y: number) => {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const x0 = ((ix % cx) + cx) % cx;
+    const y0 = ((iy % cy) + cy) % cy;
+    const x1 = (x0 + 1) % cx;
+    const y1 = (y0 + 1) % cy;
+    const a = g[y0 * cx + x0]!;
+    const b = g[y0 * cx + x1]!;
+    const c = g[y1 * cx + x0]!;
+    const d = g[y1 * cx + x1]!;
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  };
+}
+
+/** Seamless grey bark tile (multiplied over the bark wash): granulation + vertical striation streaks. */
+export function makeBarkTile(seed = 77): HTMLCanvasElement {
+  const W = 128;
+  const H = 192;
+  const cv = makeCanvas(W, H);
+  const ctx = cv.getContext('2d')!;
+  const img = ctx.createImageData(W, H);
+  const d = img.data;
+  const grain = tileNoiseRect(seed, 96, 144);
+  const streak = tileNoiseRect(seed + 5, 34, 5);
+  const blot = tileNoiseRect(seed + 9, 6, 8);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const g = grain((x * 96) / W, (y * 144) / H);
+      const s = streak((x * 34) / W, (y * 5) / H);
+      const b = blot((x * 6) / W, (y * 8) / H);
+      const v = clamp(0.93 - (1 - s) * 0.16 * (s < 0.5 ? 1.4 : 0.5) - (1 - g) * 0.1 - (1 - b) * 0.06, 0.6, 1);
+      const c = Math.round(v * 255);
+      d[i] = c;
+      d[i + 1] = Math.round(c * 0.97);
+      d[i + 2] = Math.round(c * 0.95);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/** Warm ochre soil cut-away band (roots live here): irregular edges, faint hatching, fades downward and at both ends. */
+export function makeSoilSprite(seed: number, W: number, H: number, u: number): HTMLCanvasElement {
+  const cv = makeCanvas(W, H);
+  const ctx = cv.getContext('2d')!;
+  const rnd = new Rand(seed);
+  // organic outline: wavy top (under the meadow), ends that round off irregularly, ragged blooming bottom
+  const poly: number[] = [];
+  const N = 40;
+  for (let k = 0; k <= N; k++) {
+    const x = k / N;
+    const end = Math.pow(Math.sin(Math.PI * clamp(x * 0.94 + 0.03, 0, 1)), 0.45);
+    poly.push(W * (0.02 + 0.96 * x), H * (0.02 + 0.012 * Math.sin(x * 23 + 1) + 0.01 * Math.sin(x * 9) + (1 - end) * 0.45));
+  }
+  for (let k = N; k >= 0; k--) {
+    const x = k / N;
+    const end = Math.pow(Math.sin(Math.PI * clamp(x * 0.94 + 0.03, 0, 1)), 0.5);
+    poly.push(W * (0.02 + 0.96 * x), H * (0.9 + 0.1 * Math.sin(x * 17) - (1 - end) * 0.4));
+  }
+  const body = deform(poly, rnd, 4, 0.06);
+  ctx.globalCompositeOperation = 'multiply';
+  const layers: Array<[string, number, number]> = [['#E1C28E', 0.1, 6], ['#CDA570', 0.075, 6], ['#B98F58', 0.055, 5]];
+  for (const [c, a, n] of layers) {
+    ctx.fillStyle = rgba(c, a);
+    for (let i = 0; i < n; i++) {
+      tracePoly(ctx, deform(xform(body, W / 2, H * 0.4, rnd.range(0.86, 1), rnd.range(0.55, 0.95), rnd.range(-0.04, 0.04) * W, 0), rnd, 3, 0.1));
+      ctx.fill();
+    }
+  }
+  // wet edge on top, directly under the meadow
+  ctx.strokeStyle = rgba('#9A6F3E', 0.18);
+  ctx.lineWidth = 1.6 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let k = 0; k <= 60; k++) {
+    const x = k / 60;
+    const y = H * (0.045 + 0.012 * Math.sin(x * 23 + 1) + 0.01 * Math.sin(x * 9)) + rnd.gauss() * 0.6 * u;
+    if (k === 0) ctx.moveTo(W * x, y);
+    else ctx.lineTo(W * x, y);
+  }
+  ctx.stroke();
+  // blooming granulation
+  ctx.fillStyle = rgba('#A9824E', 0.05);
+  for (let i = 0; i < 260; i++) {
+    const x = rnd.range(0.04, 0.96) * W;
+    const y = rnd.range(0.04, 0.8) * H;
+    const r = rnd.range(0.6, 1.6) * u;
+    ctx.fillRect(x, y, r, r);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // restrained hatching (ref 2) and a few pebbles
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 70; i++) {
+    const x = rnd.range(0.04, 0.96) * W;
+    const y = rnd.range(0.06, 0.75) * H;
+    const L = rnd.range(4, 12) * u;
+    ctx.strokeStyle = rgba('#6B4A2F', rnd.range(0.08, 0.2));
+    ctx.lineWidth = 0.6 * u;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + L * 0.8, y + L * 0.5);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 16; i++) {
+    const x = rnd.range(0.05, 0.95) * W;
+    const y = rnd.range(0.08, 0.7) * H;
+    const r = rnd.range(1, 2.6) * u;
+    ctx.fillStyle = rgba(rnd.chance(0.5) ? '#C9B08A' : '#8A6A47', 0.35);
+    tracePoly(ctx, deform([x - r, y, x, y - r * 0.8, x + r, y, x + r * 0.2, y + r * 0.6], rnd, 1, 0.2));
+    ctx.fill();
+  }
+  // feather: blooming fade to paper downward and toward the ends (irregular, not a straight ramp)
+  ctx.globalCompositeOperation = 'destination-in';
+  const gv = ctx.createLinearGradient(0, 0, 0, H);
+  gv.addColorStop(0, 'rgba(0,0,0,0.95)');
+  gv.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+  gv.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gv;
+  ctx.fillRect(0, 0, W, H);
+  const gh = ctx.createLinearGradient(0, 0, W, 0);
+  gh.addColorStop(0, 'rgba(0,0,0,0)');
+  gh.addColorStop(0.14, 'rgba(0,0,0,0.85)');
+  gh.addColorStop(0.3, 'rgba(0,0,0,1)');
+  gh.addColorStop(0.7, 'rgba(0,0,0,1)');
+  gh.addColorStop(0.86, 'rgba(0,0,0,0.85)');
+  gh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gh;
+  ctx.fillRect(0, 0, W, H);
+  // ragged bites out of the faded ends so they never read as a straight cut
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 26; i++) {
+    const side = i % 2 === 0 ? 0.04 : 0.96;
+    const x = (side + rnd.range(-0.05, 0.05)) * W;
+    const y = rnd.range(0.05, 0.9) * H;
+    const r = rnd.range(8, 22) * u;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    tracePoly(ctx, deform([x - r, y, x, y - r * 0.8, x + r, y, x, y + r * 0.9], rnd, 3, 0.2));
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  return cv;
+}

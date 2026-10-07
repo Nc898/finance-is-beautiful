@@ -3,7 +3,7 @@
  * loaded from /assets/foliage-atlas.{png,json} (written by scripts/bake-assets.mjs).
  */
 import {
-  SPRITE_KINDS, SPRITE_POOL, makeClumpSprite, makeMoundSprite, makePaperTile, makeShadowSprite, makeCanvas,
+  SPRITE_KINDS, SPRITE_POOL, makeClumpSprite, makeMoundSprite, makePaperTile, makeShadowSprite, makeCanvas, makeUnderSprite,
   type SpriteKind,
 } from './watercolor';
 
@@ -19,6 +19,7 @@ export interface Sprites {
   kinds: Record<SpriteKind, Spr[]>;
   mound: Spr;
   shadow: Spr;
+  under: Spr;
 }
 
 /** sprite pixel width = SPRITE_BASE_W * sd; visible body is ~0.72 of it, aspect H/W = SPRITE_ASPECT */
@@ -60,6 +61,7 @@ interface AtlasJson {
   frames: Record<string, Array<{ x: number; y: number; w: number; h: number }>>;
   mound: { x: number; y: number; w: number; h: number };
   shadow: { x: number; y: number; w: number; h: number };
+  under: { x: number; y: number; w: number; h: number };
 }
 
 async function loadBaked(): Promise<Sprites | null> {
@@ -67,13 +69,13 @@ async function loadBaked(): Promise<Sprites | null> {
     const res = await fetch(`${baseUrl()}assets/foliage-atlas.json`);
     if (!res.ok) return null;
     const j = (await res.json()) as AtlasJson;
-    if (!j || !j.frames) return null;
+    if (!j || !j.frames || !j.under) return null;
     const img = await loadImage(`${baseUrl()}assets/foliage-atlas.png`);
     const mk = (f: { x: number; y: number; w: number; h: number }): Spr => ({ src: img, sx: f.x, sy: f.y, sw: f.w, sh: f.h });
     const kinds = {} as Record<SpriteKind, Spr[]>;
     for (const k of SPRITE_KINDS) kinds[k] = (j.frames[k] ?? []).map(mk);
     if (SPRITE_KINDS.some((k) => kinds[k].length === 0)) return null;
-    return { sd: j.sd, kinds, mound: mk(j.mound), shadow: mk(j.shadow) };
+    return { sd: j.sd, kinds, mound: mk(j.mound), shadow: mk(j.shadow), under: mk(j.under) };
   } catch {
     return null;
   }
@@ -96,6 +98,7 @@ export async function generateSprites(sd: number): Promise<Sprites> {
     sd, kinds,
     mound: whole(makeMoundSprite(77, Math.round(120 * sd), Math.round(48 * sd))),
     shadow: whole(makeShadowSprite(91, Math.round(300 * sd), Math.round(46 * sd))),
+    under: whole(makeUnderSprite(5, Math.round(SPRITE_BASE_W * sd * 1.3), Math.round(SPRITE_BASE_W * sd * 0.8))),
   };
 }
 
@@ -135,7 +138,7 @@ export async function buildAtlas(sd: number): Promise<{ canvas: HTMLCanvasElemen
   const cellH = s.kinds.lit[0]!.sh;
   const all: Array<{ key: string; spr: Spr }> = [];
   for (const k of SPRITE_KINDS) s.kinds[k].forEach((sp, i) => all.push({ key: `${k}:${i}`, spr: sp }));
-  const extraRows = 1 + Math.ceil(s.mound.sh / cellH) + Math.ceil(s.shadow.sh / cellH);
+  const extraRows = 1 + Math.ceil(s.mound.sh / cellH) + Math.ceil(s.shadow.sh / cellH) + Math.ceil(s.under.sh / cellH);
   const rows = Math.ceil(all.length / COLS) + extraRows;
   const canvas = makeCanvas(cellW * COLS, cellH * rows);
   const ctx = canvas.getContext('2d')!;
@@ -153,5 +156,8 @@ export async function buildAtlas(sd: number): Promise<{ canvas: HTMLCanvasElemen
   y += Math.ceil(s.mound.sh / cellH) * cellH;
   ctx.drawImage(s.shadow.src, 0, 0, s.shadow.sw, s.shadow.sh, 0, y, s.shadow.sw, s.shadow.sh);
   const shadow = { x: 0, y, w: s.shadow.sw, h: s.shadow.sh };
-  return { canvas, json: { sd, frames, mound, shadow } };
+  y += Math.ceil(s.shadow.sh / cellH) * cellH;
+  ctx.drawImage(s.under.src, 0, 0, s.under.sw, s.under.sh, 0, y, s.under.sw, s.under.sh);
+  const under = { x: 0, y, w: s.under.sw, h: s.under.sh };
+  return { canvas, json: { sd, frames, mound, shadow, under } };
 }

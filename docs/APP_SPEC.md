@@ -28,9 +28,9 @@ Same inputs + same ageMonths ⇒ same frame (wind aside). Scrubbing only sets ag
 ## Guided story (≈ 54 s at 1×), all driven by storyTime → ageMonths (piecewise linear, eased at joins)
 | storyTime | age | chapter | caption (primary / secondary) | other |
 |---|---|---|---|---|
-| 0 – 7 s | 25 → 25¼ | planting | "Same monthly contribution. Different starting ages." / "Tree A starts at 25. Tree B starts at 35." | B shows marker "Plants at 35"; A's sprout emerges |
+| 0 – 7 s | 25 → 25¼ | planting | "Same monthly contribution. Different starting ages." / "Tree A starts at 25. Tree B starts at 35." | B shows marker "Plants at 35"; A's sprout emerges; loupe on A roots 1.5–6.5 s (close-up of the seedling) |
 | 7 – 15 s | 25¼ → 35 | growing | "Each month, $200 goes in." | pulses into roots; loupe on A roots 8–12 s |
-| 15 – 18 s | 35 → 35.4 | growing | "At 35, Tree B begins." | slow beat as B sprouts |
+| 15 – 18 s | 35 → 35.4 | growing | "At 35, Tree B begins." | slow beat as B sprouts; loupe on B roots 15.3–18 s |
 | 18 – 37 s | 35.4 → 65 | growing | "Growth is reinvested, so branches grow new branches." | loupe on A branches 25–30 s |
 | 37 – 50 s | 65 hold | difference | "Time gives growth room to branch." / "$24,000 of the gap is extra contributions. $162,633 is growth that had ten more years to compound." | results reveal (balances, contributed vs growth, difference) |
 | 50 – 54 s | 65 | explore handoff | "Explore your own timeline" | controls get a soft highlight; then mode → 'explore', paused at 65 |
@@ -42,6 +42,11 @@ If startA == startB the "Tree B begins" beat is skipped and copy says both start
 Controls during story: Pause/Play, Replay (story from 0), Skip ("Skip to explore" → explore mode, age = endAge,
 results visible, paused), speed applies to storyTime. Scrubbing the timeline or editing any input exits story
 into explore mode at the current age.
+
+## Scene insets
+The app reserves a stable top band (header + the tallest caption at the current breakpoint) and a bottom band
+(specimen plates + difference label) via `scene.setInsets`, recomputed on resize only — never per caption — so the
+camera never jumps and no caption overlaps a crown.
 
 ## Explore mode
 - Play advances ageMonths at 2 years/s × speed from current age; at end it stops; Play at end restarts from timeline start.

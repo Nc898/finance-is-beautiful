@@ -27,6 +27,11 @@
           <p class="plate-balance"></p>
           <p class="plate-split"><span class="ps-a"></span><span class="ps-dot"></span><span class="ps-b"></span></p>
         </div>
+        <div class="plate plate-ghost" id="plate-ghost" aria-hidden="true">
+          <p class="plate-id"><span data-mark="A"></span><span class="plate-name">Tree A · started at 25</span></p>
+          <p class="plate-balance">$381,536</p>
+          <p class="plate-split"><span class="ps-a">$381,536 contributed</span><span class="ps-dot"> · </span><span class="ps-b">$285,536 modeled growth</span></p>
+        </div>
         <div class="diff" id="diff">
           <p class="diff-label">Difference</p>
           <p class="diff-value" id="diff-value"></p>
@@ -36,6 +41,7 @@
       <div class="caption" id="caption">
         <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
         <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
       </div>
 
       <header class="masthead">
@@ -129,7 +135,6 @@
         <div class="foot">
           <p class="assumptions">Illustration only: a constant hypothetical return with growth reinvested. No taxes, fees, or inflation. Actual returns vary and aren't guaranteed. Tree size illustrates growth; it isn't a literal dollar scale.</p>
           <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
-        </div>
         <details class="how" id="how">
           <summary>How this is calculated</summary>
           <div class="how-body">
@@ -162,6 +167,7 @@
             </ul>
           </div>
         </details>
+        </div>
       </div>
     </section>
 

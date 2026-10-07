@@ -17,6 +17,9 @@ const store = createStore({ reducedMotion: motionQuery.matches });
 const scene = createScene(canvas);
 
 const ui = createUI(store, {
+  setInsets: (i) => {
+    if ('setInsets' in scene) scene.setInsets(i);
+  },
   getBases: () => ({
     A: scene.anchorsFor('A', 0).base,
     B: scene.anchorsFor('B', 0).base,
@@ -50,6 +53,7 @@ declare global {
     __ttg: {
       getState(): unknown;
       actions: typeof store.actions;
+      anchors(id: 'A' | 'B', maturity: number): ReturnType<typeof scene.anchorsFor>;
     };
   }
 }
@@ -77,4 +81,5 @@ window.__ttg = {
     );
   },
   actions: store.actions,
+  anchors: (id, maturity) => scene.anchorsFor(id, maturity),
 };

@@ -85,13 +85,26 @@ describe('normal story timing (default inputs)', () => {
     expect(storyChapter(50, i)).toBe('handoff');
     expect(storyBeat(16, i)).toBe('bBegins');
   });
-  it('shows the loupe at 8-12 s (roots) and 25-30 s (branches) on the earlier tree', () => {
-    expect(loupeAt(3, i)).toBeUndefined();
+  it('shows the loupe windows from the spec', () => {
+    expect(loupeAt(0.5, i)).toBeUndefined();
+    expect(loupeAt(4, i)).toMatchObject({ tree: 'A', target: 'roots', strength: 1 });
+    expect(loupeAt(1.6, i)!.strength).toBeLessThan(1);
+    expect(loupeAt(7.2, i)).toBeUndefined();
     expect(loupeAt(10, i)).toMatchObject({ tree: 'A', target: 'roots', strength: 1 });
-    expect(loupeAt(8.1, i)!.strength).toBeLessThan(1);
+    expect(loupeAt(13, i)).toBeUndefined();
+    expect(loupeAt(16.5, i)).toMatchObject({ tree: 'B', target: 'roots', strength: 1 });
     expect(loupeAt(20, i)).toBeUndefined();
     expect(loupeAt(27, i)).toMatchObject({ tree: 'A', target: 'branches' });
     expect(loupeAt(40, i)).toBeUndefined();
+  });
+  it('puts the second-tree loupe on whichever tree starts later', () => {
+    const rev = { ...i, startAgeA: 35, startAgeB: 25 };
+    expect(loupeAt(4, rev)).toMatchObject({ tree: 'B', target: 'roots' });
+    expect(loupeAt(16.5, rev)).toMatchObject({ tree: 'A', target: 'roots' });
+  });
+  it('has no second-tree loupe when starts are equal', () => {
+    const eq = { ...i, startAgeA: 30, startAgeB: 30 };
+    expect(loupeAt(16.5, eq)).toBeUndefined();
   });
 });
 

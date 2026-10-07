@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Time to Grow - two-tree scene harness</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#E9E0CB; color:var(--ink); font: 13px/1.4 system-ui, sans-serif; }
+  #wrap { display:flex; gap:12px; padding:10px; align-items:flex-start; flex-wrap:wrap; }
+  #stage { position:relative; background:var(--paper); box-shadow:0 1px 4px rgba(60,40,10,.25); }
+  canvas { display:block; }
+  .controls { width:320px; background:var(--paper); padding:12px; box-shadow:0 1px 4px rgba(60,40,10,.25); }
+  .controls label { display:block; margin:8px 0 1px; font-weight:600; font-size:12px; }
+  .controls input[type=range] { width:100%; }
+  .controls output { color:var(--muted); font-variant-numeric: tabular-nums; }
+  .row { display:flex; gap:10px; align-items:center; }
+  button { margin:6px 6px 0 0; padding:5px 9px; border:1px solid var(--ink); background:var(--shade); font:inherit; cursor:pointer; }
+  select, input[type=number] { font:inherit; }
+  .pass { color:#1E7F5C; font-weight:700; } .fail { color:#B3261E; font-weight:700; }
+  pre { white-space:pre-wrap; font-size:11px; color:var(--muted); }
+  .insetA, .insetB { position:absolute; left:0; right:0; pointer-events:none; text-align:center; font: italic 13px Georgia, serif; color:#6B6152; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <div class="controls">
+    <label>maturity A <output id="oA"></output></label>
+    <input id="mA" type="range" min="0" max="1" step="0.001" value="1" />
+    <label>maturity B <output id="oB"></output></label>
+    <input id="mB" type="range" min="0" max="1" step="0.001" value="0.715" />
+    <div class="row"><label><input id="pA" type="checkbox" checked /> A planted</label><label><input id="pB" type="checkbox" checked /> B planted</label></div>
+    <label>monthsSincePlanting <output id="oM"></output></label>
+    <input id="mon" type="range" min="0" max="12" step="0.01" value="12" />
+    <label>pulse A <output id="oPa"></output> (-1 = none)</label>
+    <input id="puA" type="range" min="-0.01" max="1" step="0.01" value="-0.01" />
+    <label>pulse B <output id="oPb"></output></label>
+    <input id="puB" type="range" min="-0.01" max="1" step="0.01" value="-0.01" />
+    <label>loupe</label>
+    <div class="row">
+      <select id="lt"><option value="A">A</option><option value="B">B</option></select>
+      <select id="lg"><option>roots</option><option>branches</option><option>canopy</option></select>
+    </div>
+    <label>loupe strength <output id="oL"></output></label>
+    <input id="ls" type="range" min="0" max="1" step="0.01" value="0" />
+    <div class="row"><label><input id="rm" type="checkbox" /> reducedMotion</label></div>
+    <div class="row">
+      <label>canvas w <input id="cw" type="number" value="1440" style="width:70px" /></label>
+      <label>h <input id="ch" type="number" value="900" style="width:70px" /></label>
+    </div>
+    <div class="row">
+      <label>inset top <input id="it" type="number" value="0" style="width:60px" /></label>
+      <label>bottom <input id="ib" type="number" value="0" style="width:60px" /></label>
+    </div>
+    <button id="apply">Apply size/insets</button>
+    <button id="check">Self-check</button><span id="checkOut"></span>
+    <button id="perf">Measure render</button>
+    <pre id="info"></pre>
+  </div>
+</div>
+<script type="module" src="/src/scene-test.ts"></script>
+</body>
+</html>

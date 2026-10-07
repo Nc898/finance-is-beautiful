@@ -20,8 +20,8 @@ export const WORLD = {
   /** Max canopy width of a maturity-1 tree. */
   matureSpread: 400,
   /** Visible band the camera must always contain (y-up). */
-  viewTop: 640,
-  viewBottom: -150,
+  viewTop: 615,
+  viewBottom: -80,
 } as const;
 
 export interface TreeVisualState {
@@ -69,6 +69,12 @@ export interface SceneAPI {
   ready: Promise<void>;
   /** Call on container resize. Rebuilds cached paper/background at the new size. */
   resize(cssWidth: number, cssHeight: number, devicePixelRatio: number): void;
+  /**
+   * Reserve CSS-px bands at the top (header + caption) and bottom (specimen labels)
+   * of the canvas. The camera fits the WORLD view band into the remaining area.
+   * Call on layout changes only (not per frame); the paper backdrop still fills the whole canvas.
+   */
+  setInsets(insets: { top: number; bottom: number }): void;
   render(frame: SceneFrame): void;
   worldToScreen(x: number, y: number): ScreenPoint;
   anchorsFor(id: TreeId, maturity: number): TreeAnchors;

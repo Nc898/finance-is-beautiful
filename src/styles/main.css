@@ -154,6 +154,15 @@ input {
   text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
 }
 
+.cap-ghost {
+  align-self: start;
+  visibility: hidden;
+}
+
+.plate-ghost {
+  visibility: hidden;
+}
+
 .cap.on {
   opacity: 1;
 }
@@ -184,7 +193,7 @@ input {
   width: var(--plate-w, 200px);
   text-align: center;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 8px var(--paper), 0 0 3px var(--paper);
+  text-shadow: 0 0 10px var(--paper), 0 0 5px var(--paper), 0 0 2px var(--paper);
   will-change: transform;
 }
 
@@ -197,6 +206,22 @@ input {
   font-size: 13px;
   line-height: 1.3;
   color: var(--ink);
+}
+
+.plate[data-align='right'] {
+  text-align: right;
+}
+
+.plate[data-align='left'] {
+  text-align: left;
+}
+
+.plate[data-align='right'] .plate-id {
+  justify-content: flex-end;
+}
+
+.plate[data-align='left'] .plate-id {
+  justify-content: flex-start;
 }
 
 .plate-balance {
@@ -215,11 +240,19 @@ input {
   display: none;
 }
 
+.plate[data-wide] .plate-split span {
+  display: inline;
+}
+
+.plate[data-wide] .plate-split .ps-dot {
+  display: inline;
+}
+
 .plate-split {
   margin-top: 1px;
   font-size: 12px;
   line-height: 1.35;
-  color: var(--muted);
+  color: #574e40; /* a shade deeper than --muted: it can sit over the pale soil wash */
   transition: opacity 0.7s ease;
 }
 
@@ -260,7 +293,7 @@ input {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 8px var(--paper), 0 0 3px var(--paper);
   opacity: 0;
-  transition: opacity 0.7s ease;
+  transition: opacity 0.5s ease;
   will-change: transform;
 }
 
@@ -272,7 +305,7 @@ input {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: #574e40;
   line-height: 1.3;
 }
 
@@ -684,11 +717,15 @@ input {
 /* ---------- Foot: assumptions and disclosure ---------- */
 
 .foot {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding-top: 2px;
+  column-gap: 16px;
+}
+
+.how[open] {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .assumptions {
@@ -832,10 +869,30 @@ input {
   margin-top: 4px;
 }
 
+/* Mid-width desktops: shorter header buttons so the caption keeps one line per paragraph. */
+@media (min-width: 1180px) and (max-width: 1520px) {
+  .story-actions .long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .caption {
+    width: min(880px, calc(100% - 2 * var(--gutter) - 400px));
+  }
+}
+
 /* Wide screens: the caption shares the masthead row, clear of the canopy. */
 @media (min-width: 1180px) {
   .caption {
     top: 10px;
+  }
+}
+
+@media (min-width: 1521px) {
+  .caption {
     width: min(880px, calc(100% - 2 * var(--gutter) - 560px));
   }
 }
@@ -953,9 +1010,12 @@ input {
   }
 
   .foot {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
+    grid-template-columns: 1fr;
+    row-gap: 0;
+  }
+
+  .how[open] {
+    grid-row: auto;
   }
 
   .plate-id {

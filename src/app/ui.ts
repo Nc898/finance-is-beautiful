@@ -4,8 +4,9 @@
  */
 import { formatCurrency } from '../engine';
 import type { InputField, TreeId } from '../engine';
+import { WORLD } from '../scene/types';
 import type { Reason, Speed, Store } from './store';
-import { storyBeat, storyCaption } from './story';
+import { captionForBeat, storyBeat, storyCaption } from './story';
 import type { StoryBeat, StoryCaption } from './story';
 import { ageShort, ageSpoken, contributionCount, exactPair, gapOf, sceneSummary } from './text';
 import type { TreePair } from './text';
@@ -26,6 +27,8 @@ export interface Point {
 export interface UIHooks {
   /** Screen-space base points of both trees, from scene.anchorsFor(id, 0).base. */
   getBases(): Record<TreeId, Point>;
+  /** Reserve stable bands at the top (header + caption) and bottom (plates + difference). Optional until the scene supports it. */
+  setInsets?(insets: { top: number; bottom: number }): void;
 }
 
 export interface UI {
@@ -227,30 +230,103 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     });
   }
 
+  /** Plates centre under their trees; when the trees are too close for that (short, wide stages), they sit either side of the middle. */
+  /** Min width the Difference label needs between the plates (worst case: seven digits). */
+  const diffWidth = () => Math.max(diffEl.offsetWidth, 112) + 20;
+  /** How far (world units) the plates may rise into the lower part of the soil band. */
+  const SOIL_OVERLAP = 10;
+
+  function plateGeometry(spacing: number): { plateW: number; outward: boolean; columns: boolean } {
+    // Phones: two equal columns across the stage, so plates never fight over the little room between trees.
+    if (stageW < 700) return { plateW: Math.floor((stageW - 32) / 2) - 4, outward: false, columns: true };
+    // Wider: Difference sits on the same row, centred between the plates.
+    const fit = spacing - diffWidth();
+    if (fit < 150) return { plateW: 280, outward: true, columns: false };
+    return { plateW: Math.min(280, fit), outward: false, columns: false };
+  }
+
+  /* ---------------- stable insets for the scene camera ---------------- */
+
+  const ghostCap = $('cap-ghost');
+  const ghostPlate = $('plate-ghost');
+  const BEATS: StoryBeat[] = ['planting', 'contribute', 'bBegins', 'reinvest', 'difference', 'handoff'];
+  let lastInsets = { top: -1, bottom: -1 };
+
+  /** Tallest caption this scenario can produce, at the current width (measured in a hidden twin). */
+  function tallestCaption(): number {
+    let tallest = 0;
+    for (const beat of BEATS) {
+      const c = captionForBeat(beat, state.scenario);
+      setText(ghostCap.querySelector<HTMLElement>('.cap-1')!, c.primary);
+      setText(ghostCap.querySelector<HTMLElement>('.cap-2')!, c.secondary ?? '');
+      tallest = Math.max(tallest, ghostCap.offsetHeight);
+    }
+    return tallest;
+  }
+
+  function applyInsets(): void {
+    if (!stageW) return;
+    const capTop = ($('caption') as HTMLElement).offsetTop;
+    const masthead = (document.querySelector('.masthead') as HTMLElement).offsetHeight;
+    const top = Math.ceil(Math.max(masthead + 4, capTop + tallestCaption() + 4));
+    const band = WORLD.viewTop - WORLD.viewBottom;
+    const dh = diffEl.offsetHeight || 44;
+    let bottom = 8;
+    for (let i = 0; i < 3; i++) {
+      const s = Math.min(stageW / WORLD.width, Math.max(1, stageH - top - bottom) / band);
+      const spacing = (WORLD.treeX.B - WORLD.treeX.A) * s;
+      const { plateW, columns } = plateGeometry(spacing);
+      stage.style.setProperty('--plate-w', plateW + 'px');
+      for (const el of [ghostPlate, plates.A.root, plates.B.root]) el.toggleAttribute('data-wide', plateW >= 270);
+      const ph = ghostPlate.offsetHeight;
+      const sameRow = !columns;
+      bottom = Math.ceil(Math.max(8, 4 + ph + (sameRow ? 0 : dh + 6) + 4 - (columns ? 0 : SOIL_OVERLAP * s)));
+    }
+    if (top !== lastInsets.top || bottom !== lastInsets.bottom) {
+      lastInsets = { top, bottom };
+      hooks.setInsets?.({ top, bottom });
+    }
+  }
+
   /* ---------------- overlay layout ---------------- */
 
   function layout(): void {
     if (!stageW) return;
     const bases = hooks.getBases();
     const spacing = bases.B.x - bases.A.x;
-    const plateW = Math.max(112, Math.min(212, spacing - 14));
+    const { plateW, outward, columns } = plateGeometry(spacing);
     stage.style.setProperty('--plate-w', `${plateW}px`);
+    for (const el of [ghostPlate, plates.A.root, plates.B.root]) el.toggleAttribute('data-wide', plateW >= 270);
+    // Plates sit below the roots/soil band, in the bottom inset the camera reserved for them.
+    const unit = spacing / (WORLD.treeX.B - WORLD.treeX.A);
+    const plateTop = bases.A.y + (-WORLD.viewBottom - (columns ? 0 : SOIL_OVERLAP)) * unit + 6;
     let bottom = 0;
     for (const id of ['A', 'B'] as const) {
       const p = plates[id];
       const b = bases[id];
       const h = p.root.offsetHeight;
-      const y = Math.min(b.y + 14, stageH - h - 6);
-      p.root.style.transform = `translate(${Math.round(b.x - plateW / 2)}px, ${Math.round(y)}px)`;
+      const y = Math.min(plateTop, stageH - h - 4);
+      const midX = (bases.A.x + bases.B.x) / 2;
+      const x = columns
+        ? (id === 'A' ? 16 : stageW - 16 - plateW)
+        : outward
+          ? (id === 'A' ? midX - diffWidth() / 2 - plateW : midX + diffWidth() / 2)
+          : id === 'A'
+            ? Math.min(b.x - plateW / 2, midX - diffWidth() / 2 - plateW)
+            : Math.max(b.x - plateW / 2, midX + diffWidth() / 2);
+      p.root.dataset.align = outward && !columns ? (id === 'A' ? 'right' : 'left') : 'center';
+      p.root.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
       p.seed.style.transform = `translate(${Math.round(b.x)}px, ${Math.round(b.y + 1)}px)`;
       bottom = Math.max(bottom, y + h);
     }
+    const worstH = ghostPlate.offsetHeight;
     const dw = diffEl.offsetWidth;
     const dh = diffEl.offsetHeight;
     const midX = (bases.A.x + bases.B.x) / 2;
-    const room = spacing - plateW;
-    const sameRow = room >= dw + 24;
-    const dy = sameRow ? Math.min(bases.A.y + 14, stageH - dh - 6) : Math.min(bottom + 4, stageH - dh - 4);
+    const sameRow = !columns;
+    const dy = sameRow
+      ? Math.min(plateTop, stageH - dh - 4)
+      : Math.min(Math.max(bottom, plateTop + worstH) + 6, stageH - dh - 4);
     diffEl.style.transform = `translate(${Math.round(midX - dw / 2)}px, ${Math.round(dy)}px)`;
     placeMarkers();
   }
@@ -284,7 +360,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   /* ---------------- captions ---------------- */
 
-  const layers = Array.from(document.querySelectorAll<HTMLElement>('#caption .cap'));
+  const layers = Array.from(document.querySelectorAll<HTMLElement>('#caption .cap[data-layer]'));
   let activeLayer = 0;
   let captionKey = '';
   function setCaption(c: StoryCaption | null): void {
@@ -580,6 +656,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
         syncDrafts();
         syncPlay();
         buildScale();
+        applyInsets();
+        layout();
         timelineKey = '';
         plateKey = '';
         tableKey = '';
@@ -667,6 +745,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     setStageSize(w, h) {
       stageW = w;
       stageH = h;
+      applyInsets();
       layout();
     },
     announce: (t) => announce(t),
