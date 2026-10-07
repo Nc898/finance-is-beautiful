@@ -139,7 +139,7 @@ async function perfScene(): Promise<{ avgMs: number; flushedMs: number; readyMs:
   scene.resize(1440, 900, 1);
   await scene.ready;
   const readyMs = performance.now() - t0;
-  const mk = (id: 'A' | 'B') => ({ id, planted: true, maturity: 1, monthsSincePlanting: 12, pulse: -1, startAge: 25 });
+  const mk = (id: 'A' | 'B') => ({ id, planted: true, maturity: 1, monthsSincePlanting: 12, pulse: -1, bills: 40, startAge: 25 });
   const frame: SceneFrame = { timeMs: 0, trees: [mk('A'), mk('B')], reducedMotion: false };
   for (let i = 0; i < 10; i++) scene.render(frame);
   const frames = 200;

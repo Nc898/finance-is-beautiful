@@ -18,6 +18,8 @@ export interface Loop {
 function treeState(
   id: TreeId,
   snap: TreeSnapshot,
+  exact: TreeSnapshot,
+  contribution: number,
   startAge: number,
   displayScale: number,
   pulse: number,
@@ -28,6 +30,7 @@ function treeState(
     maturity: snap.planted ? maturityFor(snap.balance, displayScale) : 0,
     monthsSincePlanting: snap.monthsElapsed,
     pulse: snap.planted ? pulse : -1,
+    bills: exact.planted && contribution > 0 ? Math.floor(exact.contributionsMade / 12) : 0,
     startAge,
   };
 }
@@ -75,8 +78,8 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     const f: SceneFrame = {
       timeMs: now,
       trees: [
-        treeState('A', smoothA, sc.inputs.startAgeA, state.displayScale, pulse),
-        treeState('B', smoothB, sc.inputs.startAgeB, state.displayScale, pulse),
+        treeState('A', smoothA, exact.a, sc.inputs.monthlyContribution, sc.inputs.startAgeA, state.displayScale, pulse),
+        treeState('B', smoothB, exact.b, sc.inputs.monthlyContribution, sc.inputs.startAgeB, state.displayScale, pulse),
       ],
       reducedMotion: state.reducedMotion,
       loupe,

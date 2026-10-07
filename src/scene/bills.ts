@@ -62,11 +62,11 @@ function paintBill(seed: number, variant: number): HTMLCanvasElement {
   ctx.globalCompositeOperation = 'source-over';
   // pale portrait oval in the middle with a suggested engraving
   const cx = SW / 2, cy = SH / 2;
-  ctx.fillStyle = 'rgba(244,244,226,0.85)';
+  ctx.fillStyle = 'rgba(232,238,208,0.5)';
   ctx.beginPath();
   ctx.ellipse(cx, cy, W * 0.15, H * 0.36, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(52,80,56,0.55)';
+  ctx.strokeStyle = 'rgba(52,80,56,0.5)';
   ctx.lineWidth = 1.1;
   ctx.stroke();
   ctx.strokeStyle = 'rgba(52,80,56,0.35)';
@@ -123,8 +123,19 @@ function paintBill(seed: number, variant: number): HTMLCanvasElement {
 
 /* ------------------------------------------------------------------ flights */
 
+/** Where a bill rests in the canopy (screen space), and how it lies there. */
+export interface BillPose {
+  x: number;
+  y: number;
+  ang: number;
+  size: number;
+  mirror: number;
+}
+
 export interface BillFlight {
   id: number;
+  /** the canopy slot this bill lands in */
+  slot: number;
   t0: number;
   dur: number;
   /** which main root to start from (index into the painter's root list) */
@@ -190,7 +201,7 @@ function travel(t: number): number {
  * Draw one bill along the current scratch path. `now` is wall-clock ms, `size` the bill's on-screen
  * width, `groundY` the screen y of the ground line (bills don't sway while in the soil).
  */
-export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: number, total: number, size: number, groundY: number): void {
+export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: number, total: number, size: number, groundY: number, rest: BillPose): void {
   const t = clamp((now - f.t0) / f.dur, 0, 1);
   if (t >= 1 || total <= 1 || PX.length < 2) return;
   const s = clamp(travel(t), 0, 1) * total;
@@ -201,19 +212,23 @@ export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: numb
   const x = p.x - p.ty * sway;
   const y = p.y + p.tx * sway;
   const fadeIn = smoothstep(t / 0.08);
-  const dissolve = smoothstep((t - 0.8) / 0.2);
-  const alpha = fadeIn * (1 - dissolve);
+  // settling: in the last stretch the bill eases into the exact pose it will rest in
+  const settle = smoothstep((t - 0.74) / 0.26);
   // orientation: partly follows the path, with a slow flutter; a gentle 3D flip by squashing width
-  const ang = Math.atan2(p.ty, p.tx) * 0.3 + Math.sin(now * 0.0017 + f.id) * 0.32;
-  const flip = 0.62 + 0.38 * Math.cos(now * 0.0029 + f.id * 2.3);
-  const sc = 1 - 0.35 * dissolve;
+  const flyAng = Math.atan2(p.ty, p.tx) * 0.3 + Math.sin(now * 0.0017 + f.id) * 0.32;
+  const flyFlip = 0.62 + 0.38 * Math.cos(now * 0.0029 + f.id * 2.3);
+  const ang = flyAng + (rest.ang - flyAng) * settle;
+  const flip = (flyFlip + (1 - flyFlip) * settle) * (settle > 0.5 ? rest.mirror : 1);
+  const bx = x + (rest.x - x) * settle;
+  const by = y + (rest.y - y) * settle;
+  const alpha = fadeIn;
   if (alpha > 0.01) {
     const img = billSprites()[f.variant % 3]!;
-    const w = size * sc;
+    const w = size + (rest.size - size) * settle;
     const h = w * (SH / SW);
     ctx.save();
     ctx.globalAlpha = alpha * 0.96;
-    ctx.translate(x, y);
+    ctx.translate(bx, by);
     ctx.rotate(ang);
     ctx.scale(flip, 1);
     // soft cast shadow so the bill sits in the scene rather than on top of it
@@ -224,19 +239,75 @@ export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: numb
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
     ctx.restore();
   }
-  // dissolving into the canopy: a small bloom of leaf-green dabs spreading out and fading
-  if (dissolve > 0.01) {
-    const k = dissolve;
-    for (let i = 0; i < 6; i++) {
-      const a = i * 1.05 + f.id * 0.7;
-      const r = size * (0.15 + 0.55 * k) * (0.7 + 0.3 * Math.sin(i * 2.1 + f.id));
-      const lx = p.x + Math.cos(a) * r;
-      const ly = p.y + Math.sin(a) * r * 0.75 - size * 0.12 * k;
-      const la = Math.sin(Math.PI * k) * 0.75;
-      ctx.fillStyle = i % 3 === 0 ? `rgba(240,180,41,${la * 0.7})` : i % 2 === 0 ? `rgba(125,179,67,${la})` : `rgba(76,150,84,${la})`;
-      ctx.beginPath();
-      ctx.ellipse(lx, ly, size * 0.13, size * 0.065, a, 0, Math.PI * 2);
-      ctx.fill();
-    }
+}
+
+/** Resting-bill sprites: bill + foliage glaze + tucked leaves, baked once per (variant, leaf layout). */
+const restCache = new Map<string, HTMLCanvasElement>();
+const PAD = 14;
+function restingSprite(variant: number, layout: number): HTMLCanvasElement {
+  const key = `${variant}|${layout}`;
+  const hit = restCache.get(key);
+  if (hit) return hit;
+  const cv = makeCanvas(SW + 2 * PAD, SH + 2 * PAD);
+  const ctx = cv.getContext('2d')!;
+  const w = SW;
+  const h = SH;
+  ctx.translate(PAD + w / 2, PAD + h / 2);
+  ctx.fillStyle = 'rgba(30,70,50,0.16)';
+  ctx.beginPath();
+  ctx.ellipse(w * 0.05, h * 0.3, w * 0.5, h * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(billSprites()[variant % 3]!, -w / 2, -h / 2, w, h);
+  // foliage glaze: dappled shade from the leaves above
+  ctx.globalCompositeOperation = 'multiply';
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  g.addColorStop(0, 'rgba(190,214,150,0.12)');
+  g.addColorStop(1, 'rgba(70,130,90,0.18)');
+  ctx.fillStyle = g;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+  // two or three pointed leaves tucked over the corners
+  const n = 2 + (layout % 2);
+  for (let i = 0; i < n; i++) {
+    const hx = Math.sin(layout * 3.1 + i * 2.4);
+    const hy = Math.cos(layout * 1.7 + i * 1.9);
+    const lx = (i === 0 ? -0.42 : i === 1 ? 0.4 : hx * 0.3) * w;
+    const ly = (hy > 0 ? 0.42 : -0.4) * h;
+    const la = hx * 1.2 + i;
+    const L = w * 0.17;
+    const Wd = w * 0.065;
+    const cxl = Math.cos(la), sxl = Math.sin(la);
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(132,184,74,0.9)' : 'rgba(104,166,78,0.88)';
+    ctx.beginPath();
+    ctx.moveTo(lx - cxl * L, ly - sxl * L);
+    ctx.quadraticCurveTo(lx - sxl * Wd * 2, ly + cxl * Wd * 2, lx + cxl * L, ly + sxl * L);
+    ctx.quadraticCurveTo(lx + sxl * Wd * 2, ly - cxl * Wd * 2, lx - cxl * L, ly - sxl * L);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(30,64,40,0.4)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(lx - cxl * L * 0.85, ly - sxl * L * 0.85);
+    ctx.lineTo(lx + cxl * L * 0.85, ly + sxl * L * 0.85);
+    ctx.stroke();
   }
+  restCache.set(key, cv);
+  return cv;
+}
+
+/**
+ * A bill resting in the canopy: same painted note, with leaves tucked over its edges and a light
+ * foliage glaze so it sits among the leaves rather than on top of them. One cached drawImage per frame.
+ */
+export function drawRestingBill(ctx: CanvasRenderingContext2D, pose: BillPose, variant: number, alpha: number, seed: number): void {
+  if (alpha <= 0.01) return;
+  const img = restingSprite(variant, ((seed % 4) + 4) % 4);
+  const k = pose.size / SW;
+  const cr = Math.cos(pose.ang) * k;
+  const sr = Math.sin(pose.ang) * k;
+  const t = ctx.getTransform();
+  ctx.globalAlpha = alpha;
+  ctx.transform(cr * pose.mirror, sr * pose.mirror, -sr, cr, pose.x, pose.y);
+  ctx.drawImage(img, -(SW / 2 + PAD), -(SH / 2 + PAD));
+  ctx.setTransform(t);
+  ctx.globalAlpha = 1;
 }

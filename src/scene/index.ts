@@ -209,7 +209,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
         painters[t.id].paint(
           ctx,
           view,
-          { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, pulse: t.pulse, plantK },
+          { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, pulse: t.pulse, bills: t.bills, plantK },
           sprites,
         );
       }

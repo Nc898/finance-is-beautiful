@@ -14,7 +14,7 @@ import {
 import { PAL, makeBarkTile, mixHex, rgba } from './watercolor';
 import type { Sprites, Spr } from './sprites';
 import { paintGroundJoin, paintRootCrown, paintRoots, rootCenterline } from './rootArt';
-import { buildPath, drawBill, type BillFlight, type Line } from './bills';
+import { buildPath, drawBill, drawRestingBill, type BillFlight, type BillPose, type Line } from './bills';
 
 export interface View {
   /** screen px of world (0,0) = trunk base */
@@ -35,6 +35,8 @@ export interface PaintParams {
   pulse?: number;
   /** screen rect (css px): anything entirely outside is skipped (loupe) */
   cull?: { x0: number; y0: number; x1: number; y1: number };
+  /** whole years of contributions = bills resting in the canopy */
+  bills?: number;
   /** planting spot instead of a tree */
   unplanted?: boolean;
   /** 0..1 planting transition (stake fades, mound settles); 1 = fully planted */
@@ -42,6 +44,8 @@ export interface PaintParams {
 }
 
 const MAXP = 256;
+/** most bills a canopy can hold (years of contributions); the age range allows at most 74 */
+const MAX_SLOTS = 80;
 const PIVOT = 0.82;
 const BARK_BLOOM = ['rgba(176,104,52,0.12)', 'rgba(104,66,98,0.1)', 'rgba(214,168,86,0.13)'];
 
@@ -82,7 +86,6 @@ export class TreePainter {
   /* contribution bills */
   private bills: BillFlight[] = [];
   private billId = 0;
-  private lastYear = -1;
   private lastSpawn = -1e9;
   private rootRs = 1;
   private rootDrop = 0;
@@ -92,6 +95,15 @@ export class TreePainter {
   private scaffoldSet = new Set<number>();
   /** screen polylines of the trunk and scaffolds, captured as they are drawn this frame */
   private cap = new Map<number, Line>();
+  /** canopy slots: each bill rests on a fixed clump with a fixed offset/angle (generated once) */
+  private slots: Array<{ clump: number; dx: number; dy: number; ang: number; size: number; mirror: number; variant: number }> = [];
+  private slotsByClump = new Map<number, number[]>();
+  /** wall-clock time each slot appeared (−Infinity = shown at once), −1 = not shown */
+  private slotBorn = new Float64Array(MAX_SLOTS).fill(-1);
+  private billCount = 0;
+  private billNow = 0;
+  private billSize = 20;
+  private haveCount = false;
 
   constructor(model: TreeModel) {
     this.model = model;
@@ -105,6 +117,32 @@ export class TreePainter {
       .slice(0, 3)
       .map((b) => b.idx);
     this.scaffoldSet = new Set(this.scaffolds);
+    // canopy slots: mid/front clumps in birth order (which is spread over the dome), so early bills sit
+    // on early clumps and are visible on a young tree; offsets and angles from an index hash
+    const cand = model.clumps
+      .map((c, i) => ({ c, i }))
+      .filter((o) => o.c.layer >= 2 && !o.c.mass)
+      .sort((a, b) => a.c.birth - b.c.birth)
+      .map((o) => o.i);
+    const hh = (a: number, b: number) => {
+      const t = Math.sin(a * 12.9898 + b * 78.233 + model.seed * 0.137) * 43758.5453;
+      return t - Math.floor(t);
+    };
+    for (let k = 0; k < MAX_SLOTS && cand.length; k++) {
+      const clump = cand[(k * 3) % cand.length]!;
+      this.slots.push({
+        clump,
+        dx: (hh(k, 1) - 0.5) * 0.55,
+        dy: (hh(k, 2) - 0.6) * 0.45,
+        ang: (hh(k, 3) - 0.5) * 1.9,
+        size: 0.72 + hh(k, 4) * 0.22,
+        mirror: hh(k, 5) < 0.5 ? -1 : 1,
+        variant: k % 3,
+      });
+      const list = this.slotsByClump.get(clump) ?? [];
+      list.push(k);
+      this.slotsByClump.set(clump, list);
+    }
     this.cm = crownMap(0.05, model.tanLean);
     for (const b of model.branches) {
       const t = b.tone;
@@ -551,8 +589,14 @@ export class TreePainter {
 
     this.drawBills(ctx, v, p, mEff);
 
-    for (let i = 0; i < L[2].length; i++) this.drawClump(ctx, v, L[2][i]!, sp);
-    for (let i = 0; i < L[3].length; i++) this.drawClump(ctx, v, L[3][i]!, sp);
+    for (let i = 0; i < L[2].length; i++) {
+      this.drawClump(ctx, v, L[2][i]!, sp);
+      this.drawSlotBills(ctx, v, L[2][i]!);
+    }
+    for (let i = 0; i < L[3].length; i++) {
+      this.drawClump(ctx, v, L[3][i]!, sp);
+      this.drawSlotBills(ctx, v, L[3][i]!);
+    }
 
     // restrained pigment splatter, anchored to clumps so it scales with the crown
     for (const sk of model.specks) {
@@ -594,41 +638,62 @@ export class TreePainter {
    */
   private drawBills(ctx: CanvasRenderingContext2D, v: View, p: PaintParams, m: number): void {
     const now = p.timeMs;
-    if (!p.wind) {
-      // reduced motion: no flights
-      this.bills.length = 0;
-      this.lastYear = -1;
-      return;
-    }
+    this.billNow = now;
+    this.billSize = clamp(38 * v.s, 24, 54) * (0.75 + 0.25 * Math.min(1, m * 2));
+    const count = Math.min(this.slots.length, Math.max(0, Math.floor(p.bills ?? 0)));
     if (!p.cull) {
-      const yr = Math.floor(p.months / 12 + 1e-6);
-      const flowing = p.pulse !== undefined && p.pulse >= 0;
-      if (flowing && this.lastYear >= 0 && yr > this.lastYear && now - this.lastSpawn > 850 && this.bills.length < 3 && m > 0.05 && this.mainRoots.length) {
+      // which slots are showing, and since when (fade in when they arrive without a flight)
+      const instant = !p.wind || !this.haveCount;
+      for (let k = 0; k < this.slots.length; k++) {
+        if (k >= count) this.slotBorn[k] = -1;
+        else if (this.slotBorn[k]! === -1) this.slotBorn[k] = instant ? -Infinity : now;
+      }
+      if (!p.wind) this.bills.length = 0;
+      const flowing = p.wind && p.pulse !== undefined && p.pulse >= 0;
+      if (flowing && this.haveCount && count > this.billCount && now - this.lastSpawn > 850 && this.bills.length < 3 && m > 0.05 && this.mainRoots.length) {
         const id = this.billId++;
-        const nRoutes = this.scaffolds.length + 1;
         this.bills.push({
-          id, t0: now, dur: 0,
+          id, slot: count - 1, t0: now, dur: 0,
           root: this.mainRoots[(id * 2 + 1) % this.mainRoots.length]!,
-          route: (id % nRoutes) - 1,
-          variant: id % 3,
+          route: -2, // chosen once the slot's position is known
+          variant: this.slots[count - 1]!.variant,
         });
         this.lastSpawn = now;
       }
-      this.lastYear = yr;
-      this.bills = this.bills.filter((f) => f.dur === 0 || now - f.t0 < f.dur);
+      this.billCount = count;
+      this.haveCount = true;
+      this.bills = this.bills.filter((f) => f.slot < count && (f.dur === 0 || now - f.t0 < f.dur));
+    } else {
+      this.billCount = count;
     }
     const trunk = this.cap.get(0);
     if (!trunk || !this.bills.length) return;
     for (const f of this.bills) {
       const g = this.state.rootG[f.root]!;
       if (g <= 0.01) continue;
+      const rest = this.slotPose(f.slot, v);
+      if (f.route === -2) {
+        // out along the scaffold whose tip is nearest the landing spot (or up the leader)
+        let best = Infinity;
+        f.route = -1;
+        this.scaffolds.forEach((si, r) => {
+          const sc = this.cap.get(si);
+          if (!sc) return;
+          const d = Math.hypot(sc.x[sc.x.length - 1]! - rest.x, sc.y[sc.y.length - 1]! - rest.y);
+          if (d < best) {
+            best = d;
+            f.route = r;
+          }
+        });
+        const tt = trunk.x.length - 1;
+        if (Math.hypot(trunk.x[tt]! - rest.x, trunk.y[tt]! - rest.y) < best) f.route = -1;
+      }
       const rl = rootCenterline(this.model.roots[f.root]!, g, this.rootRs, v, f.root, this.rootDrop);
       rl.x.reverse();
       rl.y.reverse();
       const pieces: Line[] = [rl];
       const sc = f.route >= 0 ? this.cap.get(this.scaffolds[f.route]!) : undefined;
       if (sc) {
-        // climb the trunk to where this limb leaves it, then out along the limb into the crown
         let j = 0;
         let best = Infinity;
         for (let i = 0; i < trunk.x.length; i++) {
@@ -639,20 +704,20 @@ export class TreePainter {
           }
         }
         pieces.push({ x: trunk.x.slice(0, j + 1), y: trunk.y.slice(0, j + 1) });
-        const e = Math.max(2, Math.ceil(sc.x.length * 0.9));
+        const e = Math.max(2, Math.ceil(sc.x.length * 0.8));
         pieces.push({ x: sc.x.slice(0, e), y: sc.y.slice(0, e) });
       } else {
-        const e = Math.max(2, Math.ceil(trunk.x.length * 0.88));
+        const e = Math.max(2, Math.ceil(trunk.x.length * 0.8));
         pieces.push({ x: trunk.x.slice(0, e), y: trunk.y.slice(0, e) });
       }
+      // final leg: from the wood out to the resting spot among the leaves
+      pieces.push({ x: [rest.x], y: [rest.y] });
       const total = buildPath(pieces);
       if (f.dur === 0) {
         if (p.cull) continue;
-        // duration from the path's world length, so the pace is the same at any zoom
-        f.dur = clamp(2300 + (total / Math.max(0.2, v.s)) * 3.2, 2700, 4600);
+        f.dur = clamp(2500 + (total / Math.max(0.2, v.s)) * 3.2, 2900, 4800);
       }
-      const size = clamp(38 * v.s, 24, 54) * (0.75 + 0.25 * Math.min(1, m * 2));
-      drawBill(ctx, f, now, total, size, v.oy);
+      drawBill(ctx, f, now, total, this.billSize, v.oy, rest);
     }
   }
 
@@ -728,13 +793,11 @@ export class TreePainter {
     ctx.globalAlpha = 1;
   }
 
-  private drawClump(ctx: CanvasRenderingContext2D, v: View, ci: number, sp: Sprites): void {
+  /** Screen pose of a clump this frame (position with wind, rotation, drawn size). */
+  private clumpPose(ci: number, v: View): { X: number; Y: number; rot: number; dw: number; dh: number; wy: number } {
     const c = this.model.clumps[ci]!;
     const a = this.state.clumpA[ci]!;
-    if (a <= 0.004) return;
     const cm = this.cm;
-    const list = sp.kinds[c.kind];
-    const spr: Spr = list[c.variant % list.length]!;
     const wcl = c.mass ? Math.min(c.w0 * (cm.wc / WE), 1.3 * cm.wc) : Math.min(c.w0 * cm.sf, 0.95 * cm.wc);
     const s = 0.75 + 0.25 * a;
     const dw = (wcl * s * v.s) / 0.72;
@@ -742,10 +805,52 @@ export class TreePainter {
     const wy = mapY(c.y0, cm);
     let wx = c.x0 * cm.kx + wy * cm.tanLean;
     wx += this.windDX(wx, wy);
-    const X = v.ox + wx * v.s;
-    const Y = v.oy - wy * v.s;
     let rot = c.rot;
     if (this.windOn) rot += 0.025 * Math.sin(this.windT2 * 1.6 + c.phase) * (wy / H);
+    return { X: v.ox + wx * v.s, Y: v.oy - wy * v.s, rot, dw, dh, wy };
+  }
+
+  /** Resting pose of canopy slot k this frame: rides its clump (wind included) with a little flutter of its own. */
+  private slotPose(k: number, v: View): BillPose {
+    const sl = this.slots[k]!;
+    const cp = this.clumpPose(sl.clump, v);
+    const ox = sl.dx * cp.dw;
+    const oy = sl.dy * cp.dh - PIVOT * cp.dh * 0.25;
+    const cr = Math.cos(cp.rot), sr = Math.sin(cp.rot);
+    const flutter = this.windOn ? 0.09 * Math.sin(this.windT2 * 1.4 + k * 1.7) + 0.04 * Math.sin(this.windT1 * 3.1 + k) : 0;
+    return {
+      x: cp.X + ox * cr - oy * sr,
+      y: cp.Y + ox * sr + oy * cr,
+      ang: sl.ang + cp.rot + flutter,
+      size: this.billSize * sl.size,
+      mirror: sl.mirror,
+    };
+  }
+
+  /** Bills resting on clump ci, drawn right after it so later leaves tuck over them. */
+  private drawSlotBills(ctx: CanvasRenderingContext2D, v: View, ci: number): void {
+    const ks = this.slotsByClump.get(ci);
+    if (!ks) return;
+    const ca = this.state.clumpA[ci]!;
+    if (ca < 0.3) return;
+    for (const k of ks) {
+      if (k >= this.billCount) continue;
+      if (this.bills.some((f) => f.slot === k)) continue; // still flying in
+      const born = this.slotBorn[k]!;
+      const appear = born === -Infinity ? 1 : born < 0 ? 0 : smoothstep((this.billNow - born) / 450);
+      const dp = this.dprV;
+      ctx.setTransform(dp, 0, 0, dp, 0, 0);
+      drawRestingBill(ctx, this.slotPose(k, v), this.slots[k]!.variant, appear * smoothstep((ca - 0.3) / 0.5), k + this.model.seed);
+    }
+  }
+
+  private drawClump(ctx: CanvasRenderingContext2D, v: View, ci: number, sp: Sprites): void {
+    const c = this.model.clumps[ci]!;
+    const a = this.state.clumpA[ci]!;
+    if (a <= 0.004) return;
+    const list = sp.kinds[c.kind];
+    const spr: Spr = list[c.variant % list.length]!;
+    const { X, Y, rot, dw, dh } = this.clumpPose(ci, v);
     const cull = this.cull;
     if (cull && (X + dw < cull.x0 || X - dw > cull.x1 || Y + dh < cull.y0 || Y - dh > cull.y1)) return;
     const dp = this.dprV;

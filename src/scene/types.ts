@@ -39,8 +39,14 @@ export interface TreeVisualState {
   maturity: number;
   /** Months since planting (from the shared clock); drives sprout emergence in the first months. */
   monthsSincePlanting: number;
-  /** 0…1 phase of a restrained contribution pulse travelling roots → trunk, or −1 for none. */
+  /** ≥ 0 while contributions are flowing (playing, motion allowed): a bill flies up the tree for each new year of contributions; −1 for none. */
   pulse: number;
+  /**
+   * Whole years of contributions made so far (0 when the monthly contribution is $0). Each one is a
+   * bill resting in the canopy, so the bills are a visible count of money put in while the canopy's
+   * size shows the balance. Deterministic: same financial state ⇒ same bills.
+   */
+  bills: number;
   /** Planting age, for the unplanted marker ("Plants at 35"). */
   startAge: number;
 }

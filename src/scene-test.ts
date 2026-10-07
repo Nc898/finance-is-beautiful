@@ -28,7 +28,7 @@ let lastMs = 0;
 function mk(id: 'A' | 'B', s: State): TreeVisualState {
   return {
     id, planted: id === 'A' ? s.pA : s.pB, maturity: id === 'A' ? s.mA : s.mB, monthsSincePlanting: s.months,
-    pulse: id === 'A' ? s.puA : s.puB, startAge: id === 'A' ? 25 : 35,
+    pulse: id === 'A' ? s.puA : s.puB, bills: Math.floor(s.months / 12) + (id === 'A' ? Math.round(s.mA * 40) : Math.round(s.mB * 30)), startAge: id === 'A' ? 25 : 35,
   };
 }
 function frame(s: State, t: number): SceneFrame {
