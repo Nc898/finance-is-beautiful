@@ -13,7 +13,8 @@ import {
 } from './treeModel';
 import { PAL, makeBarkTile, mixHex, rgba } from './watercolor';
 import type { Sprites, Spr } from './sprites';
-import { paintGroundJoin, paintRootCrown, paintRoots } from './rootArt';
+import { paintGroundJoin, paintRootCrown, paintRoots, rootCenterline } from './rootArt';
+import { buildPath, drawBill, type BillFlight, type Line } from './bills';
 
 export interface View {
   /** screen px of world (0,0) = trunk base */
@@ -30,7 +31,7 @@ export interface PaintParams {
   months: number;
   timeMs: number;
   wind: boolean;
-  /** 0..1 contribution pulse (0 = root tip, 1 = trunk base), or -1 for none */
+  /** ≥ 0 while contributions are flowing (playing, motion allowed): bills are released each year of growth; −1 for none */
   pulse?: number;
   /** screen rect (css px): anything entirely outside is skipped (loupe) */
   cull?: { x0: number; y0: number; x1: number; y1: number };
@@ -78,9 +79,32 @@ export class TreePainter {
   private dprV = 1;
   mEff = 0;
 
+  /* contribution bills */
+  private bills: BillFlight[] = [];
+  private billId = 0;
+  private lastYear = -1;
+  private lastSpawn = -1e9;
+  private rootRs = 1;
+  private rootDrop = 0;
+  /** main roots (long, depth 0) the bills start from, and scaffold limbs they can travel out along */
+  private mainRoots: number[] = [];
+  private scaffolds: number[] = [];
+  private scaffoldSet = new Set<number>();
+  /** screen polylines of the trunk and scaffolds, captured as they are drawn this frame */
+  private cap = new Map<number, Line>();
+
   constructor(model: TreeModel) {
     this.model = model;
     this.state = createState(model);
+    model.roots.forEach((r, i) => {
+      if (r.depth === 0 && r.len > 70) this.mainRoots.push(i);
+    });
+    this.scaffolds = model.branches
+      .filter((b) => b.parent === 0 && !b.isRoot)
+      .sort((a, b) => b.r0 - a.r0)
+      .slice(0, 3)
+      .map((b) => b.idx);
+    this.scaffoldSet = new Set(this.scaffolds);
     this.cm = crownMap(0.05, model.tanLean);
     for (const b of model.branches) {
       const t = b.tone;
@@ -453,6 +477,7 @@ export class TreePainter {
       return;
     }
     const L = model.layers;
+    this.cap.clear();
 
     this.drawRoots(ctx, v, mEff);
 
@@ -515,13 +540,16 @@ export class TreePainter {
       if (g <= 0.0005) continue;
       if (b.rad[0]! * Math.pow(cm.m, 0.9) * st.kappa[b.idx]! * (b.depth <= 1 ? 1 + 0.35 * smoothstep((cm.m - 0.22) / 0.78) : 1) * v.s < 1.6) continue;
       const k = this.prep(b, g, st.kappa[b.idx]!, v, g >= 0.999);
+      if (k >= 2 && (b.idx === 0 || this.scaffoldSet.has(b.idx))) {
+        this.cap.set(b.idx, { x: Array.from(this.X.subarray(0, k)), y: Array.from(this.Y.subarray(0, k)) });
+      }
       if (k < 2 || this.outside(k)) continue;
       this.drawRibbon(ctx, b, k, -b.lightSign, v);
     }
 
     this.drawBaseBlend(ctx, v, mEff);
 
-    if (p.pulse !== undefined && p.pulse >= 0) this.drawPulse(ctx, v, p.pulse, mEff);
+    this.drawBills(ctx, v, p, mEff);
 
     for (let i = 0; i < L[2].length; i++) this.drawClump(ctx, v, L[2][i]!, sp);
     for (let i = 0; i < L[3].length; i++) this.drawClump(ctx, v, L[3][i]!, sp);
@@ -553,36 +581,79 @@ export class TreePainter {
     const k = smoothstep((m - 0.05) / 0.12);
     // the collar first, then the roots over it so their flared bases visibly grow out of the trunk
     paintRootCrown(ctx, v, w * v.s, this.model.seed, k, bark);
-    paintRoots(ctx, v, this.model.roots, this.state.rootG, rs, this.model.seed, bark, w * 0.45 * k);
+    this.rootRs = rs;
+    this.rootDrop = w * 0.45 * k;
+    paintRoots(ctx, v, this.model.roots, this.state.rootG, rs, this.model.seed, bark, this.rootDrop);
   }
 
-  /** Luminous golden droplet travelling from the pulse root's tip to the trunk base, fading as it enters. */
-  private drawPulse(ctx: CanvasRenderingContext2D, v: View, pulse: number, m: number): void {
-    const r = this.model.roots[this.model.pulseRoot]!;
-    const g = this.state.rootG[this.model.pulseRoot]!;
-    const lv = Math.max(2, g * r.len);
-    const s = lv * (1 - clamp(pulse, 0, 1));
-    let i = 1;
-    while (i < r.n - 1 && r.cum[i]! < s) i++;
-    const f = clamp((s - r.cum[i - 1]!) / Math.max(1e-6, r.cum[i]! - r.cum[i - 1]!), 0, 1);
-    const wx = r.px[i - 1]! + (r.px[i]! - r.px[i - 1]!) * f;
-    const wy = r.py[i - 1]! + (r.py[i]! - r.py[i - 1]!) * f;
-    const x = v.ox + wx * v.s;
-    const y = v.oy - wy * v.s;
-    const fade = pulse > 0.85 ? clamp((1 - pulse) / 0.15, 0, 1) : 1;
-    const rad = Math.max(3.4, Math.min(6, 4.6 + 2 * Math.min(1, m * 3)) * v.s);
-    const gr = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    gr.addColorStop(0, `rgba(255,236,160,${0.95 * fade})`);
-    gr.addColorStop(0.35, `rgba(244,190,60,${0.55 * fade})`);
-    gr.addColorStop(1, 'rgba(240,180,41,0)');
-    ctx.fillStyle = gr;
-    ctx.beginPath();
-    ctx.arc(x, y, rad, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(255,248,214,${0.9 * fade})`;
-    ctx.beginPath();
-    ctx.arc(x, y, Math.max(1.1, rad * 0.3), 0, Math.PI * 2);
-    ctx.fill();
+  /**
+   * Contribution bills. One is released each year of growth while contributions are flowing
+   * (at most one every 0.85 s and three in flight, so fast playback never floods the tree). Each
+   * travels root tip → root → trunk → limb → canopy on the tree as drawn this frame, and is drawn
+   * before the mid and front foliage so it disappears into the leaves.
+   */
+  private drawBills(ctx: CanvasRenderingContext2D, v: View, p: PaintParams, m: number): void {
+    const now = p.timeMs;
+    if (!p.wind) {
+      // reduced motion: no flights
+      this.bills.length = 0;
+      this.lastYear = -1;
+      return;
+    }
+    if (!p.cull) {
+      const yr = Math.floor(p.months / 12 + 1e-6);
+      const flowing = p.pulse !== undefined && p.pulse >= 0;
+      if (flowing && this.lastYear >= 0 && yr > this.lastYear && now - this.lastSpawn > 850 && this.bills.length < 3 && m > 0.05 && this.mainRoots.length) {
+        const id = this.billId++;
+        const nRoutes = this.scaffolds.length + 1;
+        this.bills.push({
+          id, t0: now, dur: 0,
+          root: this.mainRoots[(id * 2 + 1) % this.mainRoots.length]!,
+          route: (id % nRoutes) - 1,
+          variant: id % 3,
+        });
+        this.lastSpawn = now;
+      }
+      this.lastYear = yr;
+      this.bills = this.bills.filter((f) => f.dur === 0 || now - f.t0 < f.dur);
+    }
+    const trunk = this.cap.get(0);
+    if (!trunk || !this.bills.length) return;
+    for (const f of this.bills) {
+      const g = this.state.rootG[f.root]!;
+      if (g <= 0.01) continue;
+      const rl = rootCenterline(this.model.roots[f.root]!, g, this.rootRs, v, f.root, this.rootDrop);
+      rl.x.reverse();
+      rl.y.reverse();
+      const pieces: Line[] = [rl];
+      const sc = f.route >= 0 ? this.cap.get(this.scaffolds[f.route]!) : undefined;
+      if (sc) {
+        // climb the trunk to where this limb leaves it, then out along the limb into the crown
+        let j = 0;
+        let best = Infinity;
+        for (let i = 0; i < trunk.x.length; i++) {
+          const d = Math.hypot(trunk.x[i]! - sc.x[0]!, trunk.y[i]! - sc.y[0]!);
+          if (d < best) {
+            best = d;
+            j = i;
+          }
+        }
+        pieces.push({ x: trunk.x.slice(0, j + 1), y: trunk.y.slice(0, j + 1) });
+        const e = Math.max(2, Math.ceil(sc.x.length * 0.9));
+        pieces.push({ x: sc.x.slice(0, e), y: sc.y.slice(0, e) });
+      } else {
+        const e = Math.max(2, Math.ceil(trunk.x.length * 0.88));
+        pieces.push({ x: trunk.x.slice(0, e), y: trunk.y.slice(0, e) });
+      }
+      const total = buildPath(pieces);
+      if (f.dur === 0) {
+        if (p.cull) continue;
+        // duration from the path's world length, so the pace is the same at any zoom
+        f.dur = clamp(2300 + (total / Math.max(0.2, v.s)) * 3.2, 2700, 4600);
+      }
+      const size = clamp(38 * v.s, 24, 54) * (0.75 + 0.25 * Math.min(1, m * 2));
+      drawBill(ctx, f, now, total, size, v.oy);
+    }
   }
 
   /** soil mound with a slim wooden stake and a tiny string tag (no text) */

@@ -607,3 +607,9 @@ export function paintGroundJoin(ctx: CanvasRenderingContext2D, v: RootView, w: n
   ctx.stroke(inkBlades);
   ctx.restore();
 }
+
+/** Screen-space centreline of a root as currently drawn (same growth, girth and drop as paintRoots). */
+export function rootCenterline(r: RootBranch, g: number, rs: number, v: RootView, ri: number, drop: number): { x: number[]; y: number[] } {
+  const k = build(r, g, rs, v, ri, drop);
+  return { x: Array.from(X.subarray(0, k)), y: Array.from(Y.subarray(0, k)) };
+}

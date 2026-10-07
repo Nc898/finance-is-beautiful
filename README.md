@@ -81,7 +81,7 @@ not a literal dollar scale, so exact amounts are always shown as text.
     paths and `drawImage`.
   - `backdrop.ts`: paper, meadow wash and soil cut-away are painted once per size and shown as the canvas CSS
     background, so per-frame work is only the trees.
-  - Loupe (close-detail inset), contribution pulse and wind are decorative and never change growth state.
+  - Loupe (close-detail inset), contribution bills (`bills.ts`: painted banknotes released once per year of growth that travel root → trunk → limb and dissolve into the canopy; wall-clock timed, at most three in flight) and wind are decorative and never change growth state.
 - **Reusable illustration assets** (`public/assets/`): `foliage-atlas.png` + `foliage-atlas.json` (watercolor clump
   sprites) and `paper-tile.png`, baked from the procedural generators with `node scripts/bake-assets.mjs` (needs the
   dev server on :5174). At runtime the atlas is used when present, and the app falls back to procedural generation.
