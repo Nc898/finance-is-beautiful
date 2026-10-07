@@ -130,21 +130,21 @@ function paintBarkRoot(ctx: CanvasRenderingContext2D, k: number, seed: number, v
 
   // base wash: trunk sienna near the crown, cooling and paling into the soil towards the tip
   const gr = ctx.createLinearGradient(x0, y0, x1, y1);
-  gr.addColorStop(0, 'rgba(150,100,64,1)');
-  gr.addColorStop(0.45, 'rgba(142,100,66,0.95)');
-  gr.addColorStop(1, 'rgba(160,126,88,0.78)');
+  gr.addColorStop(0, 'rgba(172,124,84,1)');
+  gr.addColorStop(0.45, 'rgba(168,126,88,0.95)');
+  gr.addColorStop(1, 'rgba(184,150,110,0.78)');
   ctx.fillStyle = gr;
   ctx.fill(sil);
 
   // lit side glazes (tan), shadow side glazes (umber, then violet-brown in the core shadow)
-  ctx.fillStyle = 'rgba(232,198,142,0.24)';
+  ctx.fillStyle = 'rgba(236,206,154,0.28)';
   ctx.fill(band(k, 1, 0.45, 0.25, seed));
   ctx.fill(band(k, 1, 0.75, 0.2, seed + 1));
-  ctx.fillStyle = 'rgba(84,52,38,0.3)';
+  ctx.fillStyle = 'rgba(96,62,44,0.24)';
   ctx.fill(band(k, -1, -0.1, 0.3, seed + 2));
   ctx.fill(band(k, -1, -0.5, 0.25, seed + 3));
   if (rMax > 3) {
-    ctx.fillStyle = 'rgba(66,46,78,0.16)';
+    ctx.fillStyle = 'rgba(70,50,80,0.12)';
     ctx.fill(band(k, -1, -0.65, 0.2, seed + 4));
   }
 
@@ -277,7 +277,7 @@ function paintThinRoot(ctx: CanvasRenderingContext2D, k: number, seed: number): 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(0.7, R[0]! * 2);
-  ctx.strokeStyle = 'rgba(92,64,42,0.85)';
+  ctx.strokeStyle = 'rgba(118,86,58,0.85)';
   ctx.stroke(p);
   if (R[0]! > 0.8) {
     ctx.lineWidth = Math.max(0.4, R[0]! * 0.6);
@@ -427,7 +427,7 @@ export function paintRootCrown(ctx: CanvasRenderingContext2D, v: RootView, w: nu
   ctx.save();
   ctx.clip(body);
   // base sienna, then lit tan on the left, umber and violet-brown on the right (light from upper-left)
-  ctx.fillStyle = 'rgba(152,102,66,1)';
+  ctx.fillStyle = 'rgba(172,124,84,1)';
   ctx.fillRect(x0 - w * 2, y0 - 4, w * 4, d * 1.4 + 8);
   const across = ctx.createLinearGradient(x0 - w * 1.3, 0, x0 + w * 1.3, 0);
   across.addColorStop(0, 'rgba(226,190,134,0.5)');
