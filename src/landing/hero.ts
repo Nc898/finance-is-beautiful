@@ -45,6 +45,8 @@ export interface Hero {
   ready: Promise<void>;
   /** resolves when the grow-in has finished */
   grown: Promise<void>;
+  /** start the grow-in (called when the page is revealed) */
+  begin(): void;
   destroy(): void;
 }
 
@@ -60,6 +62,8 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
 
   let geo: HeroGeometry | null = null;
   let sprites: Sprites | null = null;
+  /** paper, sky, meadow and soil, painted once per size and copied in as the first layer of each frame */
+  let heroBg: HTMLCanvasElement | null = null;
   let t0 = -1;
   let visible = true;
   let raf = 0;
@@ -138,21 +142,26 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   const draw = (now: number) => {
     if (!geo || !sprites || layers.length === 0) return;
     const still = reduced();
-    if (t0 < 0) t0 = now;
-    const secs = still ? 99 : (now - t0) / 1000;
+    // the grow clock starts when the page is revealed (begin()); until then the grove holds as seedlings
+    const secs = still ? 99 : t0 < 0 ? 0 : Math.max(0, (now - t0) / 1000);
     const growing = secs < GROW_S + 0.5;
     const t1 = performance.now();
-    // growing / still: every tree every frame. Resting: stalest trees first, within a small time budget.
+    // Stalest trees first within a per-frame budget (every tree when still or on the first frame), so the
+    // screen keeps a steady 60 fps while growth is spread over a couple of frames per tree.
+    const budget = growing ? 9 : 7;
+    const first = layers.some((L) => L.at < 0);
     const byAge = allIdx.slice().sort((a, b) => layers[a]!.at - layers[b]!.at);
     let n = 0;
+    let bgDirty = first;
     for (const i of byAge) {
-      if (!growing && n > 0 && performance.now() - t1 > 7) break;
+      if (!still && !first && n > 0 && performance.now() - t1 > budget) break;
       paintLayer(i, now, secs, still);
+      if (GROVE[i]!.bg) bgDirty = true;
       n++;
     }
     ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
     ctx.clearRect(0, 0, geo.w, geo.h);
-    if (bgComp) {
+    if (bgComp && bgDirty) {
       const bc = bgComp.getContext('2d')!;
       bc.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
       bc.globalCompositeOperation = 'source-over';
@@ -167,6 +176,8 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       bc.fillRect(0, 0, geo.w, geo.h);
       bc.fillStyle = 'rgba(120,165,205,0.12)';
       bc.fillRect(0, 0, geo.w, geo.h);
+    }
+    if (bgComp) {
       ctx.globalAlpha = 0.55;
       ctx.drawImage(bgComp, 0, 0, geo.w, geo.h);
       ctx.globalAlpha = 1;
@@ -198,16 +209,36 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     const g = heroGeometry(w, h, window.devicePixelRatio || 1);
     if (geo && geo.w === g.w && geo.h === g.h && geo.dpr === g.dpr) return;
     const my = ++gen;
-    void Promise.all([ensureSprites(g.s * g.dpr), applyHeroBackdrop(canvas, g)]).then(([sp]) => {
+    void Promise.all([ensureSprites(g.s * g.dpr), applyHeroBackdrop(canvas, g)]).then(([sp, b]) => {
       if (destroyed || my !== gen) return;
       sprites = sp;
+      // the painted backdrop is its own static layer behind the grove: the compositor shows it with no
+      // per-frame copy and no GPU readback
+      b.className = 'grove grove-bg';
+      b.setAttribute('aria-hidden', 'true');
+      b.style.width = `${g.w}px`;
+      b.style.height = `${g.h}px`;
+      heroBg?.remove();
+      canvas.before(b);
+      heroBg = b;
       geo = g;
       buildLayers(g);
       canvas.width = Math.round(g.w * g.dpr);
       canvas.height = Math.round(g.h * g.dpr);
       canvas.style.width = `${g.w}px`;
       canvas.style.height = `${g.h}px`;
+      // Warm-up behind the curtain: paint every tree once fully grown (builds bill, bark and clump sprites
+      // and first-use paths), then the seedling state, so nothing is created for the first time mid-animation.
+      if (!reduced()) {
+        const warm = performance.now();
+        for (let i = 0; i < layers.length; i++) paintLayer(i, warm, 99, true);
+        for (const L of layers) L.at = -1;
+      }
       draw(performance.now());
+      // Make the GPU finish all queued painting now, while only the bare paper is showing: a 1-pixel read
+      // from each canvas forces it. Otherwise that work runs when the scene first becomes visible and the
+      // reveal stutters.
+      for (const c of [b, canvas, bgComp, ...layers.map((L) => L.cv)]) c?.getContext('2d')?.getImageData(0, 0, 1, 1);
       resolveReady();
       kick();
     });
@@ -242,6 +273,10 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   return {
     ready,
     grown,
+    begin() {
+      if (t0 < 0) t0 = performance.now() + 250;
+      kick();
+    },
     destroy() {
       destroyed = true;
       if (raf) cancelAnimationFrame(raf);

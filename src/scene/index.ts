@@ -1,6 +1,6 @@
 /**
  * Scene entry point. createScene(canvas, opts) implements the SceneAPI contract (types.ts):
- *  - the visible canvas is TRANSPARENT and only ever receives trees, roots, planting spots, pulse and loupe;
+ *  - each frame the cached backdrop (paper, meadow, soil) is copied in first, then trees, roots, planting spots, bills and loupe;
  *  - paper + meadow + soil cut-away are a static backdrop painted once per size and installed as the canvas CSS
  *    background (and kept as an offscreen canvas for the loupe);
  *  - two trees at WORLD.treeX on a shared ground line; the camera fits the WORLD view band into the canvas minus insets.
@@ -195,6 +195,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, c.cssW, c.cssH);
+      if (bg) ctx.drawImage(bg, 0, 0, c.cssW, c.cssH);
       for (const t of frame.trees) {
         if (lastPlanted[t.id] === false && t.planted) flipAt[t.id] = frame.timeMs;
         lastPlanted[t.id] = t.planted;

@@ -12,6 +12,14 @@ const hero = document.getElementById('hero') as HTMLElement;
 const grove = document.getElementById('grove') as HTMLCanvasElement;
 const heroApi = startHero(hero, grove, () => motion.matches);
 
+/* Reveal the page as one scene once the watercolor is painted (with a safety net if painting fails). */
+const reveal = () => {
+  if (document.documentElement.dataset.ready) return;
+  document.documentElement.dataset.ready = '1';
+  heroApi.begin();
+};
+window.setTimeout(reveal, 6000);
+
 /* ---------- demonstrations list (data driven) ---------- */
 
 const ARROW =
@@ -40,36 +48,45 @@ function entry(d: Demo): HTMLLIElement {
 const list = document.getElementById('demo-list')!;
 for (const d of DEMOS) list.append(entry(d));
 
-/** Paint each live still once it is near the viewport, and again if its box changes size. */
-list.querySelectorAll<HTMLCanvasElement>('.demo-art').forEach((canvas, i) => {
+/**
+ * Paint each live still behind the curtain (before the reveal), so nothing heavy runs once the page is
+ * showing; repaint later only if its box changes size.
+ */
+const previews = Array.from(list.querySelectorAll<HTMLCanvasElement>('.demo-art')).map((canvas, i) => {
   const demo = DEMOS[i]!;
   let lastW = 0;
   let timer = 0;
-  const paint = () => {
+  const paint = async (): Promise<void> => {
     const w = canvas.clientWidth;
     if (w < 40 || Math.abs(w - lastW) < 2) return;
     lastW = w;
-    void demo.paintPreview(canvas);
+    await demo.paintPreview(canvas);
   };
   const ro = new ResizeObserver(() => {
     window.clearTimeout(timer);
-    timer = window.setTimeout(paint, 160);
+    timer = window.setTimeout(() => void paint(), 160);
   });
-  const io = new IntersectionObserver(
-    (es) => {
-      if (es.some((e) => e.isIntersecting)) {
-        io.disconnect();
-        // let the hero finish its first paint before spending time on the vignettes
-        void heroApi.ready.then(() => {
-          paint();
-          ro.observe(canvas);
-        });
-      }
-    },
-    { rootMargin: '600px 0px' },
-  );
-  io.observe(canvas);
+  return paint().then(() => ro.observe(canvas));
 });
+
+/**
+ * Reveal only once frames are flowing smoothly: newly inserted canvases get their compositor layers on the
+ * next frames, and any settling stall should happen while only the paper is showing (capped at 700 ms).
+ */
+const whenSmooth = (): Promise<void> =>
+  new Promise((resolve) => {
+    const start = performance.now();
+    let last = start;
+    let calm = 0;
+    const step = (now: number) => {
+      calm = now - last < 26 ? calm + 1 : 0;
+      last = now;
+      if (calm >= 3 || now - start > 700) resolve();
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+void Promise.all([heroApi.ready, ...previews]).then(whenSmooth).then(reveal);
 
 void heroApi.grown.then(() => {
   document.documentElement.dataset.grown = '1';

@@ -2,7 +2,6 @@
  * Hero backdrop, painted once per size: textured paper, soft watercolor sky blooms behind the type,
  * a few pigment specks, the meadow wash and the soil cut-away down to the bottom of the hero.
  */
-import { setCanvasBackground } from '../scene/backdrop';
 import { Rand } from '../scene/prng';
 import { SOIL_DEPTH } from '../scene/treeModel';
 import { ensurePaperTile } from '../scene/sprites';
@@ -85,7 +84,7 @@ function speck(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, h
   ctx.stroke();
 }
 
-export async function applyHeroBackdrop(canvas: HTMLCanvasElement, g: HeroGeometry): Promise<void> {
+export async function applyHeroBackdrop(canvas: HTMLCanvasElement, g: HeroGeometry): Promise<HTMLCanvasElement> {
   const tile = await ensurePaperTile();
   const d = g.dpr;
   const Wd = Math.round(g.w * d);
@@ -142,5 +141,7 @@ export async function applyHeroBackdrop(canvas: HTMLCanvasElement, g: HeroGeomet
   const ground = makeGroundSprite(31, Wd, gh, (g.s * d) / 1.2);
   ctx.drawImage(ground, 0, Math.round(gy - gh * 0.42));
 
-  await setCanvasBackground(canvas, bg, g.w, g.h);
+  // shown as its own canvas layer behind the grove (no encode, no GPU readback)
+  void canvas;
+  return bg;
 }

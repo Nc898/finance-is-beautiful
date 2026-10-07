@@ -36,6 +36,8 @@ export async function gotoReady(page: Page, opts: { pause?: boolean; query?: str
   await page.routeWebSocket(/.*/, () => {});
   await page.goto('/time-to-grow.html' + query);
   await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 45_000 });
+  // let the load reveal (opacity animations) finish before measuring contrast or layout
+  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect && (a as CSSAnimation).animationName === 'reveal-in').map((a) => a.finished)));
   await frames(page, 2);
   if (pause) {
     await page.evaluate(() => window.__ttg.actions.pause());

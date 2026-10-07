@@ -55,7 +55,22 @@ fit();
 motionQuery.addEventListener('change', (e) => store.actions.setReducedMotion(e.matches));
 
 // Story autoplays once the scene is ready (never in reduced motion, and never over a user's first touch).
-scene.ready.then(() => {
+/** Resolve once frames are flowing smoothly (the first scene frames settle while only paper shows; capped at 700 ms). */
+const whenSmooth = (): Promise<void> =>
+  new Promise((resolve) => {
+    const start = performance.now();
+    let last = start;
+    let calm = 0;
+    const step = (now: number) => {
+      calm = now - last < 26 ? calm + 1 : 0;
+      last = now;
+      if (calm >= 3 || now - start > 700) resolve();
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+
+scene.ready.then(whenSmooth).then(() => {
   document.body.dataset.ready = '1';
   const { state, actions } = store;
   if (!state.reducedMotion && state.mode === 'story' && state.storyTime === 0 && !state.playing) actions.play();

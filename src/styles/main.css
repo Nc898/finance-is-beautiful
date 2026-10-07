@@ -1195,3 +1195,35 @@ html.reduce-motion .dock.hl .inputs {
 html.reduce-motion .cap {
   transition: opacity 0.2s linear !important;
 }
+
+/* ---------- Load reveal ---------- */
+
+/* Nothing shows on the bare paper until the scene is painted; then the scene and controls arrive together. */
+body:not([data-ready]) .stage,
+body:not([data-ready]) .dock,
+body:not([data-ready]) .panel-toggle {
+  opacity: 0.01;
+}
+body[data-ready] .stage {
+  animation: reveal-in 0.8s cubic-bezier(0.25, 0.6, 0.3, 1) both;
+}
+body[data-ready] .dock,
+body[data-ready] .panel-toggle {
+  animation: reveal-in 0.6s ease 0.25s both;
+}
+@keyframes reveal-in {
+  from {
+    opacity: 0.01;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-ready] .stage,
+  body[data-ready] .dock,
+  body[data-ready] .panel-toggle {
+    animation-duration: 0.01s;
+    animation-delay: 0s;
+  }
+}

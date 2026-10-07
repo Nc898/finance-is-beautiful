@@ -26,42 +26,6 @@ export interface Camera {
   ox0: number;
 }
 
-const bgUrls = new WeakMap<HTMLCanvasElement, string>();
-const bgToken = new WeakMap<HTMLCanvasElement, number>();
-
-/**
- * Use a painted backdrop as the canvas's CSS background. The JPEG is encoded with toBlob (off the main
- * thread in Chromium) and decoded before it is swapped in, so nothing blocks or flashes; a newer call
- * for the same canvas (e.g. after a resize) wins and older results are dropped.
- */
-export async function setCanvasBackground(canvas: HTMLCanvasElement, bg: HTMLCanvasElement, cssW: number, cssH: number): Promise<void> {
-  const token = (bgToken.get(canvas) ?? 0) + 1;
-  bgToken.set(canvas, token);
-  const blob = await new Promise<Blob | null>((r) => bg.toBlob(r, 'image/jpeg', 0.94));
-  const url = blob ? URL.createObjectURL(blob) : bg.toDataURL('image/jpeg', 0.94);
-  if (blob) {
-    const im = new Image();
-    im.src = url;
-    try {
-      await im.decode();
-    } catch {
-      /* swap anyway */
-    }
-  }
-  if (bgToken.get(canvas) !== token) {
-    if (blob) URL.revokeObjectURL(url);
-    return;
-  }
-  const st = canvas.style;
-  st.backgroundImage = `url(${url})`;
-  st.backgroundSize = `${cssW}px ${cssH}px`;
-  st.backgroundRepeat = 'no-repeat';
-  st.backgroundColor = '#FBF6EA';
-  const old = bgUrls.get(canvas);
-  if (old) URL.revokeObjectURL(old);
-  if (blob) bgUrls.set(canvas, url);
-}
-
 export function fitCamera(cssW: number, cssH: number, dpr: number, viewWidth: number, insets: Insets = { top: 0, bottom: 0 }): Camera {
   const band = WORLD.viewTop - WORLD.viewBottom;
   const availH = Math.max(40, cssH - insets.top - insets.bottom);
@@ -90,6 +54,10 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   const gh = Math.round(78 * cam.s * d);
   const ground = makeGroundSprite(31, Wd, gh, (cam.s * d) / 1.2);
   ctx.drawImage(ground, 0, Math.round(gy - gh * 0.42));
-  await setCanvasBackground(canvas, bg, cam.cssW, cam.cssH);
+  // Drawn as the first layer of every frame (a GPU texture copy). Handing it to CSS as an encoded image
+  // forced a GPU readback that blocked the main thread for hundreds of milliseconds.
+  canvas.style.backgroundColor = '#FBF6EA';
+  // finish the queued GPU painting now (before the scene is revealed), not on its first visible frame
+  ctx.getImageData(0, 0, 1, 1);
   return bg;
 }

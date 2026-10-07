@@ -68,9 +68,26 @@ ul {
   position: absolute;
   inset: 0;
   display: block;
-  /* the soil dissolves into the paper below the hero */
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 200px), rgba(0,0,0,0.82) calc(100% - 160px), rgba(0,0,0,0.5) calc(100% - 105px), rgba(0,0,0,0.18) calc(100% - 55px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 200px), rgba(0,0,0,0.82) calc(100% - 160px), rgba(0,0,0,0.5) calc(100% - 105px), rgba(0,0,0,0.18) calc(100% - 55px), transparent);
+  /* hidden on the bare paper until the watercolor is fully painted, then revealed as one scene; 1% rather
+     than 0 so the browser rasterizes and uploads it before the reveal instead of on the first visible frame */
+  opacity: 0.01;
+  transition: opacity 0.9s cubic-bezier(0.25, 0.6, 0.3, 1);
+}
+
+/* the soil dissolves into the paper below the hero: a static paper overlay (rasterized once), not a mask
+   on the animated canvas, which would cost a full-screen pass every frame */
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 200px;
+  pointer-events: none;
+  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.18) 72px, rgba(0, 0, 0, 0.5) 125px, rgba(0, 0, 0, 0.82) 160px, #000);
+  mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.18) 72px, rgba(0, 0, 0, 0.5) 125px, rgba(0, 0, 0, 0.82) 160px, #000);
 }
 
 .hero-text {
@@ -99,13 +116,36 @@ ul {
   color: var(--muted);
 }
 
+html[data-ready] .grove {
+  opacity: 1;
+}
+
+/* the type waits for the art, then settles in just after the paper and sky appear */
+/* text is cheap to draw, so it stays fully hidden (only the canvases pre-render at 1%) */
+.hero-title,
+.hero-sub,
+.demos,
+.closing,
+.foot {
+  opacity: 0;
+}
+html[data-ready] .demos,
+html[data-ready] .closing,
+html[data-ready] .foot {
+  opacity: 1;
+  transition: opacity 0.6s ease 0.5s;
+}
+html[data-ready] .hero-title,
+html[data-ready] .hero-sub {
+  opacity: 1;
+}
 @media (prefers-reduced-motion: no-preference) {
-  .hero-title,
-  .hero-sub {
-    animation: rise 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  html[data-ready] .hero-title,
+  html[data-ready] .hero-sub {
+    animation: rise 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) 0.3s both;
   }
-  .hero-sub {
-    animation-delay: 0.18s;
+  html[data-ready] .hero-sub {
+    animation-delay: 0.5s;
   }
 }
 @keyframes rise {
