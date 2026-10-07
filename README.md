@@ -91,3 +91,31 @@ not a literal dollar scale, so exact amounts are always shown as text.
 
 Design notes, sources and decisions: `docs/NOTES.md`; experience spec: `docs/APP_SPEC.md`; testing:
 `docs/TESTING.md`.
+
+## Verified behavior
+
+Last full run on Windows 11 / Chromium 153 (headless):
+
+- `npm test`: 129 Vitest tests. They cover the engine against the closed-form annuity (zero return, identical start ages,
+  zero contributions, start = end, $100/mo at 12% for 12 months, the default comparison, negative return, month
+  boundaries, validation), the balance→maturity mapping, story timing and store rules.
+- `npm run test:e2e`: 345 Playwright tests across desktop 1440×900, laptop 1280×720, mobile 412×915 (touch) and
+  reduced-motion. They cover autoplay, pause, replay, skip, speed, story length, the displayed amounts against an
+  independent formula, timeline keyboard and drag, identical canvas pixels at the same age whichever way it was
+  reached, input changes during playback, each validation case, axe WCAG 2 A/AA (no violations), focus order and
+  visibility, live-region restraint, touch-target size, no horizontal overflow, caption/crown and label/dock
+  non-overlap, and no console or page errors.
+- Performance (`node scripts/perf.mjs`, RTX 3050 laptop that was also running other work, so treat as indicative):
+  ~60 fps during the story at 2× and 0.5–1.1 s to ready. With 4× CPU throttle: 43–59 fps. Scene render with two mature
+  trees, roots and the loupe takes roughly 5–6 ms of CPU. Details are in `docs/TESTING.md`.
+
+## Known limitations
+
+- Mature crowns read as dense domes. Limbs show at the fork and the lifted underside, but less inner branch structure
+  shows through the foliage than in the pencil and layered-canopy references.
+- Bark is a finished illustration rather than loose wet watercolor, and the seedling's root threads are readable only in
+  the loupe.
+- At the honest shared scale the planting moment is mostly paper. The loupe close-up carries that moment.
+- Not verified here: Safari and Firefox, real phones and GPUs, screen-reader output, real touch gestures, forced-colors
+  mode, and text zoom. Software rendering without a GPU (SwiftShader) runs as low as ~13 fps under CPU throttling.
+- The dev screenshot scripts in `scripts/` expect the dev server on the port noted at the top of each file.

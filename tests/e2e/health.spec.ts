@@ -26,13 +26,8 @@ test.describe('page health', () => {
     expect(problems, problems.join('\n')).toEqual([]);
   });
 
-  test('no ResizeObserver loop errors (layout feedback loop) during play and resize', async ({ page }, info) => {
-    // BUG-1 (low): one 'ResizeObserver loop completed with undelivered notifications' window error fires at first
-    // layout (~0.7 s after navigation) and never again. Vite's dev client logs it as an Unhandled error. Source: the
-    // ResizeObservers in src/app/ui.ts (plates/diff/scale -> layout()) and src/main.ts (stage -> fit()) resizing
-    // observed elements within the same frame. Remove test.fail() once fixed.
-    // (The reduced-motion project does not render continuously and has not been seen to hit it.)
-    test.fail(info.project.name !== 'reduced-motion');
+  test('no ResizeObserver loop errors (layout feedback loop) during play and resize', async ({ page }) => {
+    // Regression guard for BUG-1: all ResizeObserver callbacks now only schedule rAF work.
     await page.addInitScript(() => {
       const w = window as unknown as { __roErrors: string[] };
       w.__roErrors = [];

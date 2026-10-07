@@ -264,10 +264,6 @@ input {
   color: var(--muted);
 }
 
-.plate.hide-split .plate-split {
-  opacity: 0;
-}
-
 .seedmark {
   position: absolute;
   top: 0;
@@ -313,6 +309,11 @@ input {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.25;
+  color: #574e40;
+  transition: color 0.6s ease;
+}
+
+.diff.emph .diff-value {
   color: var(--emerald-deep);
 }
 

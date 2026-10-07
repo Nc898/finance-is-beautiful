@@ -1,7 +1,7 @@
 // Usage: node scripts/shoot-slice.mjs [tag] [seed]
 // Needs the dev server on :5174. Saves PNGs under docs/screens/.
 import { createRequire } from 'node:module';
-const PW = process.env.PLAYWRIGHT_PATH ?? 'C:/Users/Nick/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright';
+const PW = process.env.PLAYWRIGHT_PATH ?? 'playwright';
 const { chromium } = createRequire(import.meta.url)(PW);
 import { mkdirSync } from 'node:fs';
 

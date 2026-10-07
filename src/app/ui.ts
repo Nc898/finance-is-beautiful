@@ -16,8 +16,6 @@ const COMMIT_DEBOUNCE_MS = 250;
 const SCRUB_ANNOUNCE_MS = 600;
 const INPUT_ANNOUNCE_MS = 700;
 const HIGHLIGHT_MS = 1500;
-/** Beats during which the results (split line and Difference label) stay hidden in the story. */
-const PRE_REVEAL: ReadonlySet<StoryBeat> = new Set<StoryBeat>(['planting', 'contribute', 'bBegins', 'reinvest']);
 
 export interface Point {
   x: number;
@@ -280,7 +278,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       for (const el of [ghostPlate, plates.A.root, plates.B.root]) el.toggleAttribute('data-wide', plateW >= 270);
       const ph = ghostPlate.offsetHeight;
       const sameRow = !columns;
-      bottom = Math.ceil(Math.max(8, 4 + ph + (sameRow ? 0 : dh + 6) + 4 - (columns ? 0 : SOIL_OVERLAP * s)));
+      bottom = Math.ceil(Math.max(8, 6 + ph + (sameRow ? 0 : dh + 6) + 8 - (columns ? 0 : SOIL_OVERLAP * s)));
     }
     if (top !== lastInsets.top || bottom !== lastInsets.bottom) {
       lastInsets = { top, bottom };
@@ -331,16 +329,23 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     placeMarkers();
   }
 
-  let layoutQueued = false;
-  const queueLayout = () => {
-    if (layoutQueued) return;
-    layoutQueued = true;
+  // Every ResizeObserver callback only schedules ONE shared rAF pass (read, then write), so nothing is resized
+  // inside observer delivery and no loop can form.
+  let passQueued = false;
+  let passDock = false;
+  const queuePass = (dock = false) => {
+    passDock ||= dock;
+    if (passQueued) return;
+    passQueued = true;
     requestAnimationFrame(() => {
-      layoutQueued = false;
+      passQueued = false;
+      const doDock = passDock;
+      passDock = false;
+      if (doDock) syncDockHeight();
       layout();
     });
   };
-  const resizeObs = new ResizeObserver(queueLayout);
+  const resizeObs = new ResizeObserver(() => queuePass());
   resizeObs.observe(plates.A.root);
   resizeObs.observe(plates.B.root);
   resizeObs.observe(diffEl);
@@ -348,11 +353,15 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   /* ---------------- dock height -> stage height ---------------- */
 
+  let lastDockH = -1;
   function syncDockHeight(): void {
     if (how.open) return; // keep the scene steady while the explanation is open
-    document.documentElement.style.setProperty('--dock-h', `${dock.offsetHeight}px`);
+    const h = dock.offsetHeight;
+    if (Math.abs(h - lastDockH) < 0.5) return;
+    lastDockH = h;
+    document.documentElement.style.setProperty('--dock-h', `${h}px`);
   }
-  new ResizeObserver(syncDockHeight).observe(dock);
+  new ResizeObserver(() => queuePass(true)).observe(dock);
   how.addEventListener('toggle', () => {
     syncDockHeight();
     if (how.open) updateTable(lastPair ?? exactPair(state.scenario, state.ageMonths), true);
@@ -399,7 +408,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     return planted ? `Tree ${id} · started at ${start}` : `Tree ${id} · starts at ${s}`;
   }
 
-  function updatePlate(id: TreeId, snap: TreePair['a'], reveal: boolean): void {
+  function updatePlate(id: TreeId, snap: TreePair['a']): void {
     const p = plates[id];
     const start = id === 'A' ? state.inputs.startAgeA : state.inputs.startAgeB;
     const noTime = start >= state.inputs.endAge;
@@ -417,7 +426,6 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       setText(p.splitDot, '');
       setText(p.splitB, '');
     }
-    p.root.classList.toggle('hide-split', !reveal);
     p.seed.classList.toggle('on', !snap.planted);
   }
 
@@ -454,7 +462,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     // Story beat / chapter handling (captions + live announcements).
     let beat: StoryBeat | null = null;
     if (state.mode === 'story') beat = storyBeat(state.storyTime, state.inputs, state.reducedMotion);
-    const reveal = state.mode === 'explore' || (beat !== null && !PRE_REVEAL.has(beat));
+    // The Difference label gets a one-time emphasis (muted to emerald) at the difference chapter and in explore.
+    const emph = state.mode === 'explore' || beat === 'difference' || beat === 'handoff';
 
     if (beat !== lastBeat) {
       const chapterChanged = chapterOf(beat) !== chapterOf(lastBeat);
@@ -479,18 +488,19 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       Math.round(pair.b.balance * 100),
       pair.a.contributionsMade,
       pair.b.contributionsMade,
-      reveal,
+      emph,
       state.scenario.inputs.startAgeA,
       state.scenario.inputs.startAgeB,
       state.scenario.inputs.endAge,
     ].join('|');
     if (key !== plateKey) {
       plateKey = key;
-      updatePlate('A', pair.a, reveal);
-      updatePlate('B', pair.b, reveal);
+      updatePlate('A', pair.a);
+      updatePlate('B', pair.b);
       const both = pair.a.planted && pair.b.planted;
       setText(diffValue, formatCurrency(gapOf(pair).balance));
-      diffEl.classList.toggle('on', both && reveal);
+      diffEl.classList.toggle('on', both);
+      diffEl.classList.toggle('emph', emph);
       const lk = `${pair.a.planted}|${pair.b.planted}`;
       if (lk !== lastLayoutKey) {
         lastLayoutKey = lk;
@@ -726,6 +736,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
         lastBeat = null;
         break;
     }
+  });
+
+  // Text metrics change once the web fonts arrive, so measure the reserved bands again (once, not per frame).
+  void document.fonts?.ready.then(() => {
+    applyInsets();
+    layout();
   });
 
   // Initial paint of static state.

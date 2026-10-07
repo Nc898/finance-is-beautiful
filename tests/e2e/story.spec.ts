@@ -98,20 +98,22 @@ test.describe('guided story', () => {
     expect(await diffText(page)).toBe('$186,633');
     expect((await plate(page, 'A')).balance).toBe('$381,536');
     expect((await plate(page, 'B')).balance).toBe('$194,903');
-    await expect(page.locator('#plate-A')).not.toHaveClass(/hide-split/);
+    expect((await plate(page, 'A')).split).toContain('$96,000 contributed');
     expect((await caption(page)).primary).toBe('Explore your own timeline');
     await expect(page.locator('#btn-play')).toContainText('Play');
     await expect(page.locator('#btn-skip')).toBeHidden();
   });
 
-  test('results stay hidden early in the story and appear at the difference moment', async ({ page }) => {
+  test('breakdown and Difference show as soon as the trees are planted; Difference is emphasised at the difference moment', async ({ page }) => {
     await gotoReady(page);
     await seek(page, 20);
-    await expect(page.locator('#plate-A')).toHaveClass(/hide-split/);
-    await expect(page.locator('#diff')).not.toHaveClass(/\bon\b/);
-    await seek(page, 44);
-    await expect(page.locator('#plate-A')).not.toHaveClass(/hide-split/);
+    expect((await plate(page, 'A')).split).toMatch(/contributed . .+ modeled growth$/);
+    expect((await plate(page, 'B')).split).toMatch(/contributed . .+ modeled growth$/);
     await expect(page.locator('#diff')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#diff')).not.toHaveClass(/\bemph\b/);
+    await seek(page, 44);
+    await expect(page.locator('#diff')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#diff')).toHaveClass(/\bemph\b/);
   });
 
   test('speed 2x advances the story clock about twice as fast as 1x', async ({ page }) => {

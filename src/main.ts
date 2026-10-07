@@ -28,14 +28,28 @@ const ui = createUI(store, {
 const loop = startLoop(store, scene, ui);
 
 // Size the canvas to its container.
+let fitW = -1;
+let fitH = -1;
 const fit = () => {
   const w = Math.max(1, Math.round(stage.clientWidth));
   const h = Math.max(1, Math.round(stage.clientHeight));
+  if (w === fitW && h === fitH) return;
+  fitW = w;
+  fitH = h;
   scene.resize(w, h, Math.min(window.devicePixelRatio || 1, 2));
   ui.setStageSize(w, h);
   loop.invalidate();
 };
-new ResizeObserver(fit).observe(stage);
+// The observer only schedules the work for the next frame, so resizing never happens inside delivery.
+let fitQueued = false;
+new ResizeObserver(() => {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => {
+    fitQueued = false;
+    fit();
+  });
+}).observe(stage);
 fit();
 
 motionQuery.addEventListener('change', (e) => store.actions.setReducedMotion(e.matches));

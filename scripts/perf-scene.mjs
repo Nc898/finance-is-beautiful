@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-const PW = process.env.PLAYWRIGHT_PATH ?? 'C:/Users/Nick/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright';
+const PW = process.env.PLAYWRIGHT_PATH ?? 'playwright';
 const { chromium } = createRequire(import.meta.url)(PW);
 const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
 const page = await browser.newPage({ viewport: { width: 1820, height: 1000 }, deviceScaleFactor: 1 });
