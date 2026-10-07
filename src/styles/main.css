@@ -125,6 +125,31 @@ input {
   color: var(--ink);
 }
 
+/* the title is a quiet way back to the collection */
+.title-link {
+  position: relative;
+  display: inline-block;
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+  border-radius: 3px;
+}
+.title-arrow {
+  position: absolute;
+  right: 100%;
+  margin-right: 0.22em;
+  font-size: 0.72em;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateX(5px);
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.title-link:hover .title-arrow,
+.title-link:focus-visible .title-arrow {
+  opacity: 1;
+  transform: none;
+}
+
 .story-actions {
   display: flex;
   gap: 2px;

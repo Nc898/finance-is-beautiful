@@ -14,6 +14,10 @@ npm run test:e2e     # browser tests (Playwright; first run: npx playwright inst
 npm run build        # typecheck + production build into dist/
 ```
 
+Pages: `/` is the landing page ("Finance is beautiful") listing the demonstrations; `/time-to-grow.html` is the
+Time to Grow demonstration. To add a demonstration, add its page to `vite.config.ts` and one entry to
+`src/landing/demos.ts` (title, one-sentence summary, link, and a function that paints its preview).
+
 Extra pages for development: `/slice.html` (one tree, maturity scrubber, determinism self-check) and
 `/scene-test.html` (two-tree scene harness: maturities, planting, pulse, loupe, reduced motion, perf).
 
