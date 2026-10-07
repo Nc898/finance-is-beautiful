@@ -7,6 +7,7 @@ import { getModel } from '../scene';
 import { TreePainter } from '../scene/treePainter';
 import { ensureSprites, type Sprites } from '../scene/sprites';
 import { HORIZON_UP, applyHeroBackdrop, heroGeometry, type HeroGeometry } from './backdrop';
+import { Aviary } from './birds';
 
 interface GroveTree {
   seed: number;
@@ -59,6 +60,43 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     .sort((a, b) => GROVE[a]!.m - GROVE[b]!.m);
   const bgOrder = GROVE.map((_, i) => i).filter((i) => GROVE[i]!.bg);
   const allIdx = GROVE.map((_, i) => i);
+  /** bills the birds have delivered to each tree (on top of its starting count) */
+  const extra = GROVE.map(() => 0);
+  /** a tree that just received a bill repaints every frame until this time, so the bill fades in smoothly */
+  const hotUntil = GROVE.map(() => 0);
+  let grownDone = false;
+  const billCount = (i: number) => GROVE[i]!.bills + extra[i]!;
+  const layerView = (i: number) => {
+    const g = geo!;
+    const L = layers[i]!;
+    return { ox: L.cssW / 2, oy: LAYER_UP * g.s, s: g.s, dpr: g.dpr };
+  };
+  const subline = hero.querySelector('.hero-sub') as HTMLElement | null;
+  const aviary = new Aviary({
+    sky() {
+      const g = geo!;
+      const hr = hero.getBoundingClientRect();
+      const sub = subline ? subline.getBoundingClientRect().bottom - hr.top : g.h * 0.32;
+      let crown = Infinity;
+      for (const i of order) crown = Math.min(crown, g.groundY - painters[i]!.apexWorld(GROVE[i]!.m).y * g.s);
+      const yTop = sub + 34;
+      return { w: g.w, yTop, yBottom: Math.max(yTop + 40, crown - 34), scale: Math.min(1.3, Math.max(0.85, g.w / 1440)) };
+    },
+    targets() {
+      return order
+        .filter((i) => !aviary.reserved.has(i) && billCount(i) < Math.min(painters[i]!.billSlots, GROVE[i]!.bills + 24))
+        .map((i) => ({ tree: i, x: layers[i]!.x + layers[i]!.cssW / 2, variant: billCount(i) % 3 }));
+    },
+    restPose(i) {
+      if (!geo || !layers[i]) return null;
+      const p = painters[i]!.restingBillPose(billCount(i), layerView(i));
+      return { ...p, x: p.x + layers[i]!.x, y: p.y + layers[i]!.y };
+    },
+    landed(i) {
+      extra[i]!++;
+      hotUntil[i] = performance.now() + 700;
+    },
+  });
 
   let geo: HeroGeometry | null = null;
   let sprites: Sprites | null = null;
@@ -131,7 +169,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
         timeMs: now,
         wind: !still,
         pulse: -1,
-        bills: Math.floor(t.bills * e + 0.001),
+        bills: Math.floor(t.bills * e + 0.001) + extra[i]!,
       },
       sprites!,
     );
@@ -150,11 +188,12 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     // screen keeps a steady 60 fps while growth is spread over a couple of frames per tree.
     const budget = growing ? 9 : 7;
     const first = layers.some((L) => L.at < 0);
-    const byAge = allIdx.slice().sort((a, b) => layers[a]!.at - layers[b]!.at);
+    const hot = (i: number) => hotUntil[i]! > now;
+    const byAge = allIdx.slice().sort((a, b) => (hot(b) ? 1 : 0) - (hot(a) ? 1 : 0) || layers[a]!.at - layers[b]!.at);
     let n = 0;
     let bgDirty = first;
     for (const i of byAge) {
-      if (!still && !first && n > 0 && performance.now() - t1 > budget) break;
+      if (!still && !first && n > 0 && !hot(i) && performance.now() - t1 > budget) break;
       paintLayer(i, now, secs, still);
       if (GROVE[i]!.bg) bgDirty = true;
       n++;
@@ -186,7 +225,12 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       const L = layers[i]!;
       ctx.drawImage(L.cv, L.x, L.y, L.cssW, L.cssH);
     }
-    if (secs > GROW_S + 0.5) resolveGrown();
+    // occasional birds, once the grove has grown (never in reduced motion)
+    if (grownDone && !still) aviary.frame(ctx, now);
+    if (secs > GROW_S + 0.5) {
+      grownDone = true;
+      resolveGrown();
+    }
   };
 
   /** motion is capped at 30 fps (with slack so 60/120 Hz displays land on every 2nd/4th refresh) */

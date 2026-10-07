@@ -241,6 +241,31 @@ export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: numb
   }
 }
 
+/** Width-to-height ratio of a bill. */
+export const BILL_ASPECT = SW / SH;
+
+/** A loose bill in the air (carried or falling): the painted note with a soft shadow, rotated and flipped. */
+export function drawLooseBill(
+  ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, flip: number, size: number, variant: number, alpha: number,
+): void {
+  if (alpha <= 0.01) return;
+  const img = billSprites()[variant % 3]!;
+  const w = size;
+  const h = w / BILL_ASPECT;
+  const t = ctx.getTransform();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.scale(Math.abs(flip) < 0.08 ? 0.08 * Math.sign(flip || 1) : flip, 1);
+  ctx.fillStyle = 'rgba(40,52,34,0.1)';
+  ctx.beginPath();
+  ctx.ellipse(w * 0.05, h * 0.32, w * 0.48, h * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  ctx.setTransform(t);
+  ctx.globalAlpha = 1;
+}
+
 /** Resting-bill sprites: bill + foliage glaze + tucked leaves, baked once per (variant, leaf layout). */
 const restCache = new Map<string, HTMLCanvasElement>();
 const PAD = 14;

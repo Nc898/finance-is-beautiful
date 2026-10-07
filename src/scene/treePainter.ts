@@ -810,6 +810,16 @@ export class TreePainter {
     return { X: v.ox + wx * v.s, Y: v.oy - wy * v.s, rot, dw, dh, wy };
   }
 
+  /** How many canopy bill slots this tree has. */
+  get billSlots(): number {
+    return this.slots.length;
+  }
+
+  /** Resting pose of canopy bill k as of the most recent paint, in that paint's view coordinates. */
+  restingBillPose(k: number, v: View): BillPose {
+    return this.slotPose(Math.min(k, this.slots.length - 1), v);
+  }
+
   /** Resting pose of canopy slot k this frame: rides its clump (wind included) with a little flutter of its own. */
   private slotPose(k: number, v: View): BillPose {
     const sl = this.slots[k]!;
