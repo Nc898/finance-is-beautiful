@@ -69,6 +69,20 @@ export async function seek(page: Page, seconds: number): Promise<void> {
   await frames(page, 3);
 }
 
+/** Story length in seconds for the current inputs and motion preference (54 s normally, ~34.5 s in reduced motion). */
+export async function storyLength(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    window.__ttg.actions.seekStory(1e6);
+    return (window.__ttg.getState() as { storyTime: number }).storyTime;
+  });
+}
+
+/** Seek to a fraction of the story, so beat-based assertions hold for both the normal and reduced-motion timelines. */
+export async function seekFrac(page: Page, fraction: number): Promise<void> {
+  const len = await storyLength(page);
+  await seek(page, fraction * len);
+}
+
 /** Scrub the shared clock (enters explore mode, paused). */
 export async function scrub(page: Page, ageMonths: number): Promise<void> {
   await page.evaluate((m) => window.__ttg.actions.scrubTo(m), ageMonths);

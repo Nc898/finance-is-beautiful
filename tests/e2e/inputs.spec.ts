@@ -10,6 +10,7 @@ import {
   plate,
   scrub,
   seek,
+  seekFrac,
   setField,
   skipToExplore,
   state,
@@ -178,15 +179,15 @@ test.describe('inputs: edge scenarios', () => {
     expect(b.split).toBe(a.split);
     expect(await diffText(page)).toBe('$0');
     // No beat in the whole story mentions Tree B beginning.
-    for (const t of [3, 8, 12, 16, 20, 30, 40, 52]) {
-      await seek(page, t);
+    for (const t of [0.03, 0.15, 0.22, 0.3, 0.37, 0.55, 0.74, 0.81, 0.96]) {
+      await seekFrac(page, t);
       const cap = await caption(page);
       expect(cap.primary, `caption at ${t}`).not.toMatch(/begins/i);
       expect(cap.secondary, `caption at ${t}`).not.toMatch(/waits until/i);
     }
-    await seek(page, 3);
+    await seekFrac(page, 0.03);
     expect((await caption(page)).primary).toBe('Same monthly contribution. Same starting age.');
-    await seek(page, 44);
+    await seekFrac(page, 0.81);
     expect((await caption(page)).primary).toBe('Starting together, the two trees grow together.');
   });
 
@@ -236,9 +237,9 @@ test.describe('inputs: edge scenarios', () => {
     expect((await plate(page, 'A')).balance).toBe('$0');
     expect((await plate(page, 'B')).balance).toBe('$0');
     expect(await diffText(page)).toBe('$0');
-    await seek(page, 44);
+    await seekFrac(page, 0.81);
     expect((await caption(page)).primary).toBe('Time gives growth room to branch.');
-    await seek(page, 10);
+    await seekFrac(page, 0.19);
     expect((await caption(page)).primary).toBe('In this scenario, nothing goes in each month.');
   });
 
