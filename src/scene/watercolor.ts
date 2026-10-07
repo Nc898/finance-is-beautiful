@@ -625,24 +625,33 @@ export function paintPaperBackdrop(ctx: CanvasRenderingContext2D, W: number, H: 
   ctx.fillStyle = pat;
   ctx.fillRect(0, 0, W, H);
   ctx.restore();
-  // low-frequency warmth / mottling
+  // low-frequency warmth / mottling and vignette: pure soft tone, so it is painted at quarter
+  // resolution and scaled up (indistinguishable, a sixteenth of the fill cost)
+  const q = 4;
+  const w = Math.max(1, Math.ceil(W / q));
+  const h = Math.max(1, Math.ceil(H / q));
+  const tone = makeCanvas(w, h);
+  const tctx = tone.getContext('2d')!;
   const rnd = new Rand(404);
   for (let i = 0; i < 9; i++) {
-    const x = rnd.range(0, W);
-    const y = rnd.range(0, H);
-    const r = rnd.range(0.25, 0.55) * Math.max(W, H);
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const x = rnd.range(0, w);
+    const y = rnd.range(0, h);
+    const r = rnd.range(0.25, 0.55) * Math.max(w, h);
+    const g = tctx.createRadialGradient(x, y, 0, x, y, r);
     const warm = rnd.chance(0.5);
     g.addColorStop(0, warm ? 'rgba(236,222,190,0.12)' : 'rgba(255,252,242,0.14)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+    tctx.fillStyle = g;
+    tctx.fillRect(0, 0, w, h);
   }
-  const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+  const v = tctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.55);
   v.addColorStop(0, 'rgba(239,229,207,0)');
   v.addColorStop(1, `rgba(222,205,170,${0.34 + 0 * dpr})`);
-  ctx.fillStyle = v;
-  ctx.fillRect(0, 0, W, H);
+  tctx.fillStyle = v;
+  tctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(tone, 0, 0, W, H);
 }
 
 /** Soft emerald/blue-green under-shadow blob, drawn beneath front clumps (source-atop, low alpha). */

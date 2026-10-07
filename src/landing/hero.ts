@@ -33,7 +33,7 @@ const GROVE: GroveTree[] = [
   { seed: 3307, x: 0.56, m: 0.5, bills: 0, delay: 0.1, bg: true },
   { seed: 6120, x: 0.775, m: 0.33, bills: 0, delay: 0.45, bg: true },
 ];
-const GROW_S = 2.4;
+const GROW_S = 1.8;
 const START_M = 0.02;
 const smoother = (t: number) => {
   const x = t < 0 ? 0 : t > 1 ? 1 : t;

@@ -2,6 +2,7 @@
  * Hero backdrop, painted once per size: textured paper, soft watercolor sky blooms behind the type,
  * a few pigment specks, the meadow wash and the soil cut-away down to the bottom of the hero.
  */
+import { setCanvasBackground } from '../scene/backdrop';
 import { Rand } from '../scene/prng';
 import { SOIL_DEPTH } from '../scene/treeModel';
 import { ensurePaperTile } from '../scene/sprites';
@@ -36,8 +37,15 @@ function bloom(ctx: CanvasRenderingContext2D, d: number, cx: number, cy: number,
     const j = 0.78 + 0.4 * rnd.next();
     base.push(cx + Math.cos(a) * rx * j, cy + Math.sin(a) * ry * (0.85 + 0.3 * rnd.next()));
   }
-  ctx.save();
-  ctx.filter = `blur(${Math.max(1.5, Math.round(ry * 0.022))}px)`;
+  // blur only a canvas the size of this wash (a filter on the full page canvas costs seconds)
+  const blurPx = Math.max(1.5, Math.round(ry * 0.022));
+  const pad = Math.ceil(blurPx * 3 + Math.max(rx, ry) * 0.35);
+  const x0 = Math.floor(cx - rx * 1.25 - pad);
+  const y0 = Math.floor(cy - ry * 1.25 - pad);
+  const off = makeCanvas(Math.ceil(rx * 2.5 + pad * 2), Math.ceil(ry * 2.5 + pad * 2));
+  const octx = off.getContext('2d')!;
+  octx.translate(-x0, -y0);
+  octx.filter = `blur(${blurPx}px)`;
   const layers = 8;
   for (let i = 0; i < layers; i++) {
     const k = 1 - i * 0.075;
@@ -47,10 +55,12 @@ function bloom(ctx: CanvasRenderingContext2D, d: number, cx: number, cy: number,
       4,
       0.2,
     );
-    ctx.fillStyle = rgba(hex, alpha / 3.6);
-    tracePoly(ctx, p);
-    ctx.fill();
+    octx.fillStyle = rgba(hex, alpha / 3.6);
+    tracePoly(octx, p);
+    octx.fill();
   }
+  ctx.save();
+  ctx.drawImage(off, x0, y0);
   // a faint pooled edge where pigment dried
   ctx.filter = 'none';
   ctx.strokeStyle = rgba(hex, alpha * 0.22);
@@ -132,9 +142,5 @@ export async function applyHeroBackdrop(canvas: HTMLCanvasElement, g: HeroGeomet
   const ground = makeGroundSprite(31, Wd, gh, (g.s * d) / 1.2);
   ctx.drawImage(ground, 0, Math.round(gy - gh * 0.42));
 
-  const st = canvas.style;
-  st.backgroundImage = `url(${bg.toDataURL('image/jpeg', 0.94)})`;
-  st.backgroundSize = `${g.w}px ${g.h}px`;
-  st.backgroundRepeat = 'no-repeat';
-  st.backgroundColor = PAL.paper;
+  await setCanvasBackground(canvas, bg, g.w, g.h);
 }

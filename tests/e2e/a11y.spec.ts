@@ -64,6 +64,7 @@ test.describe('accessibility', () => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
     const expected = [
+      'Time to Grow, back to all demonstrations',
       'btn-replay',
       'panel-toggle',
       'btn-play',
@@ -152,6 +153,8 @@ test.describe('accessibility', () => {
   test('Skip to explore is in the Tab order while the story is active', async ({ page }) => {
     await gotoReady(page);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    // title link home, Replay, then Skip
+    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     const id = await page.evaluate(() => document.activeElement?.id);
