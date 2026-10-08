@@ -180,7 +180,8 @@ input {
 
 .cap {
   grid-area: 1 / 1;
-  background: radial-gradient(ellipse closest-side, rgba(251, 246, 234, 0.9) 55%, rgba(251, 246, 234, 0));
+  /* a soft glow hugging the letters (no paper-coloured oval over the sky) */
+  text-shadow: 0 0 10px rgba(251, 246, 234, 0.95), 0 0 4px rgba(251, 246, 234, 0.9), 0 0 2px rgba(251, 246, 234, 0.9);
   opacity: 0;
   transition: opacity 0.6s ease;
   padding: 4px 36px;

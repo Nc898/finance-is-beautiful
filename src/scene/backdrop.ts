@@ -5,7 +5,7 @@
  */
 import { WORLD } from './types';
 import { ensurePaperTile } from './sprites';
-import { makeCanvas, makeDeepSoil, makeGroundSprite, paintFence, paintPaperBackdrop } from './watercolor';
+import { makeCanvas, makeDeepSoil, makeGroundSprite, paintFence, paintPaperBackdrop, paintSky } from './watercolor';
 import { SOIL_DEPTH } from './treeModel';
 
 export interface Insets {
@@ -53,6 +53,8 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   const paper = makeCanvas(Wd, Hd);
   const pctx = paper.getContext('2d')!;
   paintPaperBackdrop(pctx, Wd, Hd, tile, cam.dpr);
+  // distant sky and clouds stay in the paper layer, so they hold still while the world zooms
+  paintSky(pctx, Wd, Hd, cam.oyGround - 20 * cam.s, cam.dpr);
 
   const gd = cam.dpr * 1.5;
   const groundTop = Math.max(0, cam.oyGround - 72 * cam.s); // room for the fence above the meadow

@@ -1068,3 +1068,193 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
   }
   ctx.restore();
 }
+
+/**
+ * Watercolor sky for the demo: a variegated cerulean wash, richest at the top and fading to pale paper at
+ * the horizon, with soft blue cumulus clouds (lighter lifted tops, deeper blue undersides, a faint dried
+ * pigment rim). Painted once into the paper layer; d = device px per css px, horizon = css y.
+ */
+export function paintSky(ctx: CanvasRenderingContext2D, Wd: number, Hd: number, horizon: number, d: number, seed = 17): void {
+  const rnd = new Rand(seed);
+  const hy = Math.min(Hd, horizon * d);
+  ctx.save();
+  // 1. graded wash
+  ctx.globalCompositeOperation = 'multiply';
+  const g = ctx.createLinearGradient(0, 0, 0, hy);
+  g.addColorStop(0, 'rgba(92,162,220,0.38)');
+  g.addColorStop(0.45, 'rgba(128,184,226,0.25)');
+  g.addColorStop(0.85, 'rgba(178,208,226,0.1)');
+  g.addColorStop(1, 'rgba(200,220,230,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, Wd, hy);
+  // 2. variegation: a few broad blooms of slightly different blues
+  const q = 4;
+  const w = Math.ceil(Wd / q);
+  const h = Math.ceil(hy / q);
+  if (w > 0 && h > 0) {
+    const v = makeCanvas(w, h);
+    const vc = v.getContext('2d')!;
+    const tints = ['rgba(80,140,200,0.12)', 'rgba(120,170,215,0.1)', 'rgba(150,170,210,0.08)'];
+    for (let i = 0; i < 9; i++) {
+      const x = rnd.range(0, w);
+      const y = rnd.range(0, h * 0.7);
+      const r = rnd.range(0.15, 0.35) * w;
+      const b = vc.createRadialGradient(x, y, 0, x, y, r);
+      b.addColorStop(0, tints[i % 3]!);
+      b.addColorStop(1, 'rgba(255,255,255,0)');
+      vc.fillStyle = b;
+      vc.fillRect(0, 0, w, h);
+    }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(v, 0, 0, Wd, hy);
+  }
+  // 3. soft horizontal brush streaks, as a wash laid in broad strokes
+  for (let i = 0; i < 14; i++) {
+    const y = rnd.range(0.02, 0.75) * hy;
+    const sh = rnd.range(14, 40) * d;
+    const sg = ctx.createLinearGradient(0, y - sh, 0, y + sh);
+    sg.addColorStop(0, 'rgba(90,150,210,0)');
+    sg.addColorStop(0.5, `rgba(90,150,210,${rnd.range(0.04, 0.08)})`);
+    sg.addColorStop(1, 'rgba(90,150,210,0)');
+    // feather the stroke's ends too, so it never shows a squared-off edge
+    const x0 = rnd.range(-0.2, 0.4) * Wd;
+    const sw = rnd.range(0.4, 0.9) * Wd;
+    const st = makeCanvas(Math.max(2, Math.round(sw / 8)), Math.max(2, Math.round((sh * 2) / 8)));
+    const sc = st.getContext('2d')!;
+    const sgs = sc.createLinearGradient(0, 0, 0, st.height);
+    sgs.addColorStop(0, 'rgba(90,150,210,0)');
+    sgs.addColorStop(0.5, `rgba(90,150,210,${rnd.range(0.04, 0.08)})`);
+    sgs.addColorStop(1, 'rgba(90,150,210,0)');
+    sc.fillStyle = sgs;
+    sc.fillRect(0, 0, st.width, st.height);
+    sc.globalCompositeOperation = 'destination-in';
+    const ends = sc.createLinearGradient(0, 0, st.width, 0);
+    ends.addColorStop(0, 'rgba(0,0,0,0)');
+    ends.addColorStop(0.2, 'rgba(0,0,0,1)');
+    ends.addColorStop(0.8, 'rgba(0,0,0,1)');
+    ends.addColorStop(1, 'rgba(0,0,0,0)');
+    sc.fillStyle = ends;
+    sc.fillRect(0, 0, st.width, st.height);
+    void sg;
+    ctx.drawImage(st, x0, y - sh, sw, sh * 2);
+  }
+  // 4. granulation, denser where the wash is richer
+  for (let i = 0; i < 1400; i++) {
+    const y = Math.pow(rnd.next(), 1.7) * hy * 0.9;
+    ctx.fillStyle = `rgba(70,120,170,${rnd.range(0.04, 0.1)})`;
+    ctx.fillRect(rnd.range(0, Wd), y, d, d);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 4. clouds
+  const n = 5;
+  for (let c = 0; c < n; c++) {
+    const cw = rnd.range(180, 320) * d;
+    const ch = cw * rnd.range(0.26, 0.36);
+    const cx = ((c + rnd.range(0.15, 0.85)) / n) * Wd;
+    const cy = rnd.range(0.16, 0.5) * hy;
+    paintCloud(ctx, cx, cy, cw, ch, d, rnd);
+  }
+  ctx.restore();
+}
+
+function paintCloud(ctx: CanvasRenderingContext2D, cx: number, cy: number, cw: number, ch: number, d: number, rnd: Rand): void {
+  const pad = Math.ceil(ch * 0.6);
+  const W = Math.ceil(cw + pad * 2);
+  const H = Math.ceil(ch * 1.6 + pad * 2);
+  const ox = pad;
+  const base = pad + ch * 1.15; // fairly flat underside
+  // irregular billows, merged into one shape per glaze
+  const lobes: Array<[number, number, number]> = [];
+  const k = rnd.int(6, 9);
+  for (let i = 0; i < k; i++) {
+    const t = rnd.range(0.08, 0.92);
+    const r = ch * (0.28 + 0.5 * Math.sin(Math.PI * t)) * rnd.range(0.75, 1.15);
+    lobes.push([ox + t * cw, base - r * rnd.range(0.5, 0.85), r]);
+  }
+  const lobePoly = (x: number, y: number, r: number, amp: number) => {
+    const pts: number[] = [];
+    for (let j = 0; j < 22; j++) {
+      const a = (j / 22) * Math.PI * 2;
+      pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.92);
+    }
+    return deform(pts, rnd, 3, amp);
+  };
+  // the joining base: a flattened oval, so the underside is a soft gentle curve rather than a ruled line
+  const slab: number[] = [];
+  for (let j = 0; j < 28; j++) {
+    const a = (j / 28) * Math.PI * 2;
+    slab.push(ox + cw * (0.5 + 0.37 * Math.cos(a)), base - ch * 0.2 + Math.sin(a) * ch * (Math.sin(a) > 0 ? 0.2 : 0.24));
+  }
+  const union = (c: CanvasRenderingContext2D, grow: number, amp: number) => {
+    for (const [x, y, r] of lobes) {
+      tracePoly(c, lobePoly(x, y, r * grow, amp));
+      c.fill();
+    }
+    tracePoly(c, deform(slab, rnd, 3, amp * 0.4));
+    c.fill();
+  };
+  const cv = makeCanvas(W, H);
+  const c = cv.getContext('2d')!;
+  const tmp = makeCanvas(W, H);
+  const t = tmp.getContext('2d')!;
+  const tint = t.createLinearGradient(0, base - ch * 1.3, 0, base);
+  tint.addColorStop(0, 'rgb(226,236,244)');
+  tint.addColorStop(0.5, 'rgb(176,204,232)');
+  tint.addColorStop(1, 'rgb(122,160,206)');
+  // thin glazes: each a slightly different deformed version of the whole cloud (soft, irregular edges)
+  const L = 12;
+  for (let i = 0; i < L; i++) {
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, W, H);
+    t.fillStyle = '#000';
+    union(t, 0.86 + 0.16 * (i / L), 0.13);
+    t.globalCompositeOperation = 'source-in';
+    t.fillStyle = tint;
+    t.fillRect(0, 0, W, H);
+    c.globalAlpha = 0.085;
+    c.drawImage(tmp, 0, 0);
+  }
+  c.globalAlpha = 1;
+  // pigment pooling along the outer edge only (the outline of one glaze, minus its inside)
+  t.globalCompositeOperation = 'source-over';
+  t.clearRect(0, 0, W, H);
+  t.fillStyle = 'rgba(96,138,190,0.42)';
+  union(t, 1.0, 0.1);
+  t.globalCompositeOperation = 'destination-out';
+  t.filter = `blur(${Math.max(1.5, ch * 0.04)}px)`;
+  t.translate(W / 2, base);
+  t.scale(0.95, 0.94);
+  t.translate(-W / 2, -base);
+  t.fillStyle = '#000';
+  union(t, 1.0, 0.04);
+  t.setTransform(1, 0, 0, 1, 0, 0);
+  t.filter = 'none';
+  // the pooled edge is strongest along the billowing top and fades out toward the soft underside
+  t.globalCompositeOperation = 'destination-in';
+  const fadeRim = t.createLinearGradient(0, base - ch * 1.2, 0, base);
+  fadeRim.addColorStop(0, 'rgba(0,0,0,0.85)');
+  fadeRim.addColorStop(0.6, 'rgba(0,0,0,0.5)');
+  fadeRim.addColorStop(1, 'rgba(0,0,0,0.1)');
+  t.fillStyle = fadeRim;
+  t.fillRect(0, 0, W, H);
+  c.drawImage(tmp, 0, 0);
+  // lifted lights: pigment blotted back toward the paper near the sunlit tops
+  c.globalCompositeOperation = 'destination-out';
+  c.filter = `blur(${Math.max(2, ch * 0.06)}px)`;
+  for (let i = 0; i < 4; i++) {
+    const [x, y, r] = lobes[rnd.int(0, lobes.length - 1)]!;
+    c.fillStyle = `rgba(0,0,0,${rnd.range(0.25, 0.45)})`;
+    tracePoly(c, lobePoly(x - r * 0.15, y - r * 0.15, r * rnd.range(0.35, 0.5), 0.2));
+    c.fill();
+  }
+  c.filter = 'none';
+  // granulation settling in the shadowed underside
+  c.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 260; i++) {
+    c.fillStyle = `rgba(70,110,170,${rnd.range(0.08, 0.2)})`;
+    c.fillRect(rnd.range(ox, ox + cw), base - Math.pow(rnd.next(), 1.6) * ch * 1.1, d, d);
+  }
+  c.globalCompositeOperation = 'source-over';
+  ctx.drawImage(cv, cx - W / 2, cy - H / 2);
+}
