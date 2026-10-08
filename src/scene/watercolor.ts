@@ -916,3 +916,155 @@ export function makeDeepSoil(seed: number, W: number, H: number, u: number, band
   ctx.globalCompositeOperation = 'source-over';
   return cv;
 }
+
+/**
+ * A weathered split-rail fence along the back of the meadow, painted like the trees: warm wood washes
+ * lit from the upper left, grain strokes, a broken sepia contour, and grass tufts at the post feet.
+ * Kept a touch pale so it sits behind the trees. Draws into ctx at ground line gy (px), u = px per
+ * world unit, spanning x from 0 to W. Deterministic for a seed.
+ */
+export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number, u: number, seed = 61, avoid: number[] = []): void {
+  const rnd = new Rand(seed);
+  const base = gy - 7 * u; // set back a little from where the trees stand
+  const gap = 74 * u;
+  const posts: Array<{ x: number; top: number; lean: number; w: number }> = [];
+  for (let x = -rnd.range(10, 40) * u; x < W + gap; x += gap * rnd.range(0.86, 1.12)) {
+    // no post directly behind a trunk (it would compete with the seedling in the close-up)
+    let px = x;
+    for (const ax of avoid) if (Math.abs(px - ax) < 22 * u) px = ax + (px < ax ? -22 : 22) * u;
+    posts.push({ x: px, top: base - rnd.range(33, 39) * u, lean: rnd.range(-0.05, 0.05), w: rnd.range(5.6, 6.8) * u });
+  }
+  const postX = (p: (typeof posts)[number], y: number) => p.x + (base - y) * p.lean;
+  ctx.save();
+  // back meadow: a soft, feathered strip of grass for the fence to stand in
+  {
+    const top = base - 7 * u;
+    const g = ctx.createLinearGradient(0, top, 0, base + 9 * u);
+    g.addColorStop(0, 'rgba(150,186,104,0)');
+    g.addColorStop(0.45, 'rgba(146,184,100,0.42)');
+    g.addColorStop(1, 'rgba(126,170,86,0.6)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, base + 9 * u);
+    for (let x = 0; x <= W; x += 24 * u) ctx.lineTo(x, top + Math.sin(x / (37 * u) + seed) * 2.2 * u + rnd.range(-0.8, 0.8) * u);
+    ctx.lineTo(W, base + 9 * u);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.88;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // rails first (they pass behind the posts): two split rails per bay, gently sagging and uneven
+  for (let i = 0; i < posts.length - 1; i++) {
+    const a = posts[i]!;
+    const b = posts[i + 1]!;
+    for (const [h, th] of [[27, 4], [13.5, 4.4]] as const) {
+      const ya = base - (h + rnd.range(-1.2, 1.2)) * u;
+      const yb = base - (h + rnd.range(-1.2, 1.2)) * u;
+      const xa = postX(a, ya);
+      const xb = postX(b, yb);
+      const sag = rnd.range(0.4, 1.8) * u;
+      const t = th * u * rnd.range(0.85, 1.1);
+      const mx = (xa + xb) / 2;
+      const my = (ya + yb) / 2 + sag;
+      const rail = new Path2D();
+      rail.moveTo(xa, ya - t / 2);
+      rail.quadraticCurveTo(mx, my - t / 2 - sag * 0.2, xb, yb - t / 2);
+      rail.lineTo(xb, yb + t / 2);
+      rail.quadraticCurveTo(mx, my + t / 2, xa, ya + t / 2);
+      rail.closePath();
+      // wash: weathered warm grey-brown, lighter on top
+      const g = ctx.createLinearGradient(0, my - t, 0, my + t);
+      g.addColorStop(0, 'rgba(196,164,122,0.95)');
+      g.addColorStop(0.5, 'rgba(156,120,84,0.95)');
+      g.addColorStop(1, 'rgba(112,82,58,0.95)');
+      ctx.fillStyle = g;
+      ctx.fill(rail);
+      // grain: a few long thin strokes along the rail
+      ctx.strokeStyle = 'rgba(82,58,40,0.35)';
+      ctx.lineWidth = Math.max(0.6, 0.35 * u);
+      for (let k = 0; k < 3; k++) {
+        const off = rnd.range(-0.3, 0.3) * t;
+        const s0 = rnd.range(0.05, 0.4);
+        const s1 = rnd.range(0.55, 0.95);
+        ctx.beginPath();
+        ctx.moveTo(xa + (xb - xa) * s0, ya + (yb - ya) * s0 + off + sag * Math.sin(Math.PI * s0));
+        ctx.quadraticCurveTo(mx, my + off, xa + (xb - xa) * s1, ya + (yb - ya) * s1 + off + sag * Math.sin(Math.PI * s1));
+        ctx.stroke();
+      }
+      // broken ink contour, heavier underneath
+      ctx.setLineDash([18 * u, 3 * u, 7 * u, 2 * u]);
+      ctx.strokeStyle = 'rgba(52,38,28,0.6)';
+      ctx.lineWidth = Math.max(0.7, 0.42 * u);
+      ctx.stroke(rail);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // posts
+  for (const p of posts) {
+    const w = p.w;
+    const h = base - p.top;
+    const pts: number[] = [];
+    const N = 10;
+    for (let k = 0; k <= N; k++) {
+      const y = p.top + (h * k) / N;
+      pts.push(postX(p, y) - w / 2 - (k / N) * 0.6 * u, y);
+    }
+    // slightly rounded, weathered top
+    pts.push(postX(p, base) + w / 2 + 0.6 * u, base);
+    for (let k = N; k >= 0; k--) {
+      const y = p.top + (h * k) / N + (k === 0 ? 1.2 * u : 0);
+      pts.push(postX(p, y) + w / 2 + (k / N) * 0.6 * u, y);
+    }
+    const poly = deform(pts, rnd, 2, 0.006);
+    const path = new Path2D();
+    path.moveTo(poly[0]!, poly[1]!);
+    for (let i = 2; i < poly.length; i += 2) path.lineTo(poly[i]!, poly[i + 1]!);
+    path.closePath();
+    const cx = postX(p, (p.top + base) / 2);
+    const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    g.addColorStop(0, 'rgba(206,174,130,0.96)');
+    g.addColorStop(0.45, 'rgba(160,122,84,0.96)');
+    g.addColorStop(1, 'rgba(100,72,52,0.96)');
+    ctx.fillStyle = g;
+    ctx.fill(path);
+    // grain and a check or two
+    ctx.strokeStyle = 'rgba(78,54,38,0.38)';
+    ctx.lineWidth = Math.max(0.6, 0.32 * u);
+    for (let k = 0; k < 4; k++) {
+      const off = rnd.range(-0.32, 0.3) * w;
+      const y0 = p.top + rnd.range(0.05, 0.4) * h;
+      const y1 = y0 + rnd.range(0.25, 0.55) * h;
+      ctx.beginPath();
+      ctx.moveTo(postX(p, y0) + off, y0);
+      ctx.lineTo(postX(p, y1) + off + rnd.range(-0.3, 0.3) * u, Math.min(base - u, y1));
+      ctx.stroke();
+    }
+    // weathered top: a darker end-grain cap
+    ctx.fillStyle = 'rgba(96,70,50,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(postX(p, p.top), p.top + 0.8 * u, w * 0.5, 0.9 * u, p.lean, 0, Math.PI * 2);
+    ctx.fill();
+    // broken sepia contour
+    ctx.setLineDash([14 * u, 2.5 * u, 6 * u, 2 * u]);
+    ctx.strokeStyle = 'rgba(46,34,26,0.65)';
+    ctx.lineWidth = Math.max(0.7, 0.45 * u);
+    ctx.stroke(path);
+    ctx.setLineDash([]);
+    // grass tufts hiding the foot of the post
+    for (let k = 0; k < 7; k++) {
+      const gx = postX(p, base) + rnd.range(-1.4, 1.4) * w;
+      const len = rnd.range(3, 7.5) * u;
+      const lean = rnd.range(-0.5, 0.5);
+      ctx.strokeStyle = rnd.chance(0.5) ? 'rgba(98,142,62,0.85)' : 'rgba(132,168,80,0.8)';
+      ctx.lineWidth = Math.max(0.6, 0.5 * u);
+      ctx.beginPath();
+      ctx.moveTo(gx, base + 1.2 * u);
+      ctx.quadraticCurveTo(gx + lean * len * 0.3, base - len * 0.6, gx + lean * len, base - len);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}

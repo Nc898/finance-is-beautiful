@@ -5,7 +5,7 @@
  */
 import { WORLD } from './types';
 import { ensurePaperTile } from './sprites';
-import { makeCanvas, makeDeepSoil, makeGroundSprite, paintPaperBackdrop } from './watercolor';
+import { makeCanvas, makeDeepSoil, makeGroundSprite, paintFence, paintPaperBackdrop } from './watercolor';
 import { SOIL_DEPTH } from './treeModel';
 
 export interface Insets {
@@ -55,7 +55,7 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   paintPaperBackdrop(pctx, Wd, Hd, tile, cam.dpr);
 
   const gd = cam.dpr * 1.5;
-  const groundTop = Math.max(0, cam.oyGround - 60 * cam.s);
+  const groundTop = Math.max(0, cam.oyGround - 72 * cam.s); // room for the fence above the meadow
   const GW = Math.round(cam.cssW * gd);
   const GH = Math.max(2, Math.round((cam.cssH - groundTop) * gd));
   const ground = makeCanvas(GW, GH);
@@ -70,6 +70,8 @@ export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Pro
   const gh = Math.round(78 * cam.s * gd);
   const meadow = makeGroundSprite(31, GW, gh, (cam.s * gd) / 1.2);
   ctx.drawImage(meadow, 0, Math.round(gy - gh * 0.42));
+  // a weathered split-rail fence along the back of the meadow
+  paintFence(ctx, GW, gy, cam.s * gd, 61, [WORLD.treeX.A, WORLD.treeX.B].map((x) => (cam.ox0 + x * cam.s) * gd));
 
   // Both are drawn into the visible canvas each frame (GPU texture copies): no CSS image, no readback.
   canvas.style.backgroundColor = '#FBF6EA';
