@@ -167,7 +167,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     painter.paint(
       ctx,
       { ox: cx - lx * S, oy: cy + ly * S, s: S, dpr: c.dpr },
-      { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, plantK: 1, cull: { x0: cx - r, y0: cy - r, x1: cx + r, y1: cy + r } },
+      { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, plantK: 1, noBills: true, cull: { x0: cx - r, y0: cy - r, x1: cx + r, y1: cy + r } },
       sp,
     );
     ctx.restore();
@@ -249,7 +249,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
         painters[t.id].paint(
           ctx,
           view,
-          { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, pulse: t.pulse, bills: t.bills, plantK },
+          { maturity: t.maturity, months: t.monthsSincePlanting, timeMs: frame.timeMs, wind: !frame.reducedMotion, pulse: t.pulse, bills: t.bills, billScale: c.s, plantK },
           sprites,
         );
       }

@@ -39,6 +39,10 @@ export interface PaintParams {
   bills?: number;
   /** fade newly added canvas bills in even when wind is off (the landing sways trees as whole images) */
   fadeBills?: boolean;
+  /** px per world unit used to size bills (the unzoomed scale), so camera zoom never magnifies them */
+  billScale?: number;
+  /** leave bills out entirely (the close-up insets show wood and leaves, not money) */
+  noBills?: boolean;
   /** planting spot instead of a tree */
   unplanted?: boolean;
   /** 0..1 planting transition (stake fades, mound settles); 1 = fully planted */
@@ -106,6 +110,7 @@ export class TreePainter {
   private billNow = 0;
   private billSize = 20;
   private haveCount = false;
+  private hideBills = false;
 
   constructor(model: TreeModel) {
     this.model = model;
@@ -641,7 +646,9 @@ export class TreePainter {
   private drawBills(ctx: CanvasRenderingContext2D, v: View, p: PaintParams, m: number): void {
     const now = p.timeMs;
     this.billNow = now;
-    this.billSize = clamp(38 * v.s, 24, 54) * (0.75 + 0.25 * Math.min(1, m * 2));
+    this.billSize = clamp(38 * (p.billScale ?? v.s), 24, 54) * (0.75 + 0.25 * Math.min(1, m * 2));
+    this.hideBills = !!p.noBills;
+    if (this.hideBills) return;
     const count = Math.min(this.slots.length, Math.max(0, Math.floor(p.bills ?? 0)));
     if (!p.cull) {
       // which slots are showing, and since when (fade in when they arrive without a flight)
@@ -842,7 +849,7 @@ export class TreePainter {
   /** Bills resting on clump ci, drawn right after it so later leaves tuck over them. */
   private drawSlotBills(ctx: CanvasRenderingContext2D, v: View, ci: number): void {
     const ks = this.slotsByClump.get(ci);
-    if (!ks) return;
+    if (!ks || this.hideBills) return;
     const ca = this.state.clumpA[ci]!;
     if (ca < 0.3) return;
     for (const k of ks) {
