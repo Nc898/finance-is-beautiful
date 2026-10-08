@@ -37,6 +37,8 @@ export interface PaintParams {
   cull?: { x0: number; y0: number; x1: number; y1: number };
   /** whole years of contributions = bills resting in the canopy */
   bills?: number;
+  /** fade newly added canvas bills in even when wind is off (the landing sways trees as whole images) */
+  fadeBills?: boolean;
   /** planting spot instead of a tree */
   unplanted?: boolean;
   /** 0..1 planting transition (stake fades, mound settles); 1 = fully planted */
@@ -643,7 +645,7 @@ export class TreePainter {
     const count = Math.min(this.slots.length, Math.max(0, Math.floor(p.bills ?? 0)));
     if (!p.cull) {
       // which slots are showing, and since when (fade in when they arrive without a flight)
-      const instant = !p.wind || !this.haveCount;
+      const instant = (!p.wind && !p.fadeBills) || !this.haveCount;
       for (let k = 0; k < this.slots.length; k++) {
         if (k >= count) this.slotBorn[k] = -1;
         else if (this.slotBorn[k]! === -1) this.slotBorn[k] = instant ? -Infinity : now;

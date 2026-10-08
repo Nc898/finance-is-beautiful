@@ -120,6 +120,12 @@ html[data-ready] .grove {
   opacity: 1;
 }
 
+/* each main tree is its own page layer, swaying on the compositor */
+.grove.grove-tree {
+  inset: auto;
+  will-change: transform;
+}
+
 /* the type waits for the art, then settles in just after the paper and sky appear */
 /* text is cheap to draw, so it stays fully hidden (only the canvases pre-render at 1%) */
 .hero-title,

@@ -65,6 +65,28 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   /** a tree that just received a bill repaints every frame until this time, so the bill fades in smoothly */
   const hotUntil = GROVE.map(() => 0);
   let grownDone = false;
+  let overlayDirty = false;
+  let tick = 0;
+  let finalPainted = false;
+  const settled = GROVE.map(() => false);
+  /**
+   * Wind as a gentle bend of each tree's cached image: a horizontal shear about its ground line, a slow
+   * gust under a quicker flutter, phase-shifted per tree; bigger trees bend a little less.
+   */
+  const SWAY_MS = 8000;
+  const swayAt = (i: number, t: number): number => {
+    const ph = i * 1.7;
+    const w = (Math.PI * 2 * t) / (SWAY_MS / 1000);
+    const amp = 0.011 * (1.15 - 0.35 * GROVE[i]!.m);
+    return amp * (0.7 * Math.sin(w + ph) + 0.3 * Math.sin(3 * w + ph * 1.9));
+  };
+  /** current bend of tree i, read from its running compositor animation */
+  const sway = (i: number): number => {
+    const a = swayAnims[i];
+    const ct = a ? Number(a.currentTime ?? 0) : 0;
+    return a ? swayAt(i, (ct % SWAY_MS) / 1000) : 0;
+  };
+  const swayAnims: Array<Animation | undefined> = GROVE.map(() => undefined);
   const billCount = (i: number) => GROVE[i]!.bills + extra[i]!;
   const layerView = (i: number) => {
     const g = geo!;
@@ -90,7 +112,11 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     restPose(i) {
       if (!geo || !layers[i]) return null;
       const p = painters[i]!.restingBillPose(billCount(i), layerView(i));
-      return { ...p, x: p.x + layers[i]!.x, y: p.y + layers[i]!.y };
+      const L = layers[i]!;
+      const y = p.y + L.y;
+      const yb = L.y + LAYER_UP * geo.s;
+      const k = reduced() ? 0 : sway(i);
+      return { ...p, x: p.x + L.x + k * (yb - y), y };
     },
     landed(i) {
       extra[i]!++;
@@ -130,7 +156,13 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   const LAYER_DOWN = 100; // below it (roots)
   const LAYER_W = 620;
 
+  /** canvases this hero has put in the page (removed and rebuilt on resize) */
+  let domLayers: HTMLCanvasElement[] = [];
+  let farTmp: HTMLCanvasElement | null = null;
   const buildLayers = (g: HeroGeometry) => {
+    for (const a of swayAnims) a?.cancel();
+    for (const c of domLayers) c.remove();
+    domLayers = [];
     layers = GROVE.map((t) => {
       const cssW = Math.ceil(LAYER_W * g.s);
       const cssH = Math.ceil((LAYER_UP + LAYER_DOWN) * g.s);
@@ -140,9 +172,43 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       const up = t.bg ? HORIZON_UP : 0;
       return { cv, cssW, cssH, x: t.x * g.w - cssW / 2, y: g.groundY - (LAYER_UP + up) * g.s, at: -1 };
     });
+    // far trees: hazed together into one static page layer
+    farTmp = document.createElement('canvas');
+    farTmp.width = Math.round(g.w * g.dpr);
+    farTmp.height = Math.round(g.h * g.dpr);
     bgComp = document.createElement('canvas');
-    bgComp.width = Math.round(g.w * g.dpr);
-    bgComp.height = Math.round(g.h * g.dpr);
+    bgComp.width = farTmp.width;
+    bgComp.height = farTmp.height;
+    bgComp.className = 'grove grove-far';
+    bgComp.setAttribute('aria-hidden', 'true');
+    bgComp.style.width = `${g.w}px`;
+    bgComp.style.height = `${g.h}px`;
+    canvas.before(bgComp);
+    domLayers.push(bgComp);
+    // main trees: one page layer each, smaller trees first so larger crowns overlap them
+    for (const i of order) {
+      const L = layers[i]!;
+      const st = L.cv.style;
+      L.cv.className = 'grove grove-tree';
+      L.cv.setAttribute('aria-hidden', 'true');
+      st.left = `${L.x}px`;
+      st.top = `${L.y}px`;
+      st.width = `${L.cssW}px`;
+      st.height = `${L.cssH}px`;
+      st.transformOrigin = `${L.cssW / 2}px ${LAYER_UP * g.s}px`;
+      canvas.before(L.cv);
+      domLayers.push(L.cv);
+      if (!reduced()) {
+        // wind on the compositor: a gentle shear about the ground line, sampled from swayAt over one loop
+        const N = 48;
+        const frames: Keyframe[] = [];
+        for (let f = 0; f <= N; f++) {
+          const k = swayAt(i, ((f / N) * SWAY_MS) / 1000);
+          frames.push({ transform: `skewX(${(Math.atan(-k) * 180) / Math.PI}deg)` });
+        }
+        swayAnims[i] = L.cv.animate(frames, { duration: SWAY_MS, iterations: Infinity, easing: 'linear' });
+      }
+    }
   };
 
   const paintLayer = (i: number, now: number, secs: number, still: boolean) => {
@@ -167,7 +233,8 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
         maturity: START_M + (t.m - START_M) * e,
         months: 24,
         timeMs: now,
-        wind: !still,
+        wind: false,
+        fadeBills: !still,
         pulse: -1,
         bills: Math.floor(t.bills * e + 0.001) + extra[i]!,
       },
@@ -183,25 +250,29 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     // the grow clock starts when the page is revealed (begin()); until then the grove holds as seedlings
     const secs = still ? 99 : t0 < 0 ? 0 : Math.max(0, (now - t0) / 1000);
     const growing = secs < GROW_S + 0.5;
-    const t1 = performance.now();
-    // Stalest trees first within a per-frame budget (every tree when still or on the first frame), so the
-    // screen keeps a steady 60 fps while growth is spread over a couple of frames per tree.
-    const budget = growing ? 9 : 7;
+    // Trees are repainted only when they change: every frame while growing (far trees every other frame),
+    // and once when a bill lands. Wind never repaints a tree: the cached image is bent when drawn (sway()).
     const first = layers.some((L) => L.at < 0);
     const hot = (i: number) => hotUntil[i]! > now;
-    const byAge = allIdx.slice().sort((a, b) => (hot(b) ? 1 : 0) - (hot(a) ? 1 : 0) || layers[a]!.at - layers[b]!.at);
-    let n = 0;
+    tick++;
     let bgDirty = first;
-    for (const i of byAge) {
-      if (!still && !first && n > 0 && !hot(i) && performance.now() - t1 > budget) break;
+    for (const i of allIdx) {
+      const t = GROVE[i]!;
+      const due = first || hot(i) || (growing && !settled[i] && (!t.bg || tick % 2 === 0));
+      if (!due) continue;
       paintLayer(i, now, secs, still);
-      if (GROVE[i]!.bg) bgDirty = true;
-      n++;
+      // one last paint after its growth window closes, then it is cached for good
+      if (growing && secs > t.delay + GROW_S + 0.1) settled[i] = true;
+      if (t.bg) bgDirty = true;
     }
-    ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
-    ctx.clearRect(0, 0, geo.w, geo.h);
-    if (bgComp && bgDirty) {
-      const bc = bgComp.getContext('2d')!;
+    if (!growing && !finalPainted) {
+      // make sure every tree's cached image is its exact final state
+      finalPainted = true;
+      for (const i of allIdx) if (!settled[i]) paintLayer(i, now, secs, still);
+      bgDirty = true;
+    }
+    if (bgComp && farTmp && bgDirty) {
+      const bc = farTmp.getContext('2d')!;
       bc.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
       bc.globalCompositeOperation = 'source-over';
       bc.clearRect(0, 0, geo.w, geo.h);
@@ -215,18 +286,20 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       bc.fillRect(0, 0, geo.w, geo.h);
       bc.fillStyle = 'rgba(120,165,205,0.12)';
       bc.fillRect(0, 0, geo.w, geo.h);
+      const fc = bgComp.getContext('2d')!;
+      fc.setTransform(1, 0, 0, 1, 0, 0);
+      fc.clearRect(0, 0, bgComp.width, bgComp.height);
+      fc.globalAlpha = 0.55;
+      fc.drawImage(farTmp, 0, 0);
+      fc.globalAlpha = 1;
     }
-    if (bgComp) {
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(bgComp, 0, 0, geo.w, geo.h);
-      ctx.globalAlpha = 1;
+    // the overlay canvas only carries birds and falling bills: redraw it only while something is flying
+    if (grownDone && !still && (aviary.busy(now) || overlayDirty)) {
+      ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
+      ctx.clearRect(0, 0, geo.w, geo.h);
+      aviary.frame(ctx, now);
+      overlayDirty = aviary.busy(now);
     }
-    for (const i of order) {
-      const L = layers[i]!;
-      ctx.drawImage(L.cv, L.x, L.y, L.cssW, L.cssH);
-    }
-    // occasional birds, once the grove has grown (never in reduced motion)
-    if (grownDone && !still) aviary.frame(ctx, now);
     if (secs > GROW_S + 0.5) {
       grownDone = true;
       resolveGrown();

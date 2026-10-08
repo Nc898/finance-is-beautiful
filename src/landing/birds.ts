@@ -252,6 +252,11 @@ export class Aviary {
   readonly reserved = new Set<number>();
   constructor(private hooks: AviaryHooks) {}
 
+  /** True while birds or bills are on screen, or a new bird is due. */
+  busy(now: number): boolean {
+    return this.birds.length > 0 || this.falls.length > 0 || this.nextAt < 0 || now >= this.nextAt;
+  }
+
   /** Advance and draw; `now` is wall-clock ms. Call only once the grove has grown and motion is allowed. */
   frame(ctx: CanvasRenderingContext2D, now: number): void {
     const sky = this.hooks.sky();
