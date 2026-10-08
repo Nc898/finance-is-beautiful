@@ -96,6 +96,8 @@ export interface SceneAPI {
   setInsets(insets: { top: number; bottom: number; side?: number }): void;
   render(frame: SceneFrame): void;
   worldToScreen(x: number, y: number): ScreenPoint;
+  /** The last frame's camera move as screen' = a * screen + (bx, by) (identity when not zoomed). */
+  cameraTransform(): { a: number; bx: number; by: number };
   anchorsFor(id: TreeId, maturity: number): TreeAnchors;
   destroy(): void;
 }

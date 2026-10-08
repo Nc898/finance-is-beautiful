@@ -102,8 +102,14 @@ input {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* specimen labels wait out the opening close-up (set by the loop) */
-  opacity: var(--label-fade, 1);
+}
+
+/* during the opening close-up the zoomed tree's label follows the camera; the others wait for it to settle */
+.overlay .plate:not(.cam-follow),
+.overlay .diff,
+.overlay .seedmark {
+  /* filter: opacity() composes with each label's own show/hide opacity */
+  filter: opacity(var(--label-fade, 1));
 }
 
 .masthead {

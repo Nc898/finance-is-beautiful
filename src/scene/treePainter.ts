@@ -110,6 +110,8 @@ export class TreePainter {
   private billNow = 0;
   private billSize = 20;
   private haveCount = false;
+  /** last whole month of contributions seen (bills start flowing from the first one) */
+  private lastMonth = -1;
   private hideBills = false;
 
   constructor(model: TreeModel) {
@@ -662,28 +664,41 @@ export class TreePainter {
       }
       if (!p.wind) this.bills.length = 0;
       const flowing = p.wind && p.pulse !== undefined && p.pulse >= 0;
-      if (flowing && this.haveCount && count > this.billCount && now - this.lastSpawn > 850 && this.bills.length < 3 && m > 0.05 && this.mainRoots.length) {
-        const id = this.billId++;
-        this.bills.push({
-          id, slot: count - 1, t0: now, dur: 0,
-          root: this.mainRoots[(id * 2 + 1) % this.mainRoots.length]!,
-          route: -2, // chosen once the slot's position is known
-          variant: this.slots[count - 1]!.variant,
-        });
-        this.lastSpawn = now;
+      const month = Math.floor(p.months + 1e-6);
+      const root = this.billRoot(this.billId);
+      if (flowing && this.haveCount && root >= 0 && this.bills.length < 3 && now - this.lastSpawn > 850) {
+        const newYear = count > this.billCount && m > 0.05;
+        const newMonth = month > this.lastMonth && this.lastMonth >= 0;
+        if (newYear || newMonth) {
+          const id = this.billId++;
+          // a new year's bill lands and stays in the canopy; the months in between are absorbed by the tree
+          this.bills.push({
+            id, slot: newYear ? count - 1 : -1, t0: now, dur: 0, root,
+            route: -2, // chosen once the destination is known
+            variant: newYear ? this.slots[count - 1]!.variant : id % 3,
+          });
+          this.lastSpawn = now;
+        }
       }
+      this.lastMonth = month;
       this.billCount = count;
       this.haveCount = true;
       this.bills = this.bills.filter((f) => f.slot < count && (f.dur === 0 || now - f.t0 < f.dur));
     } else {
       this.billCount = count;
     }
-    const trunk = this.cap.get(0);
-    if (!trunk || !this.bills.length) return;
+    if (!this.bills.length) return;
+    // the trunk as drawn; a seedling's stem is too thin to be captured, so follow it straight up
+    const trunk = this.cap.get(0) ?? this.stemLine(v, m);
     for (const f of this.bills) {
       const g = this.state.rootG[f.root]!;
       if (g <= 0.01) continue;
-      const rest = this.slotPose(f.slot, v);
+      const tt = trunk.x.length - 1;
+      // absorbed bills end high on the trunk (into the young crown); canopy bills at their slot
+      const rest: BillPose =
+        f.slot >= 0
+          ? this.slotPose(f.slot, v)
+          : { x: trunk.x[tt]!, y: trunk.y[tt]!, ang: 0, size: this.billSize, mirror: 1 };
       if (f.route === -2) {
         // out along the scaffold whose tip is nearest the landing spot (or up the leader)
         let best = Infinity;
@@ -697,8 +712,7 @@ export class TreePainter {
             f.route = r;
           }
         });
-        const tt = trunk.x.length - 1;
-        if (Math.hypot(trunk.x[tt]! - rest.x, trunk.y[tt]! - rest.y) < best) f.route = -1;
+        if (f.slot < 0 || Math.hypot(trunk.x[tt]! - rest.x, trunk.y[tt]! - rest.y) < best) f.route = -1;
       }
       const rl = rootCenterline(this.model.roots[f.root]!, g, this.rootRs, v, f.root, this.rootDrop);
       rl.x.reverse();
@@ -718,12 +732,14 @@ export class TreePainter {
         pieces.push({ x: trunk.x.slice(0, j + 1), y: trunk.y.slice(0, j + 1) });
         const e = Math.max(2, Math.ceil(sc.x.length * 0.8));
         pieces.push({ x: sc.x.slice(0, e), y: sc.y.slice(0, e) });
+      } else if (f.slot < 0) {
+        pieces.push(trunk);
       } else {
         const e = Math.max(2, Math.ceil(trunk.x.length * 0.8));
         pieces.push({ x: trunk.x.slice(0, e), y: trunk.y.slice(0, e) });
       }
       // final leg: from the wood out to the resting spot among the leaves
-      pieces.push({ x: [rest.x], y: [rest.y] });
+      if (f.slot >= 0) pieces.push({ x: [rest.x], y: [rest.y] });
       const total = buildPath(pieces);
       if (f.dur === 0) {
         if (p.cull) continue;
@@ -731,6 +747,34 @@ export class TreePainter {
       }
       drawBill(ctx, f, now, total, this.billSize, v.oy, rest);
     }
+  }
+
+  /**
+   * Root for the next bill: a grown main root when there is one, otherwise the seedling's taproot or
+   * side roots (so bills can flow from the very first month). −1 when no root is visible yet.
+   */
+  private billRoot(id: number): number {
+    const g = this.state.rootG;
+    const main = this.mainRoots.filter((ri) => g[ri]! > 0.3);
+    if (main.length) return main[(id * 2 + 1) % main.length]!;
+    const young: number[] = [];
+    this.model.roots.forEach((r, i) => {
+      if (r.depth <= 1 && g[i]! > 0.15 && r.len > 20) young.push(i);
+    });
+    return young.length ? young[id % young.length]! : -1;
+  }
+
+  /** Screen polyline up a seedling's stem (base to tip), for when the trunk is too thin to be captured. */
+  private stemLine(v: View, m: number): Line {
+    const h = Math.max(4, m * H * 0.85);
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 0; i <= 6; i++) {
+      const y = (h * i) / 6;
+      xs.push(v.ox + this.windDX(0, y) * v.s);
+      ys.push(v.oy - y * v.s);
+    }
+    return { x: xs, y: ys };
   }
 
   /** soil mound with a slim wooden stake and a tiny string tag (no text) */

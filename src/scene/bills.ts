@@ -212,8 +212,11 @@ export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: numb
   const x = p.x - p.ty * sway;
   const y = p.y + p.tx * sway;
   const fadeIn = smoothstep(t / 0.08);
-  // settling: in the last stretch the bill eases into the exact pose it will rest in
-  const settle = smoothstep((t - 0.74) / 0.26);
+  // settling: in the last stretch the bill eases into the exact pose it will rest in; a bill that is
+  // absorbed by the young tree (slot < 0) instead shrinks and fades as it reaches the end of its path
+  const absorb = f.slot < 0;
+  const settle = absorb ? 0 : smoothstep((t - 0.74) / 0.26);
+  const fadeOut = absorb ? 1 - smoothstep((t - 0.7) / 0.3) : 1;
   // orientation: partly follows the path, with a slow flutter; a gentle 3D flip by squashing width
   const flyAng = Math.atan2(p.ty, p.tx) * 0.3 + Math.sin(now * 0.0017 + f.id) * 0.32;
   const flyFlip = 0.62 + 0.38 * Math.cos(now * 0.0029 + f.id * 2.3);
@@ -221,10 +224,10 @@ export function drawBill(ctx: CanvasRenderingContext2D, f: BillFlight, now: numb
   const flip = (flyFlip + (1 - flyFlip) * settle) * (settle > 0.5 ? rest.mirror : 1);
   const bx = x + (rest.x - x) * settle;
   const by = y + (rest.y - y) * settle;
-  const alpha = fadeIn;
+  const alpha = fadeIn * fadeOut;
   if (alpha > 0.01) {
     const img = billSprites()[f.variant % 3]!;
-    const w = size + (rest.size - size) * settle;
+    const w = (size + (rest.size - size) * settle) * (absorb ? 0.55 + 0.45 * fadeOut : 1);
     const h = w * (SH / SW);
     ctx.save();
     ctx.globalAlpha = alpha * 0.96;

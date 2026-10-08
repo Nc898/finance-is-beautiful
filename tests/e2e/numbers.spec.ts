@@ -21,8 +21,8 @@ test.describe('numbers', () => {
     expect(b.split).toContain('$72,000 contributed');
     expect(b.split).toContain('$122,903 modeled growth');
     expect(await diffText(page)).toBe('$186,633');
-    expect(a.name).toBe('Tree A · started at 25');
-    expect(b.name).toBe('Tree B · started at 35');
+    expect(a.name).toBe('Tree A · started at 25 · Year 40');
+    expect(b.name).toBe('Tree B · started at 35 · Year 30');
   });
 
   test('details table matches the plates at the difference moment', async ({ page }) => {

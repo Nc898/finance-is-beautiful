@@ -410,16 +410,20 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const cells = new Map<string, HTMLElement>();
   document.querySelectorAll<HTMLElement>('[data-cell]').forEach((c) => cells.set(c.dataset.cell!, c));
 
-  function treeName(id: TreeId, start: number, planted: boolean): string {
+  function treeName(id: TreeId, start: number, planted: boolean, monthsElapsed = 0): string {
     const s = id === 'A' ? state.inputs.startAgeA : state.inputs.startAgeB;
-    return planted ? `Tree ${id} · started at ${start}` : `Tree ${id} · starts at ${s}`;
+    if (!planted) return `Tree ${id} · starts at ${s}`;
+    // which year of investing this is: Year 1 for the first twelve months, up to the last full year
+    const years = Math.max(1, state.inputs.endAge - start);
+    const year = Math.min(years, Math.floor(Math.max(0, monthsElapsed - 1e-9) / 12) + 1);
+    return `Tree ${id} · started at ${start} · Year ${year}`;
   }
 
   function updatePlate(id: TreeId, snap: TreePair['a']): void {
     const p = plates[id];
     const start = id === 'A' ? state.inputs.startAgeA : state.inputs.startAgeB;
     const noTime = start >= state.inputs.endAge;
-    setText(p.name, treeName(id, start, snap.planted));
+    setText(p.name, treeName(id, start, snap.planted, snap.monthsElapsed));
     if (snap.planted) {
       p.root.removeAttribute('data-hold');
       setText(p.balance, formatCurrency(snap.balance));

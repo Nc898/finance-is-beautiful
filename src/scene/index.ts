@@ -28,6 +28,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   const painters: Record<TreeId, TreePainter> = { A: new TreePainter(getModel(seeds.A)), B: new TreePainter(getModel(seeds.B)) };
   let sprites: Sprites | null = null;
   let bg: Backdrop | null = null;
+  let lastCam = { a: 1, bx: 0, by: 0 };
   let cam: Camera | null = null;
   let size = { w: 0, h: 0, ratio: 1 };
   let insets: Insets = { top: 0, bottom: 0 };
@@ -216,6 +217,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       let A = 1;
       let Bx = 0;
       let By = 0;
+      lastCam = { a: 1, bx: 0, by: 0 };
       if (z > 1.0005 && frame.camera) {
         const Fx = c.ox0 + frame.camera.focus.x * c.s;
         const Fy = c.oyGround - frame.camera.focus.y * c.s;
@@ -225,6 +227,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
         A = z;
         Bx = Fx * (1 - z) + (Cx - Fx) * k;
         By = Fy * (1 - z) + (Cy - Fy) * k;
+        lastCam = { a: A, bx: Bx, by: By };
         s = c.s * z;
         ox0 = c.ox0 * z + Bx;
         oy = c.oyGround * z + By;
@@ -256,6 +259,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       if (frame.loupe) drawLoupe(frame.loupe, frame, c, sprites);
     },
     worldToScreen,
+    cameraTransform: () => lastCam,
     anchorsFor(id: TreeId, maturity: number): TreeAnchors {
       const c = camNow();
       const m = clamp(maturity, 0, 1);

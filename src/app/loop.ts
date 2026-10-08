@@ -52,6 +52,7 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
   let camInit = false;
   let camFocus = { x: 0, y: 0 };
   let lastFade = -1;
+  let camTree: 'A' | 'B' = 'A';
 
   const frame = (now: number) => {
     if (!running) return;
@@ -91,12 +92,13 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     camZoom = camInit && motion ? camZoom + (tz - camZoom) * (1 - Math.exp(-dt / 0.35)) : tz;
     camInit = true;
     if (Math.abs(camZoom - 1) < 0.002) camZoom = 1;
-    // labels sit under the trees, so they wait out the close-up and fade back in as the camera settles
+    // the other labels wait out the close-up and fade back in as the camera settles
     const fade = Math.max(0, Math.min(1, (1.35 - camZoom) / 0.35));
     if (Math.abs(fade - lastFade) > 0.01 || (fade === 1 && lastFade !== 1)) {
       document.documentElement.style.setProperty('--label-fade', fade.toFixed(3));
       lastFade = fade;
     }
+    if (camTarget) camTree = camTarget.tree;
 
     const pulsing = state.playing && motion && sc.inputs.monthlyContribution > 0;
     const pulse = pulsing ? (age / 12) % 1 : -1;
@@ -111,6 +113,21 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
       camera: camZoom > 1 ? { zoom: camZoom, focus: camFocus } : undefined,
     };
     scene.render(f);
+
+    // the zoomed tree's label rides along with the camera, so its money is readable from the first month
+    const T = scene.cameraTransform();
+    for (const id of ['A', 'B'] as const) {
+      const el = document.getElementById(`plate-${id}`);
+      if (!el) continue;
+      // follow only during the opening's own camera move; after a skip or scrub the label fades back in
+      // with the others while the camera glides out
+      const follow = !!camTarget && camZoom > 1 && id === camTree;
+      el.classList.toggle('cam-follow', follow);
+      if (follow) {
+        const b = scene.anchorsFor(id, 0).base;
+        el.style.translate = `${Math.round(b.x * (T.a - 1) + T.bx)}px ${Math.round(b.y * (T.a - 1) + T.by)}px`;
+      } else if (el.style.translate) el.style.translate = '';
+    }
   };
 
   raf = requestAnimationFrame(frame);
