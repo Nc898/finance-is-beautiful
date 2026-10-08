@@ -943,7 +943,8 @@ export function generateTree(seed: number): TreeModel {
     return me;
   };
   // seedling threads: a taproot and 3 fine laterals, all BELOW the soil line (nothing radiates above ground)
-  const tap = growRoot(0, -2, -Math.PI / 2 + rnd.range(-0.12, 0.12), 52, 2.4, 0, -1, 0, 0.12, 0);
+  // the taproot lengthens over the seedling's first growth rather than appearing at full length
+  const tap = growRoot(0, -2, -Math.PI / 2 + rnd.range(-0.12, 0.12), 52, 2.4, 0, -1, 0, 0.36, 0);
   {
     const R = roots[tap]!;
     const ts = [0.2, 0.34, 0.48];
@@ -958,7 +959,7 @@ export function generateTree(seed: number): TreeModel {
         if (smoothstep(mid) < tq) lo = mid;
         else hi = mid;
       }
-      growRoot(R.px[j]!, R.py[j]!, -Math.PI / 2 + sd * rnd.range(1.0, 1.25), rnd.range(30, 48), 1.1, 1, tap, 0.12 * ((lo + hi) / 2) + 0.004 + k * 0.006, 0.09, 1);
+      growRoot(R.px[j]!, R.py[j]!, -Math.PI / 2 + sd * rnd.range(0.8, 1.05), rnd.range(30, 48), 1.1, 1, tap, 0.36 * ((lo + hi) / 2) + 0.02 + k * 0.025, 0.2, 1);
     }
   }
   const nMain = 6;

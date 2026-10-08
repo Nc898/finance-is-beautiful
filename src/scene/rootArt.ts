@@ -79,7 +79,9 @@ function build(r: RootBranch, g: number, rs: number, v: RootView, ri: number, dr
       c = lv;
       last = true;
     }
-    const flare = r.depth === 0 ? 1 + 1.15 * Math.pow(1 - smoothstep(c / 34), 1.4) : 1;
+    // a newly emerging root is slender; its buttress flare builds up as it lengthens
+    const est = smoothstep(lv / 40);
+    const flare = r.depth === 0 ? 1 + 1.15 * est * Math.pow(1 - smoothstep(c / 34), 1.4) : 1;
     // main roots leave the root crown below the surface, then ease back to their modelled path
     if (drop > 0 && r.depth === 0) y -= drop * (0.35 + 0.65 * (1 - smoothstep(c / 40))) * (0.75 + 0.5 * hash(ri, 5));
     else if (drop > 0 && r.depth <= 2) y -= drop * 0.35;
@@ -88,7 +90,7 @@ function build(r: RootBranch, g: number, rs: number, v: RootView, ri: number, dr
     const tipT = clamp((lv - c) / 10, 0, 1);
     X[k] = v.ox + x * v.s;
     Y[k] = v.oy - y * v.s;
-    R[k] = Math.max(0.22, rd * rs * thick * flare * wobble * (0.35 + 0.65 * tipT)) * v.s;
+    R[k] = Math.max(0.22, rd * rs * thick * flare * wobble * (0.35 + 0.65 * tipT) * (0.4 + 0.6 * est)) * v.s;
     C[k] = c;
     k++;
     if (last) break;
@@ -261,51 +263,59 @@ function paintBarkRoot(ctx: CanvasRenderingContext2D, k: number, seed: number, v
   }
 }
 
-/** Thin secondary roots: two-tone line in the same umber, no full bark treatment. */
+/** Add a smooth curve through the given points (quadratic segments through the midpoints). */
+function smoothThrough(p: Path2D, xs: (i: number) => number, ys: (i: number) => number, k: number, move: boolean): void {
+  if (move) p.moveTo(xs(0), ys(0));
+  else p.lineTo(xs(0), ys(0));
+  for (let i = 1; i < k - 1; i++) p.quadraticCurveTo(xs(i), ys(i), (xs(i) + xs(i + 1)) / 2, (ys(i) + ys(i + 1)) / 2);
+  p.lineTo(xs(k - 1), ys(k - 1));
+}
+
+/** Thin secondary roots: a smooth, tapering ribbon in the same umber, with a faint lit edge. */
 function paintThinRoot(ctx: CanvasRenderingContext2D, k: number, seed: number): void {
-  const p = new Path2D();
-  const lit = new Path2D();
-  for (let i = 0; i < k; i++) {
-    if (i === 0) {
-      p.moveTo(X[i]!, Y[i]!);
-      lit.moveTo(px(i, 0.55), py(i, 0.55));
-    } else {
-      p.lineTo(X[i]!, Y[i]!);
-      lit.lineTo(px(i, 0.55), py(i, 0.55));
-    }
-  }
-  ctx.lineCap = 'round';
+  // taper to a fine point regardless of the model's minimum radius
+  for (let i = 0; i < k; i++) R[i] = Math.max(0.25, R[i]! * (1 - 0.75 * (i / Math.max(1, k - 1))));
+  const body = new Path2D();
+  smoothThrough(body, (i) => px(i, 1), (i) => py(i, 1), k, true);
+  const back = (i: number) => k - 1 - i;
+  smoothThrough(body, (i) => px(back(i), -1), (i) => py(back(i), -1), k, false);
+  body.closePath();
+  ctx.fillStyle = 'rgba(122,90,60,0.88)';
+  ctx.fill(body);
   ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(0.7, R[0]! * 2);
-  ctx.strokeStyle = 'rgba(118,86,58,0.85)';
-  ctx.stroke(p);
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(60,42,30,0.45)';
+  ctx.stroke(body);
   if (R[0]! > 0.8) {
-    ctx.lineWidth = Math.max(0.4, R[0]! * 0.6);
-    ctx.strokeStyle = 'rgba(196,156,106,0.5)';
+    const lit = new Path2D();
+    smoothThrough(lit, (i) => px(i, 0.5), (i) => py(i, 0.5), Math.max(2, Math.round(k * 0.7)), true);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(0.35, R[0]! * 0.45);
+    ctx.strokeStyle = 'rgba(206,168,118,0.45)';
     ctx.stroke(lit);
   }
-  // a few whiskers along thin roots
+  // a few fine root hairs along the middle of the root (never at the tip, where they read as hooks)
   const wh = new Path2D();
-  for (let i = 2; i < k - 1; i += 2) {
-    if (hash(i, seed + 5) > 0.45) continue;
+  for (let i = 2; i < k - 3; i += 3) {
+    if (hash(i, seed + 5) > 0.4) continue;
     const sd = hash(i, seed + 9) < 0.5 ? 1 : -1;
-    const len = 1.5 + hash(i, seed + 17) * 2.5;
+    const len = 1.2 + hash(i, seed + 17) * 1.6;
     const tx = NY[i]!, ty = -NX[i]!;
-    wh.moveTo(X[i]!, Y[i]!);
-    wh.lineTo(X[i]! + (NX[i]! * sd * 0.8 + tx * 0.6) * len, Y[i]! + (NY[i]! * sd * 0.8 + ty * 0.6) * len);
+    wh.moveTo(px(i, sd), py(i, sd));
+    wh.quadraticCurveTo(
+      X[i]! + NX[i]! * sd * (R[i]! + len * 0.6), Y[i]! + NY[i]! * sd * (R[i]! + len * 0.6),
+      X[i]! + (NX[i]! * sd * 0.9 + tx * 0.5) * (R[i]! + len), Y[i]! + (NY[i]! * sd * 0.9 + ty * 0.5) * (R[i]! + len),
+    );
   }
-  ctx.lineWidth = 0.45;
-  ctx.strokeStyle = 'rgba(78,56,38,0.5)';
+  ctx.lineWidth = 0.4;
+  ctx.strokeStyle = 'rgba(78,56,38,0.4)';
   ctx.stroke(wh);
 }
 
 /** Hair roots: fine sepia threads with tiny fibrous whiskers. */
 function paintHairRoot(ctx: CanvasRenderingContext2D, k: number, seed: number, hair: Path2D, whisk: Path2D): void {
-  for (let i = 0; i < k; i++) {
-    if (i === 0) hair.moveTo(X[i]!, Y[i]!);
-    else hair.lineTo(X[i]!, Y[i]!);
-  }
-  for (let i = 1; i < k; i++) {
+  smoothThrough(hair, (i) => X[i]!, (i) => Y[i]!, k, true);
+  for (let i = 1; i < k - 1; i++) {
     if (hash(i, seed + 3) > 0.6) continue;
     const sd = i % 2 === 0 ? 1 : -1;
     const len = 1.2 + hash(i, seed + 7) * 1.8;
@@ -553,7 +563,7 @@ export function paintGroundJoin(ctx: CanvasRenderingContext2D, v: RootView, w: n
     const u = hash(i, seed + 101) * 2 - 1;
     const x = x0 + u * w * 2.1;
     const y = y0 + (hash(i, seed + 103) - 0.35) * w * 0.35;
-    const r = (0.7 + hash(i, seed + 107) * 1.6) * sc;
+    const r = Math.min((0.7 + hash(i, seed + 107) * 1.6) * sc, w * 0.09);
     const dark = hash(i, seed + 109) < 0.5;
     ctx.fillStyle = dark ? 'rgba(86,60,40,0.6)' : 'rgba(176,142,98,0.6)';
     ctx.beginPath();

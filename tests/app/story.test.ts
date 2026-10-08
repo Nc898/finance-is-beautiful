@@ -96,7 +96,9 @@ describe('normal story timing (default inputs)', () => {
     expect(loupeAt(4, i, true) ?? loupeAt(2, i, true) ?? loupeAt(8, i, true)).toBeDefined();
     expect(loupeAt(16.5, i)).toMatchObject({ tree: 'B', target: 'roots', strength: 1 });
     expect(loupeAt(20, i)).toBeUndefined();
-    expect(loupeAt(27, i)).toMatchObject({ tree: 'A', target: 'branches' });
+    expect(loupeAt(27, i)).toBeUndefined(); // no close-up on the branches
+    for (let t = 0; t < 60; t += 0.5) expect(loupeAt(t, i)?.target).not.toBe('branches');
+    for (let t = 0; t < 60; t += 0.5) expect(loupeAt(t, i, true)?.target).not.toBe('branches');
     expect(loupeAt(40, i)).toBeUndefined();
   });
   it('opens close on the first seedling and is back at the full view before the second tree is planted', () => {

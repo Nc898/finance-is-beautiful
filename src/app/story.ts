@@ -118,7 +118,6 @@ function buildPlan(inputs: Inputs): Plan {
   if (grows) {
     // the opening close-up of the first seedling is a camera move now (storyCamera), not a loupe
     if (hasLate && t1 < end) loupes.push({ who: 'second', t0: 15.3, t1: 18, target: 'roots' });
-    loupes.push({ who: 'first', t0: 25, t1: 30, target: 'branches' });
   }
   return finish({ duration: STORY_DURATION, knots, beats, loupes, fade: 0.6, first, second, t0, t1, end });
 }
@@ -164,7 +163,7 @@ function buildReducedPlan(inputs: Inputs): Plan {
   });
   beats.push({ t, beat: 'handoff' });
   knots.push({ t: t + 3, age: end });
-  // Static loupes: roots at the "contribute" hold, branches at a middle "reinvest" hold.
+  // Static loupes (reduced motion): the seedling's roots at the "contribute" hold, and the second tree's planting.
   const loupes: LoupeWindow[] = [];
   if (grows) {
     loupes.push({ who: 'first', t0: holdStart[0], t1: holdStart[0] + HOLD, target: 'roots' });
@@ -172,11 +171,6 @@ function buildReducedPlan(inputs: Inputs): Plan {
     if (bi >= 0 && t1 < end) loupes.push({ who: 'second', t0: holdStart[bi], t1: holdStart[bi] + HOLD, target: 'roots' });
     const ci = holds.findIndex((h) => h.beat === 'contribute');
     if (ci >= 0) loupes.push({ who: 'first', t0: holdStart[ci], t1: holdStart[ci] + HOLD, target: 'roots' });
-    const rs = holds.map((h, i) => (h.beat === 'reinvest' ? i : -1)).filter((i) => i >= 0);
-    if (rs.length) {
-      const i = rs[Math.floor((rs.length - 1) / 2)];
-      loupes.push({ who: 'first', t0: holdStart[i], t1: holdStart[i] + HOLD, target: 'branches' });
-    }
   }
   return finish({ duration: t + 3, knots, beats, loupes, fade: TWEEN, first, second, t0, t1, end });
 }

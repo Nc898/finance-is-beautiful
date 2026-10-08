@@ -431,8 +431,10 @@ export class TreePainter {
       for (let q = 0; q < b.knots.length / 3; q++) {
         const ii = Math.floor((b.knots[3 * q]! * (b.n - 1)) / this.step);
         if (ii >= k - 1 || ii < 1) continue;
+        // knots belong to established bark: none on a slender young stem, and never wider than the trunk allows
+        if (R[ii]! < 3.2) continue;
         const off = b.knots[3 * q + 1]!;
-        const sz = b.knots[3 * q + 2]! * v.s * 0.7;
+        const sz = Math.min(b.knots[3 * q + 2]! * v.s * 0.7, R[ii]! * 0.45);
         const cx = X[ii]! - NX[ii]! * R[ii]! * litS * off * 0.5;
         const cy = Y[ii]! - NY[ii]! * R[ii]! * litS * off * 0.5;
         const a = Math.atan2(-NX[ii]!, NY[ii]!) + Math.PI / 2 + 0.25;
@@ -559,7 +561,8 @@ export class TreePainter {
     for (let oi = 0; oi < this.order.length; oi++) {
       const b = br[this.order[oi]!]!;
       if (!b.isRoot) continue;
-      const g = st.g[b.idx]! * smoothstep((mEff - 0.09) / 0.14);
+      // surface roots flare out only once the trunk has some girth (not on a sapling)
+      const g = st.g[b.idx]! * smoothstep((mEff - 0.2) / 0.3);
       if (g <= 0.0005) continue;
       const k = this.prep(b, g, st.kappa[b.idx]!, v, g >= 0.999);
       if (k < 2 || this.outside(k)) continue;
@@ -917,14 +920,21 @@ export class TreePainter {
       ctx.restore();
     }
     const mt = clamp(p.months, 0, 12);
-    const mound = 1 - 0.8 * smoothstep((mEff - 0.1) / 0.35);
+    // a low, soft hump of turned soil that settles back into the meadow as the seedling establishes
+    const mound = 1 - smoothstep((mEff - 0.03) / 0.08);
     if (mound > 0.01) {
-      const w = (16 + 8 * smoothstep(mt / 2)) * (1 + 0.8 * smoothstep((mEff - 0.05) / 0.4));
-      const h = w * 0.4 * (1 + 0.28 * (1 - plantK));
-      ctx.globalAlpha = mound;
-      const s = sp.mound;
-      ctx.drawImage(s.src, s.sx, s.sy, s.sw, s.sh, v.ox - (w / 2) * v.s, v.oy - h * 0.86 * v.s, w * v.s, h * v.s);
-      ctx.globalAlpha = 1;
+      // soft turned earth: a feathered wash, darkest at the stem, no hard silhouette
+      const w = (10 + 5 * smoothstep(mt / 2)) * v.s;
+      const h = w * 0.16 * (1 + 0.4 * (1 - plantK));
+      const g = ctx.createRadialGradient(v.ox, v.oy, 0, v.ox, v.oy, w * 0.5);
+      g.addColorStop(0, `rgba(120,86,54,${0.55 * mound})`);
+      g.addColorStop(0.55, `rgba(150,112,72,${0.3 * mound})`);
+      g.addColorStop(1, 'rgba(160,124,84,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(v.ox, v.oy - h * 0.25, w * 0.5, h, 0, Math.PI, 0);
+      ctx.ellipse(v.ox, v.oy - h * 0.25, w * 0.5, h * 0.35, 0, 0, Math.PI);
+      ctx.fill();
     }
   }
 
@@ -933,14 +943,16 @@ export class TreePainter {
     if (t <= 0.12) return;
     const grow = smoothstep((t - 0.15) / 2.4);
     const unfurl = smoothstep((t - 0.35) / 3.2);
-    const fade = 1 - smoothstep((t - 5.5) / 3.5);
+    // seed leaves yield to the true leaves: they yellow and fall away as the first crown clumps appear
+    const crownIn = smoothstep((mEff - 0.042) / 0.03);
+    const fade = (1 - smoothstep((t - 5.5) / 3.5)) * (1 - crownIn);
     if (grow <= 0.01 || fade <= 0.01) return;
     const stemH = mEff * H * 0.35;
     const nodeY = Math.min(6.2, stemH * 0.8);
     if (nodeY < 0.8) return;
     const bx = v.ox + this.windDX(0, nodeY) * v.s;
     const by = v.oy - nodeY * v.s;
-    const L = (4.4 + 8 * grow) * v.s;
+    const L = (2.4 + 3.8 * grow) * v.s;
     for (let side = -1; side <= 1; side += 2) {
       const ang = (8 + 62 * unfurl) * (Math.PI / 180);
       const droop = 6 * (Math.PI / 180) * unfurl;
@@ -953,8 +965,10 @@ export class TreePainter {
       const tipy = by + diry * L;
       ctx.globalAlpha = fade;
       const gr = ctx.createLinearGradient(bx, by - L * 0.5, bx + dirx * L, by + diry * L);
-      gr.addColorStop(0, 'rgba(168,208,96,0.95)');
-      gr.addColorStop(1, 'rgba(78,154,60,0.95)');
+      // fresh green, turning a little yellow as they are outgrown
+      const y = crownIn;
+      gr.addColorStop(0, `rgba(${Math.round(168 + 40 * y)},${Math.round(208 - 6 * y)},${Math.round(96 - 20 * y)},0.95)`);
+      gr.addColorStop(1, `rgba(${Math.round(78 + 90 * y)},${Math.round(154 + 20 * y)},${Math.round(60 - 10 * y)},0.95)`);
       ctx.fillStyle = gr;
       ctx.beginPath();
       ctx.moveTo(bx, by);
