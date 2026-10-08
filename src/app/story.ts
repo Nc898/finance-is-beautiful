@@ -5,6 +5,7 @@
  * Trees are always labelled by letter, so reversed starts (B earlier than A) keep correct copy.
  */
 import { formatCurrency } from '../engine';
+import { WORLD } from '../scene/types';
 import type { Inputs, Scenario, TreeId } from '../engine';
 import { numberWord, plural } from './text';
 
@@ -115,7 +116,7 @@ function buildPlan(inputs: Inputs): Plan {
   beats.push({ t: 37, beat: 'difference' }, { t: 50, beat: 'handoff' });
   const loupes: LoupeWindow[] = [];
   if (grows) {
-    loupes.push({ who: 'first', t0: 1.5, t1: 6.5, target: 'roots' }, { who: 'first', t0: 8, t1: 12, target: 'roots' });
+    // the opening close-up of the first seedling is a camera move now (storyCamera), not a loupe
     if (hasLate && t1 < end) loupes.push({ who: 'second', t0: 15.3, t1: 18, target: 'roots' });
     loupes.push({ who: 'first', t0: 25, t1: 30, target: 'branches' });
   }
@@ -246,6 +247,31 @@ export function loupeAt(storyTime: number, inputs: Inputs, reduced = false): Lou
     if (e > 0) return { tree: w.who === 'first' ? plan.first : plan.second, target: w.target, strength: e };
   }
   return undefined;
+}
+
+/** Close-up zoom while the first tree is a seedling, and when the camera is back to the full shared view. */
+export const CAMERA_ZOOM = 3.4;
+const CAMERA_HOLD = 6.5;
+const CAMERA_OUT = 14.5;
+
+/**
+ * The opening camera move: close on the first seedling, held through the planting, then easing out to the
+ * full shared view before the second tree is planted. Undefined (no move) in reduced motion, when nothing
+ * grows, and after the move ends, so the trees are only ever compared at the same, full view.
+ */
+export function storyCamera(storyTime: number, inputs: Inputs, reduced = false): { zoom: number; focus: { x: number; y: number }; tree: TreeId } | undefined {
+  if (reduced || storyTime >= CAMERA_OUT) return undefined;
+  const plan = planFor(inputs, reduced);
+  const { grows } = common(inputs);
+  if (!grows) return undefined;
+  const u = Math.max(0, (storyTime - CAMERA_HOLD) / (CAMERA_OUT - CAMERA_HOLD));
+  const e = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep
+  // a slow push-in while held, then the long ease out
+  const hold = 1 + 0.06 * Math.min(1, storyTime / CAMERA_HOLD);
+  const zoom = 1 + (CAMERA_ZOOM * hold - 1) * (1 - e);
+  // keep the young tree framed as it grows: the focus rises from the seedling toward its crown
+  const focusY = 14 + 60 * e;
+  return { zoom, focus: { x: WORLD.treeX[plan.first], y: focusY }, tree: plan.first };
 }
 
 export interface StoryCaption {

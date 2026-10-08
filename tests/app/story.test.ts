@@ -4,6 +4,7 @@ import type { Inputs } from '../../src/engine';
 import {
   STORY_DURATION,
   loupeAt,
+  storyCamera,
   storyAge,
   storyBeat,
   storyCaption,
@@ -86,20 +87,38 @@ describe('normal story timing (default inputs)', () => {
     expect(storyBeat(16, i)).toBe('bBegins');
   });
   it('shows the loupe windows from the spec', () => {
+    // the opening close-up of the first seedling is a camera move now, not a loupe
     expect(loupeAt(0.5, i)).toBeUndefined();
-    expect(loupeAt(4, i)).toMatchObject({ tree: 'A', target: 'roots', strength: 1 });
-    expect(loupeAt(1.6, i)!.strength).toBeLessThan(1);
-    expect(loupeAt(7.2, i)).toBeUndefined();
-    expect(loupeAt(10, i)).toMatchObject({ tree: 'A', target: 'roots', strength: 1 });
+    expect(loupeAt(4, i)).toBeUndefined();
+    expect(loupeAt(10, i)).toBeUndefined();
     expect(loupeAt(13, i)).toBeUndefined();
+    // reduced motion keeps the static loupe instead of a camera move
+    expect(loupeAt(4, i, true) ?? loupeAt(2, i, true) ?? loupeAt(8, i, true)).toBeDefined();
     expect(loupeAt(16.5, i)).toMatchObject({ tree: 'B', target: 'roots', strength: 1 });
     expect(loupeAt(20, i)).toBeUndefined();
     expect(loupeAt(27, i)).toMatchObject({ tree: 'A', target: 'branches' });
     expect(loupeAt(40, i)).toBeUndefined();
   });
+  it('opens close on the first seedling and is back at the full view before the second tree is planted', () => {
+    const c0 = storyCamera(0, i)!;
+    expect(c0.tree).toBe('A');
+    expect(c0.zoom).toBeGreaterThan(3);
+    expect(storyCamera(6, i)!.zoom).toBeGreaterThanOrEqual(c0.zoom);
+    // eases out monotonically
+    let prev = Infinity;
+    for (let t = 6.5; t < 14.5; t += 0.25) {
+      const z = storyCamera(t, i)?.zoom ?? 1;
+      expect(z).toBeLessThanOrEqual(prev + 1e-9);
+      prev = z;
+    }
+    expect(storyCamera(14.5, i)).toBeUndefined();
+    expect(storyCamera(15, i)).toBeUndefined(); // the second tree is planted at the full shared view
+    expect(storyCamera(2, i, true)).toBeUndefined(); // no camera move in reduced motion
+    expect(storyCamera(2, { ...i, startAgeA: 40, startAgeB: 30 })!.tree).toBe('B'); // follows the earlier starter
+  });
   it('puts the second-tree loupe on whichever tree starts later', () => {
     const rev = { ...i, startAgeA: 35, startAgeB: 25 };
-    expect(loupeAt(4, rev)).toMatchObject({ tree: 'B', target: 'roots' });
+    expect(storyCamera(4, rev)!.tree).toBe('B'); // the opening close-up follows the earlier starter
     expect(loupeAt(16.5, rev)).toMatchObject({ tree: 'A', target: 'roots' });
   });
   it('has no second-tree loupe when starts are equal', () => {
@@ -139,7 +158,7 @@ describe('captions use live values', () => {
     const rev = buildScenario({ ...DEFAULT_INPUTS, startAgeA: 35, startAgeB: 25 });
     expect(storyCaption(3, rev).secondary).toBe('Tree A starts at 35. Tree B starts at 25.');
     expect(storyCaption(16, rev).primary).toBe('At 35, Tree A begins.');
-    expect(loupeAt(10, rev.inputs)!.tree).toBe('B');
+    expect(storyCamera(10, rev.inputs)!.tree).toBe('B');
     expect(storyCaption(40, rev).secondary).toMatch(/ten more years/);
   });
   it('skips the begins beat and tells the truth when starts are equal', () => {

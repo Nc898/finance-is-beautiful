@@ -10,7 +10,7 @@ import { WORLD } from './types';
 import type { SceneAPI, SceneFrame, SceneOptions, ScreenPoint, TreeAnchors } from './types';
 import { TreePainter } from './treePainter';
 import { ensureSprites, type Sprites } from './sprites';
-import { applyBackdrop, fitCamera, type Camera, type Insets } from './backdrop';
+import { applyBackdrop, fitCamera, type Backdrop, type Camera, type Insets } from './backdrop';
 import { getModel } from './treeView';
 import { H } from './treeModel';
 import { clamp, smoothstep } from './prng';
@@ -27,7 +27,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   const seeds: Record<TreeId, number> = { ...DEFAULT_SEEDS, ...(opts.seeds ?? {}) } as Record<TreeId, number>;
   const painters: Record<TreeId, TreePainter> = { A: new TreePainter(getModel(seeds.A)), B: new TreePainter(getModel(seeds.B)) };
   let sprites: Sprites | null = null;
-  let bg: HTMLCanvasElement | null = null;
+  let bg: Backdrop | null = null;
   let cam: Camera | null = null;
   let size = { w: 0, h: 0, ratio: 1 };
   let insets: Insets = { top: 0, bottom: 0 };
@@ -70,7 +70,12 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
 
   /** the loupe's centre/diameter: outer upper side of the tree, never over a crown at the current maturities */
   const placeLoupe = (c: Camera, id: TreeId, trees: SceneFrame['trees']): { cx: number; cy: number; d: number } => {
-    const d0 = Math.min(220, 0.3 * size.w);
+    // the side panel may cover up to half its width on either edge (the canvas slides by side/2):
+    // keep the loupe inside the band that is always visible
+    const half = (insets.side ?? 0) / 2;
+    const L0 = half;
+    const R0 = size.w - half;
+    const d0 = Math.min(220, 0.3 * (R0 - L0));
     const boxes = trees
       .filter((t) => t.planted)
       .map((t) => {
@@ -84,13 +89,13 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     const pad = 10;
     const top = Math.max(insets.top, 0) + pad;
     const tx = c.ox0 + WORLD.treeX[id] * c.s;
-    const outerX = (d: number) => (id === 'A' ? pad + d / 2 : size.w - pad - d / 2);
+    const outerX = (d: number) => (id === 'A' ? L0 + pad + d / 2 : R0 - pad - d / 2);
     for (const f of [1, 0.86, 0.72, 0.6, 0.5]) {
       const d = d0 * f;
       const cands: Array<[number, number]> = [
         [outerX(d), top + d / 2],
-        [clamp(tx + (id === 'A' ? -1 : 1) * (d * 0.8), d / 2 + pad, size.w - d / 2 - pad), top + d / 2],
-        [clamp(tx, d / 2 + pad, size.w - d / 2 - pad), top + d / 2],
+        [clamp(tx + (id === 'A' ? -1 : 1) * (d * 0.8), L0 + d / 2 + pad, R0 - d / 2 - pad), top + d / 2],
+        [clamp(tx, L0 + d / 2 + pad, R0 - d / 2 - pad), top + d / 2],
         [outerX(d), top + d * 1.1],
       ];
       for (const [cx, cy] of cands) if (!hit(cx, cy, d)) return { cx, cy, d };
@@ -148,9 +153,15 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     // magnified paper + meadow + soil
     {
-      const dprb = bg.width / size.w;
       const sw = (2 * r) / z;
-      ctx.drawImage(bg, (tgtX - sw / 2) * dprb, (tgtY - sw / 2) * dprb, sw * dprb, sw * dprb, cx - r, cy - r, 2 * r, 2 * r);
+      const pd = bg.paper.width / size.w;
+      ctx.drawImage(bg.paper, (tgtX - sw / 2) * pd, (tgtY - sw / 2) * pd, sw * pd, sw * pd, cx - r, cy - r, 2 * r, 2 * r);
+      const gd = bg.ground.width / size.w;
+      ctx.save();
+      ctx.translate(cx - r - (tgtX - sw / 2) * ((2 * r) / sw), cy - r - (tgtY - sw / 2) * ((2 * r) / sw));
+      ctx.scale((2 * r) / sw, (2 * r) / sw);
+      ctx.drawImage(bg.ground, 0, bg.groundTop, bg.ground.width / gd, bg.ground.height / gd);
+      ctx.restore();
     }
     // the same tree, re-rendered at the loupe scale (roots, soil, canopy edge...)
     painter.paint(
@@ -195,12 +206,40 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, c.cssW, c.cssH);
-      if (bg) ctx.drawImage(bg, 0, 0, c.cssW, c.cssH);
+      if (bg) ctx.drawImage(bg.paper, 0, 0, c.cssW, c.cssH);
+      // Camera move: zoom z about the focus. screen' = F + (screen - F) z + (C - F)(1 - 1/z), so z = 1 is the
+      // normal view and a large z brings the focus to C (centre of the visible stage, a little low).
+      const z = Math.max(1, frame.camera?.zoom ?? 1);
+      let s = c.s;
+      let ox0 = c.ox0;
+      let oy = c.oyGround;
+      let A = 1;
+      let Bx = 0;
+      let By = 0;
+      if (z > 1.0005 && frame.camera) {
+        const Fx = c.ox0 + frame.camera.focus.x * c.s;
+        const Fy = c.oyGround - frame.camera.focus.y * c.s;
+        const Cx = c.cssW / 2;
+        const Cy = insets.top + (c.cssH - insets.top - insets.bottom) * 0.6;
+        const k = 1 - 1 / z;
+        A = z;
+        Bx = Fx * (1 - z) + (Cx - Fx) * k;
+        By = Fy * (1 - z) + (Cy - Fy) * k;
+        s = c.s * z;
+        ox0 = c.ox0 * z + Bx;
+        oy = c.oyGround * z + By;
+      }
+      if (bg) {
+        const gd = bg.ground.width / c.cssW;
+        ctx.setTransform(c.dpr * A, 0, 0, c.dpr * A, c.dpr * Bx, c.dpr * By);
+        ctx.drawImage(bg.ground, 0, bg.groundTop, bg.ground.width / gd, bg.ground.height / gd);
+        ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
+      }
       for (const t of frame.trees) {
         if (lastPlanted[t.id] === false && t.planted) flipAt[t.id] = frame.timeMs;
         lastPlanted[t.id] = t.planted;
-        const ox = c.ox0 + WORLD.treeX[t.id] * c.s;
-        const view = { ox, oy: c.oyGround, s: c.s, dpr: c.dpr };
+        const ox = ox0 + WORLD.treeX[t.id] * s;
+        const view = { ox, oy, s, dpr: c.dpr };
         if (!t.planted) {
           painters[t.id].paint(ctx, view, { maturity: 0, months: 0, timeMs: frame.timeMs, wind: false, unplanted: true }, sprites);
           continue;

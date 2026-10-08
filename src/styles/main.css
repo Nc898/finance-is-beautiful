@@ -102,6 +102,8 @@ input {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* specimen labels wait out the opening close-up (set by the loop) */
+  opacity: var(--label-fade, 1);
 }
 
 .masthead {

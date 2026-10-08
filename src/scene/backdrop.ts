@@ -34,30 +34,47 @@ export function fitCamera(cssW: number, cssH: number, dpr: number, viewWidth: nu
   return { cssW, cssH, dpr: Math.min(2, dpr || 1), s, oyGround, ox0: (cssW - viewWidth * s) / 2 };
 }
 
-export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Promise<HTMLCanvasElement> {
+/**
+ * The backdrop in two layers: the paper (the page itself, never zoomed) and the ground (meadow wash and
+ * soil cut-away, part of the world, so it zooms with the camera). The ground is cached at 1.5x density
+ * so the opening close-up stays soft rather than blurry.
+ */
+export interface Backdrop {
+  paper: HTMLCanvasElement;
+  ground: HTMLCanvasElement;
+  /** css y of the ground canvas's top edge; it spans to the bottom of the canvas */
+  groundTop: number;
+}
+
+export async function applyBackdrop(canvas: HTMLCanvasElement, cam: Camera): Promise<Backdrop> {
   const tile = await ensurePaperTile();
   const Wd = Math.round(cam.cssW * cam.dpr);
   const Hd = Math.round(cam.cssH * cam.dpr);
-  const bg = makeCanvas(Wd, Hd);
-  const ctx = bg.getContext('2d')!;
-  paintPaperBackdrop(ctx, Wd, Hd, tile, cam.dpr);
-  const d = cam.dpr;
-  // soil cut-away (under the ground line, fading downward and at the ends)
-  const soilH = Math.round(SOIL_DEPTH * 1.2 * cam.s * d);
-  const soilW = Wd; // the soil fills the whole underground, edge to edge
-  const gy = cam.oyGround * d;
-  const soilTop = Math.round(gy - 6 * cam.s * d); // tucked under the meadow so no paper shows between them
-  // the soil runs from just under the meadow to the bottom of the page
-  const soil = makeDeepSoil(53, soilW, Math.max(soilH, Hd - soilTop), (cam.s * d) / 1.2, soilH);
-  ctx.drawImage(soil, Math.round((Wd - soilW) / 2), soilTop);
+  const paper = makeCanvas(Wd, Hd);
+  const pctx = paper.getContext('2d')!;
+  paintPaperBackdrop(pctx, Wd, Hd, tile, cam.dpr);
+
+  const gd = cam.dpr * 1.5;
+  const groundTop = Math.max(0, cam.oyGround - 60 * cam.s);
+  const GW = Math.round(cam.cssW * gd);
+  const GH = Math.max(2, Math.round((cam.cssH - groundTop) * gd));
+  const ground = makeCanvas(GW, GH);
+  const ctx = ground.getContext('2d')!;
+  const gy = (cam.oyGround - groundTop) * gd;
+  // soil cut-away from just under the meadow to the bottom of the page, edge to edge
+  const soilH = Math.round(SOIL_DEPTH * 1.2 * cam.s * gd);
+  const soilTop = Math.round(gy - 6 * cam.s * gd); // tucked under the meadow so no paper shows between them
+  const soil = makeDeepSoil(53, GW, Math.max(soilH, GH - soilTop), (cam.s * gd) / 1.2, soilH);
+  ctx.drawImage(soil, 0, soilTop);
   // meadow wash across the whole width
-  const gh = Math.round(78 * cam.s * d);
-  const ground = makeGroundSprite(31, Wd, gh, (cam.s * d) / 1.2);
-  ctx.drawImage(ground, 0, Math.round(gy - gh * 0.42));
-  // Drawn as the first layer of every frame (a GPU texture copy). Handing it to CSS as an encoded image
-  // forced a GPU readback that blocked the main thread for hundreds of milliseconds.
+  const gh = Math.round(78 * cam.s * gd);
+  const meadow = makeGroundSprite(31, GW, gh, (cam.s * gd) / 1.2);
+  ctx.drawImage(meadow, 0, Math.round(gy - gh * 0.42));
+
+  // Both are drawn into the visible canvas each frame (GPU texture copies): no CSS image, no readback.
   canvas.style.backgroundColor = '#FBF6EA';
   // finish the queued GPU painting now (before the scene is revealed), not on its first visible frame
+  pctx.getImageData(0, 0, 1, 1);
   ctx.getImageData(0, 0, 1, 1);
-  return bg;
+  return { paper, ground, groundTop };
 }

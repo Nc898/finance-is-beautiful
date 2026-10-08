@@ -6,7 +6,7 @@ import { maturityFor, snapshotAt } from '../engine';
 import type { TreeId, TreeSnapshot } from '../engine';
 import type { SceneAPI, SceneFrame, TreeVisualState } from '../scene/types';
 import type { Store } from './store';
-import { loupeAt } from './story';
+import { loupeAt, storyCamera } from './story';
 import type { UI } from './ui';
 
 export interface Loop {
@@ -48,6 +48,10 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
   let lastScenario: unknown = null;
   let lastLoupe = '';
   let running = true;
+  let camZoom = 1;
+  let camInit = false;
+  let camFocus = { x: 0, y: 0 };
+  let lastFade = -1;
 
   const frame = (now: number) => {
     if (!running) return;
@@ -79,6 +83,21 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     lastScenario = sc;
     dirty = false;
 
+    // Opening camera move (story only). Eased, so leaving the story mid-zoom glides back to the full view;
+    // the first frame starts already close in.
+    const camTarget = state.mode === 'story' ? storyCamera(state.storyTime, state.inputs, state.reducedMotion) : undefined;
+    const tz = camTarget?.zoom ?? 1;
+    if (camTarget) camFocus = camTarget.focus;
+    camZoom = camInit && motion ? camZoom + (tz - camZoom) * (1 - Math.exp(-dt / 0.35)) : tz;
+    camInit = true;
+    if (Math.abs(camZoom - 1) < 0.002) camZoom = 1;
+    // labels sit under the trees, so they wait out the close-up and fade back in as the camera settles
+    const fade = Math.max(0, Math.min(1, (1.35 - camZoom) / 0.35));
+    if (Math.abs(fade - lastFade) > 0.01 || (fade === 1 && lastFade !== 1)) {
+      document.documentElement.style.setProperty('--label-fade', fade.toFixed(3));
+      lastFade = fade;
+    }
+
     const pulsing = state.playing && motion && sc.inputs.monthlyContribution > 0;
     const pulse = pulsing ? (age / 12) % 1 : -1;
     const f: SceneFrame = {
@@ -89,6 +108,7 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
       ],
       reducedMotion: state.reducedMotion,
       loupe,
+      camera: camZoom > 1 ? { zoom: camZoom, focus: camFocus } : undefined,
     };
     scene.render(f);
   };

@@ -57,6 +57,12 @@ export interface SceneFrame {
   trees: [TreeVisualState, TreeVisualState];
   reducedMotion: boolean;
   /**
+   * Optional camera move for the opening of the story: zoom ≥ 1 about a world-space focus point
+   * (x from the world origin, y up from the ground line). Both trees always share it; the app only
+   * zooms while a single tree is planted, and is back at 1 before the comparison matters.
+   */
+  camera?: { zoom: number; focus: { x: number; y: number } };
+  /**
    * Optional close-detail loupe (inset magnifier) that reveals craftsmanship without
    * moving the camera. strength 0…1 fades it in/out.
    */

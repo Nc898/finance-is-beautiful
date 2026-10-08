@@ -28,8 +28,8 @@ Same inputs + same ageMonths ⇒ same frame (wind aside). Scrubbing only sets ag
 ## Guided story (≈ 54 s at 1×), all driven by storyTime → ageMonths (piecewise linear, eased at joins)
 | storyTime | age | chapter | caption (primary / secondary) | other |
 |---|---|---|---|---|
-| 0 – 7 s | 25 → 25¼ | planting | "Same monthly contribution. Different starting ages." / "Tree A starts at 25. Tree B starts at 35." | B shows marker "Plants at 35"; A's sprout emerges; loupe on A roots 1.5–6.5 s (close-up of the seedling) |
-| 7 – 15 s | 25¼ → 35 | growing | "Each month, $200 goes in." | pulses into roots; loupe on A roots 8–12 s |
+| 0 – 7 s | 25 → 25¼ | planting | "Same monthly contribution. Different starting ages." / "Tree A starts at 25. Tree B starts at 35." | B shows marker "Plants at 35"; A's sprout emerges; the camera opens close on the first seedling (zoom ≈3.4) and holds |
+| 7 – 15 s | 25¼ → 35 | growing | "Each month, $200 goes in." | bills flow up the tree; the camera eases out to the full shared view by 14.5 s (labels fade back in) |
 | 15 – 18 s | 35 → 35.4 | growing | "At 35, Tree B begins." | slow beat as B sprouts; loupe on B roots 15.3–18 s |
 | 18 – 37 s | 35.4 → 65 | growing | "Growth is reinvested, so branches grow new branches." | loupe on A branches 25–30 s |
 | 37 – 50 s | 65 hold | difference | "Time gives growth room to branch." / "$24,000 of the gap is extra contributions. $162,633 is growth that had ten more years to compound." | results reveal (balances, contributed vs growth, difference) |
