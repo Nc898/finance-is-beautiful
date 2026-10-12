@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Against the Current - river scene harness</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#FBF6EA; color:var(--ink); font: 12px/1.35 system-ui, sans-serif; overflow:hidden; }
+  #cv { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .anchor { position:fixed; transform:translate(-50%,-100%); font:600 11px system-ui; padding:1px 5px; background:rgba(251,246,234,.85); border:1px solid rgba(47,42,34,.5); border-radius:3px; pointer-events:none; white-space:nowrap; }
+  .post { font-weight:500; }
+  #ui { position:fixed; right:8px; top:8px; width:280px; max-height:calc(100vh - 16px); overflow:auto; background:rgba(251,246,234,.94); padding:10px 12px; box-shadow:0 1px 5px rgba(60,40,10,.3); }
+  #ui.hidden { display:none; }
+  #ui label { display:block; margin:6px 0 0; font-weight:600; font-size:11px; }
+  #ui input[type=range] { width:100%; margin:0; }
+  #ui output { color:var(--muted); font-variant-numeric:tabular-nums; font-weight:400; }
+  #ui button { margin:5px 4px 0 0; padding:4px 8px; border:1px solid var(--ink); background:var(--shade); font:inherit; cursor:pointer; }
+  #ui .row { display:flex; gap:12px; align-items:center; margin-top:6px; }
+  #stat { margin-top:8px; color:var(--muted); white-space:pre-wrap; font-size:11px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="anchors"></div>
+<div id="ui">
+  <b>Against the Current</b> · scene harness
+  <div id="sl"></div>
+  <div class="row"><label><input id="flowing" type="checkbox" checked /> flowing</label><label><input id="reduced" type="checkbox" /> reduced motion</label></div>
+  <div>
+    <button data-p="dock">dock</button><button data-p="mid">mid-story</button><button data-p="end">end</button><button data-p="infl">high inflation</button>
+  </div>
+  <div id="stat"></div>
+</div>
+<script type="module" src="/src/river-scene-test.ts"></script>
+</body>
+</html>

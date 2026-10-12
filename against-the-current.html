@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="Three rowboats leave the same dock with the same money. Rising prices are a current: money that sits still drifts backwards, and it has to grow faster than prices to make headway." />
+<title>Against the Current</title>
+</head>
+<body>
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Three rowboats on a river, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="posts" id="posts" aria-hidden="true"></div>
+
+        <div class="boat-label" id="lab-invest" data-boat="invest">
+          <p class="bl-id"><span data-emblem="invest"></span><span class="bl-name"></span></p>
+          <p class="bl-amount"></p>
+          <p class="bl-buys"></p>
+        </div>
+        <div class="boat-label" id="lab-savings" data-boat="savings">
+          <p class="bl-id"><span data-emblem="savings"></span><span class="bl-name"></span></p>
+          <p class="bl-amount"></p>
+          <p class="bl-buys"></p>
+        </div>
+        <div class="boat-label" id="lab-cash" data-boat="cash">
+          <p class="bl-id"><span data-emblem="cash"></span><span class="bl-name"></span></p>
+          <p class="bl-amount"></p>
+          <p class="bl-buys"></p>
+        </div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./" aria-label="Against the Current, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Against the Current</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-replay">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Replay<span class="long"> story</span></span>
+          </button>
+          <button type="button" class="btn quiet" id="btn-skip">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Skip<span class="long"> to explore</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play story</span>
+          </button>
+
+          <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
+            <label class="speed"><input type="radio" name="speed" value="0.5" /><span>0.5×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="1" checked /><span>1×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="2" /><span>2×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="4" /><span>4×</span></label>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="360" step="1" value="0" aria-label="Timeline year" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field" data-field="start">
+            <label for="f-start">Starting amount ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease starting amount">−</button>
+              <input id="f-start" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-start" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase starting amount">+</button>
+            </div>
+            <p class="field-error" id="err-start" hidden></p>
+          </div>
+          <div class="field" data-field="years">
+            <label for="f-years">Years</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease years">−</button>
+              <input id="f-years" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-years" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase years">+</button>
+            </div>
+            <p class="field-error" id="err-years" hidden></p>
+          </div>
+          <div class="field" data-field="inflation">
+            <label for="f-inflation">Inflation (% a year)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease inflation">−</button>
+              <input id="f-inflation" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-inflation" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase inflation">+</button>
+            </div>
+            <p class="field-error" id="err-inflation" hidden></p>
+          </div>
+          <div class="field" data-field="savingsRate">
+            <label for="f-savingsRate"><span data-emblem="savings"></span>Savings account (%)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease savings account return">−</button>
+              <input id="f-savingsRate" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-savingsRate" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase savings account return">+</button>
+            </div>
+            <p class="field-error" id="err-savingsRate" hidden></p>
+          </div>
+          <div class="field" data-field="investRate">
+            <label for="f-investRate"><span data-emblem="invest"></span>Investment return (% a year)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease investment return">−</button>
+              <input id="f-investRate" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-investRate" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase investment return">+</button>
+            </div>
+            <p class="field-error" id="err-investRate" hidden></p>
+          </div>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: constant hypothetical inflation and returns, with no taxes or fees. Actual results vary and aren't guaranteed. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">At <span id="how-age">year 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare">
+                <caption class="sr-only">Comparison of the three boats at the current year</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col" id="th-cash"><span data-emblem="cash"></span>Cash</th>
+                    <th scope="col" id="th-savings"><span data-emblem="savings"></span>Savings</th>
+                    <th scope="col" id="th-invest"><span data-emblem="invest"></span>Investing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Annual return</th><td data-cell="cash.rate"></td><td data-cell="savings.rate"></td><td data-cell="invest.rate"></td></tr>
+                  <tr class="strong"><th scope="row">Amount</th><td data-cell="cash.nominal"></td><td data-cell="savings.nominal"></td><td data-cell="invest.nominal"></td></tr>
+                  <tr class="strong"><th scope="row">Buys today</th><td data-cell="cash.real"></td><td data-cell="savings.real"></td><td data-cell="invest.real"></td></tr>
+                  <tr><th scope="row">Change since start</th><td data-cell="cash.change"></td><td data-cell="savings.change"></td><td data-cell="invest.change"></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <ul class="conventions">
+              <li>Amount = starting amount × (1 + return)<sup>years</sup>. Returns and inflation are effective annual rates, and fractional years use the same formula.</li>
+              <li>Buys today = amount ÷ (1 + inflation)<sup>years</sup>. That is what the money buys in today's dollars.</li>
+              <li>A boat's place on the river is ln(buys today ÷ starting amount), which is years × (ln(1 + return) − ln(1 + inflation)). It grows in a straight line with time, so each boat moves at a constant speed.</li>
+              <li>Distance on the river is a log scale of buying power: each post marks a doubling or a step of one and a half times. All three boats share one scale, which adjusts smoothly when you change inputs.</li>
+              <li>The current is inflation. The boat's rowing is its return. Money only makes headway when the return is higher than inflation, and cash never rows.</li>
+              <li>Constant hypothetical rates, with no taxes or fees. Real inflation and returns vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/river/main.ts"></script>
+</body>
+</html>
