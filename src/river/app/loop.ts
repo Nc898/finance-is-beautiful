@@ -15,8 +15,12 @@ export interface Loop {
   invalidate(): void;
 }
 
-/** Minimum time between rendered frames: 30 fps, with a little slack so 60/120 Hz displays land every 2nd/4th refresh. */
-const FRAME_MS = 1000 / 30 - 4;
+/**
+ * Minimum time between rendered frames: 60 fps (with slack so 120 Hz displays land on every 2nd refresh).
+ * The other pages cap at 30 fps; here the rowing strokes need 60 to read smoothly, and the whole river
+ * scene costs about 2 ms a frame.
+ */
+const FRAME_MS = 1000 / 60 - 2;
 /** The scene accepts u in [-1.1, 1.1]. */
 const U_LIMIT = 1.1;
 
@@ -68,7 +72,7 @@ export function startLoop(store: Store, scene: RiverSceneAPI, ui: UI): Loop {
   const frame = (now: number) => {
     if (!running) return;
     raf = requestAnimationFrame(frame);
-    // Motion is capped at 30 fps: skip display refreshes until a 30 fps frame is due. The clock advances by
+    // Motion is capped at 60 fps: skip display refreshes until a 60 fps frame is due. The clock advances by
     // the real elapsed time, so playback speed and story length are unchanged.
     if (now - last < FRAME_MS) return;
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
