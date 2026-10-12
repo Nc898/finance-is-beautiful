@@ -81,46 +81,53 @@ export function strokeShape(p: number): { s: number; dip: number } {
 }
 
 /**
- * The rower faces the bow (upstream, into the current) and pushes the oars, as a gondolier or a dory fisherman
- * does: the drive goes from hands-at-chest to arms extended, so the blades sweep toward the stern and drive the
- * boat forward. The rig is computed facing +x and drawn mirrored (see paintBuffer).
+ * Pose for one moment. The rower faces the bow (upstream, into the current) and pushes the oars: the drive
+ * goes from hands-at-chest to arms extended, so the blades sweep toward the stern and drive the boat forward.
+ * The rig is computed facing +x and drawn mirrored (see paintBuffer).
+ *
+ * `act` (0…1) blends the resting "holding" pose (oars out, blades resting just above the water, hands on the
+ * handles) with the stroke, so starting and stopping is continuous and the hands NEVER leave the handles.
+ * `shipped` is the cash rower, who never rows: oars laid along the gunwales, hands in his lap, nothing moving
+ * but a slow nod. There is no shipping/unshipping transition anywhere, so an oar only ever moves in a hand.
  */
-export function computePose(p: number, row: number, eff: number, tSec: number, phase0: number, waves: boolean): Pose {
+export function computePose(p: number, act: number, eff: number, tSec: number, phase0: number, waves: boolean, shipped = false): Pose {
   const sh0 = strokeShape(p);
-  const s = 1 - sh0.s;
-  const dip = sh0.dip;
+  const s = 1 - sh0.s; // 1 at the catch (hands at the chest), 0 at the finish (arms extended)
+  const a = shipped ? 0 : ease(clamp(act, 0, 1));
   const amp = lerp(0.6, 1, eff);
   const wob = waves ? 1 : 0;
-  // rowing pose
-  const phiC = 0.3 + 0.32 * amp;
-  const phiF = -(0.24 + 0.31 * amp);
-  const phiRow = lerp(phiC, phiF, s);
-  const zw = lerp(-4, -7.5, eff);
-  const zc = lerp(6, 8.5, eff);
-  const dipR = dip;
-  const thRow = lerp(0.5 * amp, -0.36 * amp, s);
-  const slideRow = lerp(4, -5, s) * amp;
-  // resting pose: oars shipped along the gunwale, leaning back, a slow nod
   const nod = wob * (0.045 * Math.sin(tSec * 0.9 + phase0) + 0.02 * Math.sin(tSec * 1.9));
-  const phiRest = Math.PI / 2 - 0.05;
-  const thRest = -0.3 + nod * 0.5;
-  const phi = lerp(phiRest, phiRow, row);
-  const dipB = dipR * row;
-  // blade height above the water; while the oars are unshipped or shipped they lift clear of the gunwale
-  const zt = lerp(14.2, lerp(zc, zw, dipR), row) + 8 * Math.sin(Math.PI * clamp(row, 0, 1)) * (1 - dipR);
-  const th = lerp(thRest, thRow, row);
-  const seatSlide = slideRow * row;
+
+  // the stroke
+  const phiS = lerp(0.3 + 0.32 * amp, -(0.24 + 0.31 * amp), s);
+  const ztS = lerp(lerp(6, 8.5, eff), lerp(-4, -7.5, eff), sh0.dip);
+  const thS = lerp(0.42 * amp, -0.3 * amp, s);
+  const slideS = lerp(1.2, -1.2, s); // a fixed thwart: only a little hip shift, the torso does the work
+  // holding: oars out, blades resting just above the water, sitting easy
+  const phiH = 0.12;
+  const ztH = 3.2 + wob * 0.5 * Math.sin(tSec * 1.3 + phase0);
+  const thH = -0.1 + nod * 0.6;
+
+  let phi = lerp(phiH, phiS, a);
+  let zt = lerp(ztH, ztS, a);
+  let th = lerp(thH, thS, a);
+  const seat = slideS * a;
+  const dip = sh0.dip * a;
+  let lock = XO;
+  if (shipped) {
+    // oars drawn in through the locks and laid along the gunwales, blades resting out past the stern
+    phi = Math.PI / 2 - 0.05;
+    zt = 14.2;
+    th = -0.3 + nod * 0.5;
+    lock = XO - 43;
+  }
 
   const bobBase = wob * (0.8 * Math.sin(tSec * 1.6 + phase0) + 0.35 * Math.sin(tSec * 2.9 + phase0 * 2.1));
-  const bob = bobBase + row * (-0.7 * Math.cos(p * Math.PI * 2) * 0.5 * wob);
-  const pitch = wob * (0.011 * Math.sin(tSec * 1.25 + phase0 * 1.3) + row * 0.012 * Math.sin(p * Math.PI * 2 + 0.6));
-  const surge = row * wob * 1.3 * Math.sin(p * Math.PI * 2 + 1.0);
+  // each drive lifts and surges the boat a little upstream (world -x); it settles back on the recovery
+  const bob = bobBase + a * wob * -0.35 * Math.cos(p * Math.PI * 2);
+  const pitch = wob * (0.011 * Math.sin(tSec * 1.25 + phase0 * 1.3) + a * 0.01 * Math.sin(p * Math.PI * 2 + 0.6));
+  const surge = -1.6 * a * wob * (sh0.s - 0.5);
 
-  // oars
-  // Stowed, each oar is drawn in out of its lock and laid along its gunwale with the blade resting out past
-  // the stern; unshipping slides it forward into the lock, lifts it clear and swings it out.
-  const slide = (1 - ease(clamp(row * 1.25, 0, 1))) * 43;
-  const lock = XO - slide;
   const oar = (side: 1 | -1) => {
     const bp = 7 * side;
     const sin = Math.sin(phi);
@@ -134,20 +141,42 @@ export function computePose(p: number, row: number, eff: number, tSec: number, p
     return {
       h: [aH, -zH + (bH - 7) * KY] as V2,
       t: [aT, -zt + (bT - 7) * KY] as V2,
-      dip: dipB,
+      dip,
       yWater: yw,
     };
   };
   const oarN = oar(1);
   const oarF = oar(-1);
 
-  const hip: V2 = [XS + seatSlide, -10.5];
+  const hip: V2 = [XS + seat, -10.5];
+  // the torso follows the hands: if a handle would be beyond the arms' reach, lean toward it (as a rower
+  // does), so the hands never have to let go of the oars
+  if (!shipped) {
+    const REACH = 23.6;
+    const far = (t: number) => {
+      const sx = hip[0] + TORSO * Math.sin(t);
+      const sy = hip[1] - TORSO * Math.cos(t);
+      // the visible near hand decides; the far hand (mostly behind the body) follows as best it can
+      return Math.hypot(oarN.h[0] - sx, oarN.h[1] - sy);
+    };
+    if (far(th) > REACH) {
+      // smallest lean change (forward or back) that brings the near handle within reach
+      let best = th;
+      for (let k = 1; k <= 40; k++) {
+        const d = k * 0.02;
+        if (far(th + d) <= REACH) { best = th + d; break; }
+        if (far(th - d) <= REACH) { best = th - d; break; }
+        best = far(th + d) < far(best) ? th + d : far(th - d) < far(best) ? th - d : best;
+      }
+      th = best;
+    }
+  }
   const shoulder: V2 = [hip[0] + TORSO * Math.sin(th), hip[1] - TORSO * Math.cos(th)];
   const neck: V2 = [shoulder[0] + 1.2 * Math.sin(th), shoulder[1] - 1.2 * Math.cos(th)];
-  // hands follow the oar handles (resting: in the lap)
+  // hands: on the handles whenever the oars are out; in the lap only for the shipped (cash) rower
   const lap: V2 = [hip[0] + 12 + 2 * Math.sin(th), hip[1] - 8];
-  const hand: V2 = [lerp(lap[0], oarN.h[0], row), lerp(lap[1], oarN.h[1], row)];
-  const handFar: V2 = [lerp(lap[0] - 1.5, oarF.h[0], row), lerp(lap[1] - 1, oarF.h[1], row)];
+  const hand: V2 = shipped ? lap : oarN.h;
+  const handFar: V2 = shipped ? [lap[0] - 1.5, lap[1] - 1] : oarF.h;
   const foot: V2 = [XS + 27.5, -5.8];
   const knee = ik(hip, foot, TH, SH, -1);
   const tailAng = -0.15 + 0.3 * wob * Math.sin(tSec * 4.3 + phase0) - 0.5 * th + 0.12 * wob * Math.sin(tSec * 7.1);
@@ -312,22 +341,29 @@ export class Boats {
         rig.vx = 0;
       } else rig.vx += ((bx - rig.lastU) / Math.max(dt, 1e-3) - rig.vx) * 0.15;
       rig.lastU = bx;
-      const rowTarget = !o.reduced && o.flowing && b.effort > 0.02 ? 1 : 0;
+      // the cash rower never rows; the others hold their oars when the river is still and row when it flows
+      const shipped = b.id === 'cash';
+      const rowTarget = !shipped && !o.reduced && o.flowing && b.effort > 0.02 ? 1 : 0;
       if (o.reduced) {
-        rig.ramp = b.effort > 0.02 ? 1 : 0;
+        rig.ramp = !shipped && b.effort > 0.02 ? 1 : 0;
         rig.eff = b.effort;
-        rig.phase = 0.11;
+        rig.phase = 0.2;
       } else {
-        rig.ramp += (rowTarget - rig.ramp) * (1 - Math.exp(-dt / 0.75));
-        rig.eff += (b.effort - rig.eff) * (1 - Math.exp(-dt / 0.35));
+        rig.ramp += (rowTarget - rig.ramp) * (1 - Math.exp(-dt / 0.6));
+        rig.eff += (b.effort - rig.eff) * (1 - Math.exp(-dt / 0.6));
       }
-      const row = ease(clamp(rig.ramp, 0, 1));
-      const rate = 0.5 + 0.5 * rig.eff; // strokes per second
+      const row = clamp(rig.ramp, 0, 1);
+      // a steady rowboat pace (not a race): about one stroke every 1.6 s, quicker with more effort
+      const rate = 0.36 + 0.22 * rig.eff;
       const prev = rig.phase;
-      if (!o.reduced && row > 0.03) rig.phase = (rig.phase + dt * rate) % 1;
+      if (!o.reduced) {
+        // the first stroke always begins from the end of a recovery, swinging the blades into the catch
+        if (row < 0.01) rig.phase = 0.86;
+        else rig.phase = (rig.phase + dt * rate * (0.35 + 0.65 * row)) % 1;
+      }
       const wrapped = rig.phase < prev && row > 0.35 && !o.reduced;
       const waves = !o.reduced;
-      const pose = computePose(rig.phase, row, rig.eff, tSec, rig.phaseOff, waves);
+      const pose = computePose(rig.phase, row, rig.eff, tSec, rig.phaseOff, waves, shipped);
       if (wrapped) {
         rig.rings.push({ t: o.timeMs, x: bx - pose.oarN.t[0] * BS, y: laneY + (pose.oarN.yWater + pose.bob) * BS, seed: rig.count++ });
         rig.rings.push({ t: o.timeMs, x: bx - pose.oarF.t[0] * BS, y: laneY + (pose.oarF.yWater + pose.bob) * BS, seed: rig.count++ });
