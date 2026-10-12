@@ -10,17 +10,21 @@
 import type { BoatId, RiverFrame, RiverSceneAPI, RiverScreenPoint } from '../types';
 import { ensurePaperTile } from '../../scene/sprites';
 import { clamp } from '../../scene/prng';
-import { BOAT_SCALE, LANE_Y, POST_H, WORLD, farEdge, fitCamera, nearEdge, postFootY, uOfX, xOfU, zoomTransform, type Camera, type Insets } from './geom';
+import { BOAT_SCALE, LANE_Y, MOOR_UP, MOOR_X, PLAQUE, POST_H, WORLD, mooringY, farEdge, fitCamera, nearEdge, postFootY, uOfX, xOfU, zoomTransform, type Camera, type Insets } from './geom';
 import { buildStatic, visibleX, waterPolyPath, type StaticLayers } from './world';
 import { buildFarTrees, type TreeSprite } from './farTrees';
 import { Boats } from './boats';
 import { FLOW_K, WaterLayer } from './water';
-import { Bird, makeMilepost, makeReedClump, reedSpecs, type Sprite } from './props';
+import { Bird, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
 
 /** Extra (non-contract) methods the app can use. */
 export interface RiverSceneExtras {
   /** where mileposts stand (u values); defaults to every 0.5 */
   setPosts(us: number[]): void;
+  /** the plaque on each milepost, in CSS px (unzoomed): the app letters the value inside it */
+  postPlaque(): { w: number; h: number };
+  /** the last frame's camera move as screen' = a * screen + (bx, by) (identity when not zoomed) */
+  cameraTransform(): { a: number; bx: number; by: number };
 }
 
 interface Reed {
@@ -41,6 +45,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
   let nearReeds: Reed[] = [];
   let farReeds: Reed[] = [];
   let posts: Sprite[] = [];
+  let moorPost: Sprite | null = null;
   let water: WaterLayer | null = null;
   let boats: Boats | null = null;
   let waterClip: Path2D | null = null;
@@ -77,6 +82,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       const nr: Reed[] = rs.near.map((r) => ({ x: r.x, y: r.y, k: r.k, ph: r.ph, spr: kinds[r.v]! }));
       const fr: Reed[] = rs.far.map((r) => ({ x: r.x, y: r.y, k: r.k, ph: r.ph, spr: kinds[r.v]! }));
       const ps = [0, 1, 2].map((i) => makeMilepost(900 + i * 31, q));
+      const mp = makeMooringPost(611, q, MOOR_UP);
       const wl = new WaterLayer(c.s * gd, vis.xmin, vis.xmax);
       await tick();
       if (destroyed || my !== gen) return;
@@ -96,6 +102,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       nearReeds = nr;
       farReeds = fr;
       posts = ps;
+      moorPost = mp;
       water = wl;
       boats = bt;
       waterClip = waterPolyPath(vis.xmin, vis.xmax);
@@ -152,7 +159,6 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       const A = c.dpr * z.a * c.s;
       ctx.setTransform(A, 0, 0, A, c.dpr * (z.a * c.ox + z.bx), c.dpr * (z.a * c.oy + z.by));
       ctx.imageSmoothingQuality = 'low';
-      ctx.drawImage(L.dock.cv, L.dock.x, L.dock.y, L.dock.w, L.dock.h);
       // far trees (swaying a hair) and far reeds
       ctx.globalAlpha = 0.86;
       for (const tr of trees) {
@@ -180,7 +186,14 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
         return flowSpeed * (0.72 + 0.55 * f);
       };
       const qb = Math.min(c.s * c.dpr * BOAT_SCALE * clamp(z.a, 1, 3.5), maxQ);
+      // mooring posts for the two outer boats stand just behind their lanes (boats pass in front of them)
+      for (const id of ['invest', 'savings'] as const) {
+        const sp = moorPost!;
+        ctx.drawImage(sp.cv, MOOR_X - sp.px, mooringY(id) - sp.py, sp.w, sp.h);
+      }
       boats.draw(ctx, frame.boats, { timeMs: frame.timeMs, flowing: frame.flowing, reduced, flow: flowSpeed, qb, waterClip, flowLane: lane });
+      // the short jetty is nearer to us than every lane: a boat drifting past goes behind it
+      ctx.drawImage(L.dock.cv, L.dock.x, L.dock.y, L.dock.w, L.dock.h);
       // foreground: near-bank reeds and the mileposts
       for (const r of nearReeds) drawReed(r, t, reduced);
       for (let i = 0; i < postUs.length; i++) {
@@ -213,6 +226,13 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
     },
     setPosts(us: number[]) {
       postUs = us.slice();
+    },
+    cameraTransform() {
+      return lastZ;
+    },
+    postPlaque() {
+      const c = cam ?? fitCamera(WORLD.width, WORLD.height, 1, insets);
+      return { w: PLAQUE.w * c.s, h: PLAQUE.h * c.s };
     },
     destroy() {
       destroyed = true;

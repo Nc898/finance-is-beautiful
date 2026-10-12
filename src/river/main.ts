@@ -20,6 +20,8 @@ const scene = createRiverScene(canvas);
 const ui = createUI(store, {
   boatAnchor: (id) => scene.boatAnchor(id),
   postAnchor: (u) => scene.postAnchor(u),
+  cameraTransform: () => ('cameraTransform' in scene && typeof scene.cameraTransform === 'function' ? scene.cameraTransform() : { a: 1, bx: 0, by: 0 }),
+  postPlaque: () => ('postPlaque' in scene && typeof scene.postPlaque === 'function' ? scene.postPlaque() : { w: 90, h: 34 }),
   visibleU: () => scene.visibleU(),
   setInsets: (i) => scene.setInsets(i),
   setPosts: (us) => {

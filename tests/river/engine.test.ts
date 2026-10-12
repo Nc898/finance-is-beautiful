@@ -191,11 +191,11 @@ describe('effortOf', () => {
 });
 
 describe('mileposts', () => {
-  it('uses start x 2^k and start x 1.5^+-1, inside the visible range, upstream first', () => {
+  it('uses round multiples of the start (halvings, doublings, then 0.75 / 1.5 / 3 ...), inside the visible range, upstream first', () => {
     const scale = riverScale(D);
     const posts = mileposts(D.start, scale, { min: -1.15, max: 1.15 });
     const values = posts.map((p) => Math.round(p.value));
-    expect(values).toEqual([20_000, 15_000, 10_000, 6667, 5000]);
+    expect(values).toEqual([20_000, 15_000, 10_000, 7500, 5000]);
     for (let i = 1; i < posts.length; i++) expect(posts[i].u).toBeLessThan(posts[i - 1].u);
     for (const p of posts) expect(Math.abs(p.u)).toBeLessThanOrEqual(1.15);
     expect(posts.find((p) => p.value === 10_000)?.u).toBe(0);
@@ -204,21 +204,21 @@ describe('mileposts', () => {
 
   it('marks majors (dock and doublings) apart from the half-steps', () => {
     const posts = mileposts(10_000, 0.9, { min: -1.15, max: 1.15 });
-    expect(posts.filter((p) => !p.major).map((p) => p.key).sort()).toEqual(['1.5^-1', '1.5^1']);
+    expect(posts.filter((p) => !p.major).map((p) => p.key).sort()).toEqual(['x0.75', 'x1.5']);
   });
 
   it('drops posts outside the visible range or inside the margin', () => {
     const wide = mileposts(10_000, 0.5, { min: -1.15, max: 1.15 });
     const narrow = mileposts(10_000, 0.5, { min: -0.5, max: 0.5 });
     expect(narrow.length).toBeLessThan(wide.length);
-    expect(mileposts(10_000, 0.9, { min: -1, max: 1 }, 0.6).map((p) => p.key)).toEqual(['2^0']);
+    expect(mileposts(10_000, 0.9, { min: -1, max: 1 }, 0.6).map((p) => p.key)).toEqual(['2^0', 'x0.75']);
   });
 
-  it('a long horizon shows more doublings; a tiny scale shows the dock and 1.5 steps only', () => {
+  it('a long horizon shows more doublings; a tiny scale shows the dock and the nearest round steps only', () => {
     const many = mileposts(1000, 4, { min: -1.1, max: 1.1 });
     expect(many.length).toBeGreaterThan(6);
     const few = mileposts(1000, SCALE_FLOOR, { min: -1.1, max: 1.1 });
-    expect(few.map((p) => p.key)).toEqual(['1.5^1', '2^0', '1.5^-1']);
+    expect(few.map((p) => p.key)).toEqual(['x1.5', '2^0', 'x0.75']);
   });
 });
 

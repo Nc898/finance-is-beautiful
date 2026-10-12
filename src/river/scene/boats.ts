@@ -9,7 +9,7 @@
 import { clamp, smoothstep } from '../../scene/prng';
 import { makeCanvas } from '../../scene/watercolor';
 import type { BoatId, BoatVisual } from '../types';
-import { PIER, LANE_Y, BOAT_SCALE, mooringY, xOfU } from './geom';
+import { LANE_Y, BOAT_SCALE, mooringPoint, xOfU } from './geom';
 import { SPR, buildRowerSet, type Part, type RowerSet } from './boatArt';
 
 /* ------------------------------------------------------------------ kinematics */
@@ -80,8 +80,15 @@ export function strokeShape(p: number): { s: number; dip: number } {
   return { s, dip };
 }
 
+/**
+ * The rower faces the bow (upstream, into the current) and pushes the oars, as a gondolier or a dory fisherman
+ * does: the drive goes from hands-at-chest to arms extended, so the blades sweep toward the stern and drive the
+ * boat forward. The rig is computed facing +x and drawn mirrored (see paintBuffer).
+ */
 export function computePose(p: number, row: number, eff: number, tSec: number, phase0: number, waves: boolean): Pose {
-  const { s, dip } = strokeShape(p);
+  const sh0 = strokeShape(p);
+  const s = 1 - sh0.s;
+  const dip = sh0.dip;
   const amp = lerp(0.6, 1, eff);
   const wob = waves ? 1 : 0;
   // rowing pose
@@ -95,13 +102,14 @@ export function computePose(p: number, row: number, eff: number, tSec: number, p
   const slideRow = lerp(4, -5, s) * amp;
   // resting pose: oars shipped along the gunwale, leaning back, a slow nod
   const nod = wob * (0.045 * Math.sin(tSec * 0.9 + phase0) + 0.02 * Math.sin(tSec * 1.9));
-  const phiRest = 1.5;
+  const phiRest = Math.PI / 2 - 0.05;
   const thRest = -0.3 + nod * 0.5;
   const phi = lerp(phiRest, phiRow, row);
   const dipB = dipR * row;
-  const zt = lerp(9.6, lerp(zc, zw, dipR), row); // blade height above the water
+  // blade height above the water; while the oars are unshipped or shipped they lift clear of the gunwale
+  const zt = lerp(14.2, lerp(zc, zw, dipR), row) + 8 * Math.sin(Math.PI * clamp(row, 0, 1)) * (1 - dipR);
   const th = lerp(thRest, thRow, row);
-  const slide = slideRow * row;
+  const seatSlide = slideRow * row;
 
   const bobBase = wob * (0.8 * Math.sin(tSec * 1.6 + phase0) + 0.35 * Math.sin(tSec * 2.9 + phase0 * 2.1));
   const bob = bobBase + row * (-0.7 * Math.cos(p * Math.PI * 2) * 0.5 * wob);
@@ -109,13 +117,17 @@ export function computePose(p: number, row: number, eff: number, tSec: number, p
   const surge = row * wob * 1.3 * Math.sin(p * Math.PI * 2 + 1.0);
 
   // oars
+  // Stowed, each oar is drawn in out of its lock and laid along its gunwale with the blade resting out past
+  // the stern; unshipping slides it forward into the lock, lifts it clear and swings it out.
+  const slide = (1 - ease(clamp(row * 1.25, 0, 1))) * 43;
+  const lock = XO - slide;
   const oar = (side: 1 | -1) => {
     const bp = 7 * side;
     const sin = Math.sin(phi);
     const cos = Math.cos(phi);
-    const aT = XO - L_OUT * sin;
+    const aT = lock - L_OUT * sin;
     const bT = bp + side * L_OUT * cos;
-    const aH = XO + L_IN * sin;
+    const aH = lock + L_IN * sin;
     const bH = bp - side * L_IN * cos;
     const zH = 9 - (zt - 9) * (L_IN / L_OUT);
     const yw = (bT - 7) * KY - bob;
@@ -129,7 +141,7 @@ export function computePose(p: number, row: number, eff: number, tSec: number, p
   const oarN = oar(1);
   const oarF = oar(-1);
 
-  const hip: V2 = [XS + slide, -10.5];
+  const hip: V2 = [XS + seatSlide, -10.5];
   const shoulder: V2 = [hip[0] + TORSO * Math.sin(th), hip[1] - TORSO * Math.cos(th)];
   const neck: V2 = [shoulder[0] + 1.2 * Math.sin(th), shoulder[1] - 1.2 * Math.cos(th)];
   // hands follow the oar handles (resting: in the lap)
@@ -230,7 +242,7 @@ export class Boats {
   }
 
   /** the whole boat (back to front) into its buffer, in the boat's own bob and pitch */
-  private paintBuffer(rig: Rig, pose: Pose, qb: number, tSec: number, speedFx: number): void {
+  private paintBuffer(rig: Rig, pose: Pose, qb: number, tSec: number, speedFx: number, _row: number): void {
     const id = rig.id;
     const set = this.set;
     const c = rig.buf.getContext('2d')!;
@@ -243,7 +255,13 @@ export class Boats {
     const W = SPR.x1 - SPR.x0;
     const H = SPR.y1 - SPR.y0;
     c.drawImage(set.hullBack[id], SPR.x0, SPR.y0, W, H);
+    // the rower and oars are rigged facing +x; mirror them to face the bow (upstream, -x)
+    c.save();
+    c.scale(-1, 1);
     this.oar(c, id, pose.oarF, true);
+    // shipped (or nearly), the near oar lies inside the boat, behind the near gunwale
+    const nearInside = false;
+    if (nearInside) this.oar(c, id, pose.oarN, false);
     // far arm
     {
       const el = ik(pose.shoulder, pose.handFar, UA, FA, 1);
@@ -256,14 +274,18 @@ export class Boats {
     this.part(c, set.head[id], pose.neck[0], pose.neck[1], pose.headAng);
     this.part(c, set.thigh, pose.hip[0], pose.hip[1] - 0.5, Math.atan2(pose.knee[1] - pose.hip[1], pose.knee[0] - pose.hip[0]));
     this.part(c, set.shin, pose.knee[0], pose.knee[1], Math.atan2(pose.foot[1] - pose.knee[1], pose.foot[0] - pose.knee[0]));
+    c.restore();
     c.drawImage(set.hullFront[id], SPR.x0, SPR.y0, W, H);
-    this.oar(c, id, pose.oarN, false);
+    c.save();
+    c.scale(-1, 1);
+    if (!nearInside) this.oar(c, id, pose.oarN, false);
     // near arm in front of the oar handle
     {
       const el = ik(pose.shoulder, pose.hand, UA, FA, 1);
       this.part(c, set.upper, pose.shoulder[0], pose.shoulder[1], Math.atan2(el[1] - pose.shoulder[1], el[0] - pose.shoulder[0]));
       this.part(c, set.fore, el[0], el[1], Math.atan2(pose.hand[1] - el[1], pose.hand[0] - el[0]));
     }
+    c.restore();
     void tSec;
   }
 
@@ -296,7 +318,7 @@ export class Boats {
         rig.eff = b.effort;
         rig.phase = 0.11;
       } else {
-        rig.ramp += (rowTarget - rig.ramp) * (1 - Math.exp(-dt / 0.5));
+        rig.ramp += (rowTarget - rig.ramp) * (1 - Math.exp(-dt / 0.75));
         rig.eff += (b.effort - rig.eff) * (1 - Math.exp(-dt / 0.35));
       }
       const row = ease(clamp(rig.ramp, 0, 1));
@@ -307,14 +329,14 @@ export class Boats {
       const waves = !o.reduced;
       const pose = computePose(rig.phase, row, rig.eff, tSec, rig.phaseOff, waves);
       if (wrapped) {
-        rig.rings.push({ t: o.timeMs, x: bx + pose.oarN.t[0] * BS, y: laneY + (pose.oarN.yWater + pose.bob) * BS, seed: rig.count++ });
-        rig.rings.push({ t: o.timeMs, x: bx + pose.oarF.t[0] * BS, y: laneY + (pose.oarF.yWater + pose.bob) * BS, seed: rig.count++ });
+        rig.rings.push({ t: o.timeMs, x: bx - pose.oarN.t[0] * BS, y: laneY + (pose.oarN.yWater + pose.bob) * BS, seed: rig.count++ });
+        rig.rings.push({ t: o.timeMs, x: bx - pose.oarF.t[0] * BS, y: laneY + (pose.oarF.yWater + pose.bob) * BS, seed: rig.count++ });
         if (rig.rings.length > 12) rig.rings.splice(0, rig.rings.length - 12);
       }
       for (let i = rig.rings.length - 1; i >= 0; i--) if (o.timeMs - rig.rings[i]!.t > 1900) rig.rings.splice(i, 1);
 
       // anchor for the label: above the hat
-      this.lastAnchor[b.id] = { x: bx + pose.neck[0] * 0.3 * BS, y: laneY + (pose.neck[1] - 27) * BS };
+      this.lastAnchor[b.id] = { x: bx - pose.neck[0] * 0.3 * BS, y: laneY + (pose.neck[1] - 27) * BS };
 
       const v = clamp(b.waterSpeed / 0.12, 0, 1.3);
       const xf = () => {
@@ -328,7 +350,7 @@ export class Boats {
       this.waterUnder(ctx, bx, laneY, v, tSec, rig, o.reduced);
       ctx.restore();
       // ---- body into its buffer
-      this.paintBuffer(rig, pose, o.qb, tSec, v);
+      this.paintBuffer(rig, pose, o.qb, tSec, v, row);
       // ---- reflection (clipped to the water), rippled
       ctx.save();
       ctx.clip(o.waterClip);
@@ -514,7 +536,7 @@ export class Boats {
     for (const o of [pose.oarN, pose.oarF]) {
       const a = o.dip * row;
       if (a < 0.05) continue;
-      const px = bx + o.t[0];
+      const px = bx - o.t[0];
       const py = y + o.yWater + pose.bob + 0.6;
       const g = ctx.createRadialGradient(px, py, 0.5, px, py, 8);
       g.addColorStop(0, `rgba(252,254,250,${0.55 * a})`);
@@ -577,8 +599,9 @@ export class Boats {
     if (a <= 0.01) return;
     const sx = bx + (52 + pose.surge) * BS;
     const sy = y + (-12.5 + pose.bob) * BS;
-    const ex = PIER.x0 - 3.3;
-    const ey = mooringY(id) - 14 + 1.5;
+    const mp = mooringPoint(id);
+    const ex = mp.x;
+    const ey = mp.y;
     const sag = 6 + (reduced ? 0 : Math.sin(tSec * 1.3 + (id === 'cash' ? 0 : 2)) * 0.8);
     ctx.save();
     ctx.globalAlpha = a;

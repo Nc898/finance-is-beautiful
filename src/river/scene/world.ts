@@ -658,7 +658,7 @@ export function paintDock(cam: Camera, density: number): DockLayer {
   }
 
   // pilings (the legs the deck stands on), drawn first so the deck overlaps their tops
-  const postYs = [mooringY('invest'), mooringY('savings'), mooringY('cash'), 478];
+  const postYs = [mooringY('cash'), PIER.yTip + 30];
   const piling = (px: number, foot: number, up: number, left: boolean) => {
     // wet ring + dark reflection under the post
     ctx.strokeStyle = 'rgba(244,250,244,0.7)';

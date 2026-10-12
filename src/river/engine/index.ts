@@ -90,10 +90,10 @@ export function mileposts(start: number, scale: number, visible: { min: number; 
     const u = Math.log(factor) / scale;
     if (u >= lo - 1e-9 && u <= hi + 1e-9) out.push({ key, value: start * factor, u, major });
   };
+  // round, readable multiples of the start: halvings and doublings first, then the in-between steps
   const kMax = Math.ceil((Math.max(Math.abs(visible.min), Math.abs(visible.max)) * scale) / Math.LN2) + 1;
   for (let k = -kMax; k <= kMax; k++) push(`2^${k}`, Math.pow(2, k), true);
-  push('1.5^1', 1.5, false);
-  push('1.5^-1', 1 / 1.5, false);
+  for (const f of [0.75, 1.5, 3, 6, 12]) push(`x${f}`, f, false);
   return out.sort((a, b) => b.u - a.u);
 }
 

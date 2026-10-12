@@ -33,7 +33,6 @@ const BOTTOM_BAND = 40;
 /** Fraction of the river's width kept clear of milepost labels at the very edges (in u). */
 const POST_EDGE_MARGIN = 0.1;
 /** How far below a post's top its label hangs, in lane spacings (post height 50 / lane spacing 70, plus air). */
-const POST_LABEL_DROP = 0.9;
 /** Lane spacing (CSS px) below which the boat labels use their two-line form (the three-line form is about 62px tall). */
 const COMPACT_BELOW_LANE = 68;
 /** Minimum screen gap between two milepost labels, CSS px. */
@@ -51,6 +50,10 @@ export interface UIHooks {
   setInsets(insets: { top: number; bottom: number; side: number }): void;
   /** Optional scene extra: stand the painted mileposts at these u values, so posts and labels agree. */
   setPosts?(us: number[]): void;
+  /** Optional scene extra: the plaque size in CSS px, so the value is lettered inside it. */
+  postPlaque?(): { w: number; h: number };
+  /** Optional scene extra: the opening camera move, so the lettering stays on the zooming posts. */
+  cameraTransform?(): { a: number; bx: number; by: number };
 }
 
 export interface UI {
@@ -319,9 +322,13 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   function placePosts(): void {
     const vis = hooks.visibleU();
     const range = labelRange();
-    // Labels hang under the posts, on the meadow: a post is about 0.7 lane spacings tall, plus a little air.
-    const drop = Math.max(40, hooks.boatAnchor('savings').y - hooks.boatAnchor('invest').y) * POST_LABEL_DROP;
-    const key = `${fit.toFixed(3)}|${Math.round(drop)}|${range.lo}|${state.displayScale.toFixed(5)}|${state.inputs.start}|${vis.min.toFixed(3)}|${vis.max.toFixed(3)}|${stageW}x${stageH}|${lastInsets.top}|${lastInsets.bottom}`;
+    // The value is lettered inside each post's plaque.
+    const plaque = hooks.postPlaque?.() ?? { w: 90, h: 34 };
+    const pw = plaque.w * fit;
+    const ph = plaque.h * fit;
+    // which posts carry a value is decided on the unzoomed view; their lettering then rides the camera move
+    const Z = hooks.cameraTransform?.() ?? { a: 1, bx: 0, by: 0 };
+    const key = `${Z.a.toFixed(4)}|${Z.bx.toFixed(1)}|${Z.by.toFixed(1)}|${fit.toFixed(3)}|${Math.round(pw)}|${range.lo}|${state.displayScale.toFixed(5)}|${state.inputs.start}|${vis.min.toFixed(3)}|${vis.max.toFixed(3)}|${stageW}x${stageH}|${lastInsets.top}|${lastInsets.bottom}`;
     if (key === postKey) return;
     postKey = key;
     const candidates = mileposts(state.inputs.start, state.displayScale / fit, vis, POST_EDGE_MARGIN * (vis.max - vis.min) / 2);
@@ -331,17 +338,36 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     for (const p of ranked) {
       const a = hooks.postAnchor(p.u);
       if (a.x < range.lo + 16 || a.x > range.hi - 16) continue;
-      if (accepted.some((o) => Math.abs(o.x - a.x) < POST_MIN_GAP)) continue;
+      if (accepted.some((o) => Math.abs(o.x - a.x) < Math.max(POST_MIN_GAP, pw + 14))) continue;
       accepted.push({ key: p.key, u: p.u, x: a.x, y: a.y, value: p.value, dock: p.u === 0 });
     }
     const next = new Set(accepted.map((p) => p.key));
     for (const k of postsOn) if (!next.has(k)) postEls.get(k)?.classList.remove('on');
     for (const p of accepted) {
       const el = postEl(p.key);
-      setText(el, milepostLabel(p.value));
+      const text = milepostLabel(p.value);
+      if (el.dataset.text !== text) {
+        el.dataset.text = text;
+        el.setAttribute('aria-label', text);
+        el.innerHTML = '';
+        const amt = document.createElement('span');
+        amt.className = 'post-amount';
+        amt.textContent = text.replace(/ today$/, '');
+        const sub = document.createElement('span');
+        sub.className = 'post-today';
+        sub.textContent = 'today';
+        el.append(amt, sub);
+      }
       el.classList.toggle('dock-post', p.dock);
-      const w = el.offsetWidth;
-      el.style.transform = `translate(${Math.round(p.x - w / 2)}px, ${Math.round(p.y + drop)}px)`;
+      // sized to the plaque: the amount shrinks if a long number would overflow the board
+      el.style.width = `${Math.round(pw)}px`;
+      el.style.height = `${Math.round(ph)}px`;
+      const fs = Math.max(8, Math.min(13, ph * 0.42, (pw * 0.86) / Math.max(4, text.replace(/ today$/, '').length * 0.6)));
+      el.style.setProperty('--post-fs', `${fs.toFixed(1)}px`);
+      // centred on the plaque, which hangs from the post anchor; scaled with the opening zoom
+      const zx = Z.a * (p.x - pw / 2) + Z.bx;
+      const zy = Z.a * p.y + Z.by;
+      el.style.transform = `translate(${zx.toFixed(1)}px, ${zy.toFixed(1)}px) scale(${Z.a.toFixed(4)})`;
       el.classList.add('on');
     }
     postsOn = accepted.map((p) => p.key);

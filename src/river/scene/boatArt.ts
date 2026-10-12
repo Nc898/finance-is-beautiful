@@ -144,10 +144,10 @@ function paintHullBack(id: BoatId, q: number): HTMLCanvasElement {
   // thwart (rowing seat): a plank across the boat at the rower
   ctx.fillStyle = '#C4A074';
   ctx.beginPath();
-  ctx.moveTo(-3, gun(-3) - 0.5);
-  ctx.lineTo(10, gun(10) - 0.5);
-  ctx.lineTo(11.5, farGun(11.5) + 2.2);
-  ctx.lineTo(-1.5, farGun(-1.5) + 2.2);
+  ctx.moveTo(3, gun(3) - 0.5);
+  ctx.lineTo(-10, gun(-10) - 0.5);
+  ctx.lineTo(-11.5, farGun(-11.5) + 2.2);
+  ctx.lineTo(1.5, farGun(1.5) + 2.2);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = 'rgba(48,34,26,0.6)';
@@ -179,15 +179,15 @@ function paintHullBack(id: BoatId, q: number): HTMLCanvasElement {
   ctx.lineWidth = 1.2;
   for (let k = 0; k < 3; k++) {
     ctx.beginPath();
-    ctx.ellipse(46, -11.2 - 0.3 * k, 4.2 - k * 0.5, 1.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(-46, -11.2 - 0.3 * k, 4.2 - k * 0.5, 1.5, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.strokeStyle = 'rgba(86,64,40,0.5)';
   ctx.lineWidth = 0.4;
   ctx.beginPath();
-  ctx.ellipse(46, -11.2, 3.8, 1.3, 0, 0, Math.PI * 2);
+  ctx.ellipse(-46, -11.2, 3.8, 1.3, 0, 0, Math.PI * 2);
   ctx.stroke();
-  // the emblem, on the bow thwart
+  // the emblem, on the stern thwart behind the rower
   paintEmblem(ctx, id, rnd);
   return cv;
 }
@@ -195,7 +195,7 @@ function paintHullBack(id: BoatId, q: number): HTMLCanvasElement {
 /** a small emblem so identity is never colour alone */
 function paintEmblem(ctx: CanvasRenderingContext2D, id: BoatId, rnd: Rand): void {
   ctx.save();
-  ctx.translate(-34, -10.5);
+  ctx.translate(36, -10.5);
   if (id === 'cash') {
     // a glass jar of coins with a tin lid
     const jar: Pt[] = [
@@ -439,14 +439,14 @@ function paintHullFront(id: BoatId, q: number): HTMLCanvasElement {
   // oarlock: a little iron horn on the gunwale
   lc.fillStyle = 'rgba(52,54,60,0.95)';
   lc.beginPath();
-  lc.moveTo(17.2, gun(19) - 1.7);
-  lc.lineTo(17.4, gun(19) - 4.8);
-  lc.lineTo(18.6, gun(19) - 4.8);
-  lc.lineTo(18.7, gun(19) - 2.4);
-  lc.lineTo(20.3, gun(19) - 2.4);
-  lc.lineTo(20.6, gun(19) - 4.8);
-  lc.lineTo(21.8, gun(19) - 4.8);
-  lc.lineTo(21.6, gun(19) - 1.7);
+  lc.moveTo(-17.2, gun(-19) - 1.7);
+  lc.lineTo(-17.4, gun(-19) - 4.8);
+  lc.lineTo(-18.6, gun(-19) - 4.8);
+  lc.lineTo(-18.7, gun(-19) - 2.4);
+  lc.lineTo(-20.3, gun(-19) - 2.4);
+  lc.lineTo(-20.6, gun(-19) - 4.8);
+  lc.lineTo(-21.8, gun(-19) - 4.8);
+  lc.lineTo(-21.6, gun(-19) - 1.7);
   lc.closePath();
   lc.fill();
   inkLine(lc, flat(outline), 1, { alpha: 0.78, width: 0.75, dash: [26, 2.5, 10, 2] });
@@ -485,7 +485,7 @@ function paintOar(id: BoatId, q: number): Part {
     ctx.lineWidth = 0.35;
     ctx.strokeRect(32, -1.7, 4.6, 3.4);
     // blade: a long leaf in the boat's colour with a pale tip
-    const blade = smoothPoly([[56, -1.1], [61, -2.4], [68, -2.7], [75, -2.1], [78, 0], [75, 2.1], [68, 2.7], [61, 2.4], [56, 1.1]], 4, true);
+    const blade = smoothPoly([[56, -0.9], [61, -1.7], [68, -1.95], [75, -1.6], [78, 0], [75, 1.6], [68, 1.95], [61, 1.7], [56, 0.9]], 4, true);
     paintShape(ctx, blade, col.hull, rnd, { shade: col.dark, light: '#FFF2E0', alpha: 0.95, layers: 3, inkW: 0.5, dash: [14, 2, 6, 2] });
     ctx.save();
     tracePoly(ctx, blade);

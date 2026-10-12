@@ -108,10 +108,65 @@ export function makeReedClump(seed: number, q: number, tall: number, cattail: bo
   return { cv, w, h, px, py };
 }
 
+/** a weathered mooring post standing in the water (origin at its foot on the surface) */
+export function makeMooringPost(seed: number, q: number, up: number): Sprite {
+  const rnd = new Rand(seed);
+  const w = 30;
+  const h = up + 34;
+  const cv = makeCanvas(w * q, h * q);
+  const c = cv.getContext('2d')!;
+  const px = w / 2;
+  const py = up + 6;
+  c.setTransform(q, 0, 0, q, 0, 0);
+  c.lineCap = 'round';
+  // wet ring and the post's dark, rippled reflection
+  c.strokeStyle = 'rgba(244,250,244,0.7)';
+  c.lineWidth = 0.7;
+  c.beginPath();
+  c.ellipse(px + 0.4, py + 0.3, 5.6, 1.8, 0, 0, Math.PI * 2);
+  c.stroke();
+  c.strokeStyle = 'rgba(40,52,60,0.32)';
+  c.lineWidth = 2.4;
+  for (let k = 0; k < 4; k++) {
+    c.beginPath();
+    c.moveTo(px + Math.sin(k) * 0.7, py + 2 + k * 5);
+    c.quadraticCurveTo(px + 1.5 * (k % 2 ? 1 : -1), py + 4 + k * 5, px + Math.sin(k + 2) * 0.8, py + 6 + k * 5);
+    c.stroke();
+  }
+  const pw = 5.8;
+  const pts: Pt[] = [
+    [px - pw / 2, py],
+    [px - pw / 2 + 0.3, py - up * 0.5],
+    [px - pw / 2 + 0.1, py - up],
+    [px, py - up - 1.4],
+    [px + pw / 2 - 0.1, py - up],
+    [px + pw / 2, py - up * 0.5],
+    [px + pw / 2 - 0.3, py],
+  ];
+  paintShape(c, smoothPoly(pts, 3, true), '#9B7650', rnd, { shade: '#2E1E14', light: '#E6C898', alpha: 0.96, layers: 3, inkW: 0.5, dash: [9, 1.5, 4, 1.5] });
+  grain(c, rnd, px - pw / 2, py - up, pw, up, 4, '#3E2C20', 0.4, 0.35, true);
+  // dark wet band at the waterline and green weed just above it
+  const wg = c.createLinearGradient(0, py - 5, 0, py);
+  wg.addColorStop(0, 'rgba(40,52,40,0)');
+  wg.addColorStop(1, 'rgba(40,62,46,0.55)');
+  c.fillStyle = wg;
+  c.fillRect(px - pw / 2, py - 5, pw, 5);
+  // a rope lashing near the top
+  c.strokeStyle = 'rgba(214,190,140,0.95)';
+  c.lineWidth = 0.9;
+  for (let k = 0; k < 2; k++) {
+    c.beginPath();
+    c.moveTo(px - pw / 2 - 0.2, py - up + 2.2 + k * 1.3);
+    c.quadraticCurveTo(px, py - up + 3.6 + k * 1.3, px + pw / 2 + 0.2, py - up + 2.2 + k * 1.3);
+    c.stroke();
+  }
+  return { cv, w, h, px, py };
+}
+
 export function makeMilepost(seed: number, q: number): Sprite {
   const rnd = new Rand(seed);
-  const w = 96;
-  const h = 98;
+  const w = 104;
+  const h = 108;
   const cv = makeCanvas(w * q, h * q);
   const c = cv.getContext('2d')!;
   const px = w / 2 - 6;
@@ -127,31 +182,31 @@ export function makeMilepost(seed: number, q: number): Sprite {
   }
   // the pole, weathered and a little crooked
   const lean = rnd.range(-0.02, 0.02);
-  const top = py - 56;
+  const top = py - 64;
   const pole = flat([[px - 4.2, py], [px - 4 + lean * 40, top], [px + 4 + lean * 40, top + 0.4], [px + 4.6, py]]);
   paintShape(c, pole, '#9B7650', rnd, { shade: '#2E1E14', light: '#E6C898', alpha: 0.95, layers: 3, inkW: 0.5, dash: [16, 2, 7, 2] });
-  grain(c, rnd, px - 4, top, 8, 56, 6, '#3E2C20', 0.45, 0.35, true);
+  grain(c, rnd, px - 4, top, 8, 64, 6, '#3E2C20', 0.45, 0.35, true);
   // a darker band where the meadow's damp climbs the post
   const dg = c.createLinearGradient(0, py - 12, 0, py);
   dg.addColorStop(0, 'rgba(40,52,30,0)');
   dg.addColorStop(1, 'rgba(40,52,30,0.4)');
   c.fillStyle = dg;
   c.fillRect(px - 5, py - 12, 10, 12);
-  // the plaque: a pale painted board in a wooden frame, 56 x 15.5 units, hanging from the top
-  const pw = 56;
-  const ph = 15.5;
+  // the plaque: a pale painted board in a wooden frame, big enough to carry the value the app writes on it
+  const pw = 84;
+  const ph = 32;
   const bx = px - pw / 2 + lean * 40;
   const by = top - 0.5;
   paintShape(c, flat([[bx, by], [bx + pw, by - 0.4], [bx + pw + 0.4, by + ph], [bx + 0.3, by + ph + 0.5]]), '#C79E6E', rnd, { shade: '#3E2A1A', light: '#F5DCAA', alpha: 0.98, layers: 3, inkW: 0.55, dash: [20, 2.5, 8, 2] });
   const m = 1.9;
   paintShape(c, flat([[bx + m, by + m], [bx + pw - m, by + m - 0.3], [bx + pw - m, by + ph - m], [bx + m, by + ph - m + 0.3]]), '#EBDFC2', rnd, { shade: '#8A7658', light: '#FFF8E6', alpha: 0.98, layers: 2, inkW: 0.3, inkAlpha: 0.35, dash: [10, 2] });
-  // a few faded brush marks on the plaque (no text)
-  c.strokeStyle = 'rgba(150,120,80,0.16)';
+  // a faint wood grain on the board (kept very light: the value is lettered on top of it)
+  c.strokeStyle = 'rgba(150,120,80,0.09)';
   c.lineWidth = 0.4;
-  for (let k = 0; k < 4; k++) {
+  for (let k = 0; k < 6; k++) {
     c.beginPath();
-    c.moveTo(bx + 5, by + 4 + k * 3);
-    c.lineTo(bx + pw - 6 - rnd.range(0, 14), by + 4.2 + k * 3);
+    c.moveTo(bx + 4, by + 4 + k * 4.4);
+    c.lineTo(bx + pw - 5 - rnd.range(0, 18), by + 4.3 + k * 4.4);
     c.stroke();
   }
   // nails

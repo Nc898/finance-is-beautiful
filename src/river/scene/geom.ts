@@ -32,15 +32,26 @@ export const midY = (x: number): number => (farEdge(x) + nearEdge(x)) / 2;
 export const LANE_Y: Record<BoatId, number> = { invest: 268, savings: 346, cash: 424 };
 export const LANE_DEPTH: Record<BoatId, number> = { invest: 0.82, savings: 1, cash: 1.18 };
 
-/** the pier: a plank strip running from the near bank out to the far lane, just downstream of the moored boats */
-export const PIER = { x0: WORLD.dockX + 120, x1: WORLD.dockX + 160, yTip: 300 };
+/**
+ * A short jetty from the near bank that stops in front of the near (cash) lane, so no boat ever passes over it;
+ * it is drawn after the boats, so a boat drifting past goes behind it.
+ */
+export const PIER = { x0: WORLD.dockX + 112, x1: WORLD.dockX + 152, yTip: 446 };
 
-/** y where a boat's stern line meets the pier: each boat ties to a piling at (or beyond) its lane */
-export const mooringY = (id: BoatId): number => (id === 'invest' ? PIER.yTip + 8 : LANE_Y[id] + 2);
+/** the two outer boats tie to mooring posts standing in the water just behind their lanes, at the "today" line */
+export const MOOR_X = WORLD.dockX + 100;
+export const MOOR_UP = 15;
+/** y of the water foot of a boat's mooring (the jetty's tip piling for cash, its own post for the others) */
+export const mooringY = (id: BoatId): number => (id === 'cash' ? PIER.yTip + 8 : LANE_Y[id] - 9);
+/** where each boat's line is made fast (top of its post or piling) */
+export const mooringPoint = (id: BoatId): { x: number; y: number } =>
+  id === 'cash' ? { x: PIER.x0 + 5.6, y: PIER.yTip + 8 - 14 + 1.5 } : { x: MOOR_X, y: mooringY(id) - MOOR_UP + 1.5 };
 
 /** milepost standing y on the near meadow (foot), as a function of x */
 export const postFootY = (x: number): number => nearEdge(x) + 40;
-export const POST_H = 52;
+/** height of the plaque's top above the post's foot, and the plaque's size (world units) */
+export const POST_H = 64;
+export const PLAQUE = { w: 84, h: 32 } as const;
 /** boats are drawn at this scale in world units (one hull = 120 local units) */
 export const BOAT_SCALE = 1.55;
 
