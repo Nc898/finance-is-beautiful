@@ -285,3 +285,93 @@ export class Bird {
 
 void WORLD;
 void postFootY;
+
+/**
+ * The start line: a rope strung with painted cork floats straight across the river at the dock's x (u = 0),
+ * lined up with the "today" milepost, plus a small pennant on the far bank. Floats bob gently and ripple.
+ */
+export function drawStartLine(ctx: CanvasRenderingContext2D, x: number, yFar: number, yNear: number, t: number, reduced: boolean): void {
+  const n = Math.max(6, Math.round((yNear - yFar) / 15));
+  const pts: Array<[number, number, number]> = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    const y = yFar + 6 + (yNear - yFar - 12) * f;
+    // the rope sits a hair downstream mid-river where the current pulls it, perspective-narrow near the far bank
+    const bow = Math.sin(Math.PI * f) * 2.2;
+    const bob = reduced ? 0 : 0.6 * Math.sin(t * 1.7 + i * 0.9);
+    pts.push([x + bow + (reduced ? 0 : 0.35 * Math.sin(t * 0.9 + i)), y + bob, 0.55 + 0.45 * f]);
+  }
+  ctx.save();
+  ctx.lineCap = 'round';
+  // the rope's soft shadow on the water, then the rope (lit side, ink side)
+  const rope = (dx: number, dy: number) => {
+    ctx.beginPath();
+    pts.forEach(([px, py], i) => (i ? ctx.lineTo(px + dx, py + dy) : ctx.moveTo(px + dx, py + dy)));
+    ctx.stroke();
+  };
+  ctx.strokeStyle = 'rgba(24,66,84,0.22)';
+  ctx.lineWidth = 2.2;
+  rope(1.4, 1.2);
+  ctx.strokeStyle = 'rgba(214,190,140,0.95)';
+  ctx.lineWidth = 1.2;
+  rope(0, 0);
+  ctx.strokeStyle = 'rgba(70,52,34,0.55)';
+  ctx.lineWidth = 0.4;
+  ctx.setLineDash([1.6, 1.4]);
+  rope(0.3, 0.2);
+  ctx.setLineDash([]);
+  // floats: corks alternating cream and coral, smaller toward the far bank
+  pts.forEach(([px, py, k], i) => {
+    if (i === 0 || i === pts.length - 1) return;
+    const rx = 3.6 * k + 1.2;
+    const ry = 2.1 * k + 0.7;
+    // ripple ring and reflection
+    ctx.strokeStyle = 'rgba(250,253,248,0.5)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(px, py + ry * 0.7, rx * 1.6, ry * 0.75, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(30,70,90,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(px + 0.5, py + ry * 1.6, rx * 0.9, ry * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const coral = i % 2 === 0;
+    const g = ctx.createLinearGradient(px - rx, py - ry, px + rx, py + ry);
+    g.addColorStop(0, coral ? '#F6A48C' : '#FBF1DC');
+    g.addColorStop(0.55, coral ? '#E0694F' : '#E9D7B4');
+    g.addColorStop(1, coral ? '#A9442F' : '#B8A27C');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52,36,26,0.6)';
+    ctx.lineWidth = 0.45;
+    ctx.setLineDash([5, 1.2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,252,242,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(px - rx * 0.35, py - ry * 0.35, rx * 0.35, ry * 0.25, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // a small pennant on the far bank marking the line
+  const [fx, fy] = [x, yFar + 2];
+  const sway = reduced ? 0 : Math.sin(t * 2.2) * 1.2;
+  ctx.strokeStyle = 'rgba(90,64,42,0.95)';
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);
+  ctx.lineTo(fx - 0.4, fy - 30);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(236,115,87,0.92)';
+  ctx.beginPath();
+  ctx.moveTo(fx - 0.4, fy - 30);
+  ctx.quadraticCurveTo(fx + 6, fy - 28.5 + sway * 0.4, fx + 12, fy - 26.5 + sway);
+  ctx.quadraticCurveTo(fx + 6, fy - 24.5 + sway * 0.4, fx - 0.3, fy - 22.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,30,0.55)';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+  ctx.restore();
+}

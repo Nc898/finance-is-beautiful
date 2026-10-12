@@ -15,7 +15,7 @@ import { buildStatic, visibleX, waterPolyPath, type StaticLayers } from './world
 import { buildFarTrees, type TreeSprite } from './farTrees';
 import { Boats } from './boats';
 import { FLOW_K, WaterLayer } from './water';
-import { Bird, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
+import { Bird, drawStartLine, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
 
 /** Extra (non-contract) methods the app can use. */
 export interface RiverSceneExtras {
@@ -186,6 +186,11 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
         return flowSpeed * (0.72 + 0.55 * f);
       };
       const qb = Math.min(c.s * c.dpr * BOAT_SCALE * clamp(z.a, 1, 3.5), maxQ);
+      // the start line across the river at u = 0, lined up with the "today" milepost
+      {
+        const sx = xOfU(0);
+        drawStartLine(ctx, sx, farEdge(sx), nearEdge(sx), t, reduced);
+      }
       // mooring posts for the two outer boats stand just behind their lanes (boats pass in front of them)
       for (const id of ['invest', 'savings'] as const) {
         const sp = moorPost!;
