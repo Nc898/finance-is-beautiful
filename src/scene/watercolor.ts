@@ -1159,120 +1159,249 @@ export function paintSky(ctx: CanvasRenderingContext2D, Wd: number, Hd: number, 
 }
 
 function paintCloud(ctx: CanvasRenderingContext2D, cx: number, cy: number, cw: number, ch: number, d: number, rnd: Rand): void {
-  // A cumulus kept light against the blue sky: soft, near-white billows lit from the upper left, with
-  // gentle blue-grey shading under each billow and along the base. No outline: edges are soft wet edges.
-  const pad = Math.ceil(ch * 0.7);
+  // A detailed watercolor cumulus, kept light against the blue sky. Built like an illustration: billows
+  // with small puffs budding off their tops, each billow modelled with its own light-to-shade wash (lit from
+  // the upper left), glazed in thin layers, a cool shadowed base trailing into wisps, lifted highlights,
+  // granulation, and a fine broken ink line along the top edges to match the trees.
+  const pad = Math.ceil(ch * 0.9);
   const W = Math.ceil(cw + pad * 2);
-  const H = Math.ceil(ch * 1.7 + pad * 2);
+  const H = Math.ceil(ch * 1.9 + pad * 2);
   const ox = pad;
-  const base = pad + ch * 1.25;
-  const lobes: Array<[number, number, number]> = [];
-  // a broad base row of smaller billows
-  const nb = rnd.int(3, 5);
+  const base = pad + ch * 1.35;
+  type Lobe = { x: number; y: number; r: number; tier: number };
+  const lobes: Lobe[] = [];
+  // base row: medium billows along a broad, slightly flat base
+  const nb = rnd.int(4, 6);
   for (let i = 0; i < nb; i++) {
-    const t = (i + rnd.range(0.25, 0.75)) / nb;
-    const r = ch * rnd.range(0.27, 0.4) * (0.78 + 0.22 * Math.sin(Math.PI * t));
-    lobes.push([ox + cw * (0.12 + 0.76 * t), base - r * rnd.range(0.6, 0.9), r]);
+    const t = (i + rnd.range(0.3, 0.7)) / nb;
+    const r = ch * rnd.range(0.24, 0.36) * (0.78 + 0.22 * Math.sin(Math.PI * t));
+    lobes.push({ x: ox + cw * (0.1 + 0.8 * t), y: base - r * rnd.range(0.88, 1.0), r, tier: 0 });
   }
-  // billows stacked higher toward the middle (slightly left of centre: the dome of the cloud)
-  const peak = rnd.range(0.38, 0.55);
-  const nt = rnd.int(3, 5);
+  // the dome: larger billows stacked toward the middle
+  const peak = rnd.range(0.38, 0.56);
+  const nt = rnd.int(3, 4);
   for (let i = 0; i < nt; i++) {
-    const t = peak + rnd.range(-0.26, 0.26);
-    const lift = 1 - Math.min(1, Math.abs(t - peak) / 0.35);
-    const r = ch * rnd.range(0.36, 0.52) * (0.7 + 0.3 * lift);
-    lobes.push([ox + cw * t, base - ch * (0.3 + 0.42 * lift) - r * 0.15, r]);
+    const t = peak + rnd.range(-0.24, 0.24);
+    const lift = 1 - Math.min(1, Math.abs(t - peak) / 0.34);
+    const r = ch * rnd.range(0.38, 0.5) * (0.72 + 0.28 * lift);
+    lobes.push({ x: ox + cw * t, y: base - ch * (0.32 + 0.4 * lift) - r * 0.15, r, tier: 1 });
   }
-  lobes.sort((a, b) => b[1] - a[1]); // lower billows first, upper ones overlap them
+  // small puffs budding off the upper rims of the dome billows
+  for (const L of lobes.filter((q) => q.tier === 1)) {
+    const n = rnd.int(0, 1);
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + rnd.range(-0.8, 0.8);
+      const r = L.r * rnd.range(0.5, 0.66);
+      lobes.push({ x: L.x + Math.cos(a) * L.r * 0.82, y: L.y + Math.sin(a) * L.r * 0.82, r, tier: 2 });
+    }
+  }
+  lobes.sort((a, b) => b.y + b.r - (a.y + a.r)); // lower billows first, upper ones overlap them
   const lobePoly = (x: number, y: number, r: number, amp: number) => {
     const pts: number[] = [];
-    for (let j = 0; j < 24; j++) {
-      const a = (j / 24) * Math.PI * 2;
+    for (let j = 0; j < 26; j++) {
+      const a = (j / 26) * Math.PI * 2;
       pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.9);
     }
     return deform(pts, rnd, 3, amp);
   };
-  // a flat-ish base joining the billows (a slightly lifted underside, not a ruled line)
+  const shapes = lobes.map((L) => lobePoly(L.x, L.y, L.r, 0.07));
   const flat: number[] = [];
-  for (let j = 0; j < 24; j++) {
-    const a = (j / 24) * Math.PI * 2;
-    flat.push(ox + cw * (0.5 + 0.42 * Math.cos(a)), base - ch * 0.14 + Math.sin(a) * ch * 0.14);
+  for (let j = 0; j < 26; j++) {
+    const a = (j / 26) * Math.PI * 2;
+    flat.push(ox + cw * (0.5 + 0.38 * Math.cos(a)), base - ch * 0.16 + Math.sin(a) * ch * 0.15);
   }
-  const shape = (c: CanvasRenderingContext2D, amp: number) => {
-    for (const [x, y, r] of lobes) {
-      tracePoly(c, lobePoly(x, y, r, amp));
+  const fill = (c: CanvasRenderingContext2D, grow = 1, amp = 0) => {
+    lobes.forEach((L, i) => {
+      tracePoly(c, grow === 1 && amp === 0 ? shapes[i]! : lobePoly(L.x, L.y, L.r * grow, amp || 0.07));
       c.fill();
-    }
-    tracePoly(c, deform(flat, rnd, 3, amp * 0.5));
+    });
+    tracePoly(c, deform(flat, rnd, 2, 0.04));
     c.fill();
-    // a solid core so no gaps open up between the billows
     c.beginPath();
-    c.ellipse(ox + cw * 0.5, base - ch * 0.38, cw * 0.36, ch * 0.34, 0, 0, Math.PI * 2);
+    c.ellipse(ox + cw * 0.5, base - ch * 0.4, cw * 0.34, ch * 0.33, 0, 0, Math.PI * 2);
     c.fill();
   };
 
-  // silhouette (soft wet edge)
+  // silhouette with a soft (but not blurry) wet edge
   const mask = makeCanvas(W, H);
   const m = mask.getContext('2d')!;
-  m.filter = `blur(${Math.max(1, ch * 0.016)}px)`;
+  m.filter = `blur(${Math.max(0.8, ch * 0.012)}px)`;
   m.fillStyle = '#000';
-  shape(m, 0.11);
+  fill(m);
+  m.filter = 'none';
+  {
+    // cumulus have soft, fairly flat bases: cut away anything below a gently uneven base line, feathered
+    const cut = makeCanvas(W, H);
+    const cc = cut.getContext('2d')!;
+    cc.filter = `blur(${Math.max(1.5, ch * 0.03)}px)`;
+    cc.fillStyle = '#000';
+    cc.beginPath();
+    cc.moveTo(0, H);
+    for (let x = 0; x <= W; x += Math.max(6, W / 24)) cc.lineTo(x, base - ch * 0.04 + Math.sin(x / (cw * 0.13) + cw) * ch * 0.025);
+    cc.lineTo(W, H);
+    cc.closePath();
+    cc.fill();
+    m.globalCompositeOperation = 'destination-out';
+    m.drawImage(cut, 0, 0);
+    m.globalCompositeOperation = 'source-over';
+  }
 
   const cv = makeCanvas(W, H);
   const c = cv.getContext('2d')!;
-  // body: soft white lifted out of the blue, faintly warm at the sunlit top
-  const body = c.createLinearGradient(0, base - ch * 1.4, 0, base);
-  body.addColorStop(0, 'rgba(253,251,245,0.9)');
-  body.addColorStop(0.6, 'rgba(240,244,248,0.86)');
-  body.addColorStop(1, 'rgba(220,230,240,0.84)');
-  c.fillStyle = body;
-  c.fillRect(0, 0, W, H);
-  c.globalCompositeOperation = 'destination-in';
-  c.drawImage(mask, 0, 0);
-  c.globalCompositeOperation = 'source-atop';
-  // shading under each billow and toward the lower right (light from the upper left), very soft
-  c.filter = `blur(${Math.max(3, ch * 0.09)}px)`;
-  for (const [x, y, r] of lobes) {
-    c.fillStyle = 'rgba(152,178,210,0.3)';
-    c.beginPath();
-    c.ellipse(x + r * 0.3, y + r * 0.66, r * 0.8, r * 0.38, 0.15, 0, Math.PI * 2);
-    c.fill();
+  const tmp = makeCanvas(W, H);
+  const t = tmp.getContext('2d')!;
+  const bodyTint = t.createLinearGradient(0, base - ch * 1.5, 0, base);
+  bodyTint.addColorStop(0, 'rgb(253,251,246)');
+  bodyTint.addColorStop(0.55, 'rgb(240,244,248)');
+  bodyTint.addColorStop(1, 'rgb(218,229,240)');
+  // 1. body in thin glazes, each a slightly different version of the whole cloud (soft layered edges)
+  for (let i = 0; i < 5; i++) {
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, W, H);
+    t.fillStyle = '#000';
+    fill(t, 0.95 + 0.025 * i, 0.09);
+    t.globalCompositeOperation = 'source-in';
+    t.fillStyle = bodyTint;
+    t.fillRect(0, 0, W, H);
+    c.globalAlpha = 0.3;
+    c.drawImage(tmp, 0, 0);
   }
-  // a cool shadow band along the base
-  const sh = c.createLinearGradient(0, base - ch * 0.75, 0, base + 4);
-  sh.addColorStop(0, 'rgba(160,184,214,0)');
-  sh.addColorStop(0.6, 'rgba(150,176,210,0.18)');
-  sh.addColorStop(1, 'rgba(140,168,206,0.4)');
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = 'destination-in';
+  {
+    // glazes keep their soft layered character but stop at the trimmed base
+    const soft = makeCanvas(W, H);
+    const sc = soft.getContext('2d')!;
+    sc.filter = `blur(${Math.max(1, ch * 0.02)}px)`;
+    sc.drawImage(mask, 0, 0);
+    c.drawImage(soft, 0, 0);
+  }
+  c.globalCompositeOperation = 'source-over';
+  {
+    // a firmer body inside the silhouette, so the cloud reads as one solid form
+    const b = makeCanvas(W, H);
+    const bc = b.getContext('2d')!;
+    bc.drawImage(mask, 0, 0);
+    bc.globalCompositeOperation = 'source-in';
+    bc.fillStyle = bodyTint;
+    bc.fillRect(0, 0, W, H);
+    c.globalAlpha = 0.6;
+    c.drawImage(b, 0, 0);
+    c.globalAlpha = 1;
+  }
+
+  // 2. the cloud is shaded as one form, lit from the upper left: warm light on the dome, cooler to the lower right
+  c.globalCompositeOperation = 'source-atop';
+  {
+    const top = lobes.reduce((a, L) => (L.y - L.r < a.y - a.r ? L : a), lobes[0]!);
+    const g = c.createRadialGradient(top.x - top.r * 0.5, top.y - top.r * 0.6, ch * 0.05, top.x, top.y, cw * 0.62);
+    g.addColorStop(0, 'rgba(255,252,244,0.7)');
+    g.addColorStop(0.45, 'rgba(246,247,248,0.25)');
+    g.addColorStop(1, 'rgba(176,198,224,0.4)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+  }
+  // billows are suggested, not drawn as balls: a soft shadow fold under the lower edge of each upper billow,
+  // where it sits in front of the cloud behind it
+  c.filter = `blur(${Math.max(1.5, ch * 0.035)}px)`;
+  c.lineCap = 'round';
+  for (const L of lobes) {
+    if (L.tier === 0) continue;
+    c.strokeStyle = 'rgba(150,176,210,0.32)';
+    c.lineWidth = Math.max(2, L.r * 0.16);
+    c.beginPath();
+    c.ellipse(L.x + L.r * 0.06, L.y + L.r * 0.1, L.r * 0.92, L.r * 0.82, 0, Math.PI * 0.15, Math.PI * 0.85);
+    c.stroke();
+  }
   c.filter = 'none';
+
+  // 3. cool shadow along the base, with a little reflected light at the very bottom
+  const sh = c.createLinearGradient(0, base - ch * 0.7, 0, base + 3);
+  sh.addColorStop(0, 'rgba(150,176,210,0)');
+  sh.addColorStop(0.55, 'rgba(146,172,208,0.28)');
+  sh.addColorStop(0.9, 'rgba(128,158,200,0.5)');
+  sh.addColorStop(1, 'rgba(170,192,220,0.35)');
   c.fillStyle = sh;
   c.fillRect(0, 0, W, H);
-  // re-light the tops of the upper billows (lifted pigment), softly
-  c.filter = `blur(${Math.max(3, ch * 0.08)}px)`;
-  for (const [x, y, r] of lobes) {
-    if (y > base - ch * 0.5) continue;
-    c.fillStyle = 'rgba(255,253,247,0.6)';
+
+  // 4. lifted highlights on the sunlit tops of the upper billows and puffs
+  c.filter = `blur(${Math.max(1.5, ch * 0.04)}px)`;
+  for (const L of lobes) {
+    if (L.tier === 0) continue;
+    c.fillStyle = 'rgba(255,253,245,0.45)';
     c.beginPath();
-    c.ellipse(x - r * 0.25, y - r * 0.35, r * 0.55, r * 0.32, -0.2, 0, Math.PI * 2);
+    c.ellipse(L.x - L.r * 0.25, L.y - L.r * 0.45, L.r * 0.5, L.r * 0.2, -0.3, 0, Math.PI * 2);
     c.fill();
   }
   c.filter = 'none';
-  // a faint wet edge where the wash dried, only on the shaded lower-right side
+
+  // 5. granulation settling in the shaded parts
+  for (let i = 0; i < 360; i++) {
+    const y = base - Math.pow(rnd.next(), 1.6) * ch * 1.2;
+    c.fillStyle = `rgba(104,136,178,${rnd.range(0.05, 0.14)})`;
+    c.fillRect(rnd.range(ox, ox + cw), y, d, d);
+  }
+  c.globalCompositeOperation = 'source-over';
+
+  // 6. soft wisps trailing off the base (behind the body)
+  {
+    const wisp = makeCanvas(W, H);
+    const wc = wisp.getContext('2d')!;
+    wc.filter = `blur(${Math.max(2, ch * 0.06)}px)`;
+    const nw = rnd.int(2, 4);
+    for (let i = 0; i < nw; i++) {
+      const wx = ox + cw * rnd.range(0.05, 0.95);
+      const wy = base - ch * rnd.range(0.02, 0.12);
+      wc.fillStyle = `rgba(226,234,242,${rnd.range(0.45, 0.65)})`;
+      wc.beginPath();
+      wc.ellipse(wx, wy, cw * rnd.range(0.14, 0.26), ch * rnd.range(0.05, 0.08), rnd.range(-0.05, 0.05), 0, Math.PI * 2);
+      wc.fill();
+    }
+    c.globalCompositeOperation = 'destination-over';
+    c.drawImage(wisp, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  // 7. a faint dried-wash edge on the shaded lower right
   {
     const rim = makeCanvas(W, H);
     const rc = rim.getContext('2d')!;
     rc.drawImage(mask, 0, 0);
     rc.globalCompositeOperation = 'destination-out';
-    rc.drawImage(mask, -Math.max(1.5, ch * 0.02), -Math.max(1.5, ch * 0.025));
+    rc.drawImage(mask, -Math.max(1.2, ch * 0.016), -Math.max(1.2, ch * 0.02));
     rc.globalCompositeOperation = 'source-in';
-    rc.fillStyle = 'rgba(120,150,192,0.5)';
+    rc.fillStyle = 'rgba(118,148,190,0.45)';
     rc.fillRect(0, 0, W, H);
     c.drawImage(rim, 0, 0);
   }
-  // the faintest granulation in the shade
-  for (let i = 0; i < 160; i++) {
-    c.fillStyle = `rgba(110,140,180,${rnd.range(0.05, 0.12)})`;
-    c.fillRect(rnd.range(ox, ox + cw), base - Math.pow(rnd.next(), 2) * ch * 0.8, d, d);
+
+  // 8. a fine, broken ink line along the top edges (like the trees' contours), pale blue-grey
+  {
+    const ink = makeCanvas(W, H);
+    const ic = ink.getContext('2d')!;
+    ic.drawImage(mask, 0, 0);
+    ic.globalCompositeOperation = 'destination-out';
+    ic.drawImage(mask, 0, Math.max(1.2, 0.9 * d));
+    ic.globalCompositeOperation = 'source-in';
+    ic.fillStyle = 'rgba(92,112,142,0.42)';
+    ic.fillRect(0, 0, W, H);
+    // broken like a dry pen: gaps of varying length
+    ic.globalCompositeOperation = 'destination-out';
+    for (let x = 0; x < W; ) {
+      const on = rnd.range(10, 34) * d;
+      const off = rnd.range(3, 12) * d;
+      ic.fillRect(x + on, 0, off, H);
+      x += on + off;
+    }
+    // only along the lit upper half of the cloud
+    ic.globalCompositeOperation = 'destination-in';
+    const keep = ic.createLinearGradient(0, base - ch * 1.4, 0, base - ch * 0.35);
+    keep.addColorStop(0, 'rgba(0,0,0,1)');
+    keep.addColorStop(1, 'rgba(0,0,0,0)');
+    ic.fillStyle = keep;
+    ic.fillRect(0, 0, W, H);
+    c.drawImage(ink, 0, 0);
   }
-  c.globalCompositeOperation = 'source-over';
+
   ctx.drawImage(cv, cx - W / 2, cy - H / 2);
 }
