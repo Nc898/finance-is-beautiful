@@ -22,19 +22,22 @@ export interface TreeSprite {
   phase: number;
 }
 
-const SPECS: Array<{ seed: number; x: number; m: number }> = [
-  { seed: 5510, x: -40, m: 0.4 },
-  { seed: 3307, x: 112, m: 0.46 },
-  { seed: 6120, x: 258, m: 0.33 },
-  { seed: 4207, x: 408, m: 0.43 },
-  { seed: 9931, x: 628, m: 0.36 },
-  { seed: 1181, x: 752, m: 0.47 },
-  { seed: 7733, x: 908, m: 0.34 },
-  { seed: 2290, x: 1050, m: 0.42 },
+/** x = foot, m = maturity (size), h = paper haze (farther / paler trees get more) */
+const SPECS: Array<{ seed: number; x: number; m: number; h: number }> = [
+  { seed: 5510, x: -70, m: 0.4, h: 0.3 },
+  { seed: 3307, x: 112, m: 0.46, h: 0.3 },
+  { seed: 6120, x: 258, m: 0.33, h: 0.4 },
+  { seed: 4207, x: 408, m: 0.43, h: 0.3 },
+  { seed: 5992, x: 520, m: 0.3, h: 0.48 },
+  { seed: 9931, x: 628, m: 0.36, h: 0.36 },
+  { seed: 1181, x: 752, m: 0.47, h: 0.28 },
+  { seed: 7733, x: 908, m: 0.34, h: 0.4 },
+  { seed: 2290, x: 1050, m: 0.42, h: 0.3 },
+  { seed: 4488, x: 1130, m: 0.3, h: 0.46 },
 ];
 
 /** tree-units to world-units */
-const TREE_K = 0.27;
+export const TREE_K = 0.27;
 
 export async function buildFarTrees(q: number, xmin: number, xmax: number): Promise<TreeSprite[]> {
   const sprites = await ensureSprites(q * TREE_K);
@@ -59,9 +62,9 @@ export async function buildFarTrees(q: number, xmin: number, xmax: number): Prom
     ctx.restore();
     // haze: a veil of paper and a breath of sky over the trees only
     ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = 'rgba(251,246,234,0.34)';
+    ctx.fillStyle = `rgba(251,246,234,${sp.h})`;
     ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.fillStyle = 'rgba(120,165,205,0.14)';
+    ctx.fillStyle = `rgba(120,165,205,${0.08 + sp.h * 0.2})`;
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.globalCompositeOperation = 'source-over';
     out.push({ cv, x: sp.x, y: farEdge(sp.x) - 1.5 + (i % 3) * 0.8, ox: Wt / 2, oy: Ht - 4, w: Wt, h: Ht, phase: i * 1.7 });
