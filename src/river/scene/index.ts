@@ -5,7 +5,7 @@
  * the dock, far trees, reed clumps, mileposts, the water-motion sprite pool and the boat/rower sprite sets.
  * Per frame: the world layer, swaying trees and reeds, the flowing water layer, then for each boat (far lane
  * first) its reflection, wake, body and oars and ripple rings, and finally the foreground reeds, posts and a
- * rare bird. All decorative motion is wall-clock; positions come only from the frame.
+ * rare bird. Fish swim under the current's strokes, and their leaps and splashes are drawn after the boats. All decorative motion is wall-clock; positions come only from the frame.
  */
 import type { BoatId, RiverFrame, RiverSceneAPI, RiverScreenPoint } from '../types';
 import { ensurePaperTile, ensureSprites } from '../../scene/sprites';
@@ -15,6 +15,7 @@ import { buildStatic, visibleX, waterPolyPath, type StaticLayers } from './world
 import { TREE_K, buildFarTrees, type TreeSprite } from './farTrees';
 import { Boats } from './boats';
 import { FLOW_K, WaterLayer } from './water';
+import { School, buildFishSprites } from './fish';
 import { Bird, StartLine, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
 
 /** Extra (non-contract) methods the app can use. */
@@ -49,6 +50,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
   let startLine: StartLine | null = null;
   let water: WaterLayer | null = null;
   let boats: Boats | null = null;
+  let school: School | null = null;
   let waterClip: Path2D | null = null;
   let maxQ = 4;
   const bird = new Bird();
@@ -92,6 +94,8 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       const sprQ = Math.min(c.s * c.dpr * BOAT_SCALE * 2.2, 5.5);
       maxQ = Math.min(c.s * c.dpr * 3.5 * BOAT_SCALE, 7);
       const bt = new Boats(sprQ, maxQ);
+      // fish are small, but the opening close-up gets near them: paint them for about 3x
+      const sc = new School(buildFishSprites(Math.min(c.s * c.dpr * 3, 6)), vis.xmin, vis.xmax);
       await tick();
       if (destroyed || my !== gen) return;
       // swap everything in together: the previous size keeps rendering until the new caches are complete
@@ -109,6 +113,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       startLine = sl;
       water = wl;
       boats = bt;
+      school = sc;
       waterClip = waterPolyPath(vis.xmin, vis.xmax);
       if (!readyDone) {
         readyDone = true;
@@ -180,6 +185,16 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       water.step(frame.timeMs, flowSpeed, reduced);
       ctx.save();
       ctx.clip(waterClip);
+      // fish under the surface, beneath the current's strokes (no fish in reduced motion)
+      if (school && !reduced) {
+        // what is on screen, in world units: past the half of the panel that covers each end, inside the zoom
+        const hide = (insets.side ?? 0) / 2;
+        const wx = (sx: number) => ((sx - z.bx) / z.a - c.ox) / c.s;
+        const wy = (sy: number) => ((sy - z.by) / z.a - c.oy) / c.s;
+        school.setView(wx(hide), wx(c.cssW - hide), wy(insets.top), wy(c.cssH));
+        school.step(frame.timeMs, flowSpeed, frame.boats);
+        school.drawUnder(ctx, frame.timeMs);
+      }
       water.draw(ctx, frame.timeMs, reduced, frame.flowing);
       water.drawGlints(ctx, frame.timeMs, reduced);
       ctx.restore();
@@ -201,6 +216,8 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
         ctx.drawImage(sp.cv, MOOR_X - sp.px, mooringY(id) - sp.py, sp.w, sp.h);
       }
       boats.draw(ctx, frame.boats, { timeMs: frame.timeMs, flowing: frame.flowing, reduced, flow: flowSpeed, qb, waterClip, flowLane: lane });
+      // leaping fish, their spray and rings (a leap never starts where it would cross a boat)
+      if (school && !reduced) school.drawAbove(ctx, frame.timeMs, waterClip);
       // the short jetty is nearer to us than every lane: a boat drifting past goes behind it
       ctx.drawImage(L.dock.cv, L.dock.x, L.dock.y, L.dock.w, L.dock.h);
       // foreground: near-bank reeds and the mileposts
