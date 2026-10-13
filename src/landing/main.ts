@@ -25,19 +25,25 @@ window.setTimeout(reveal, 6000);
 const ARROW =
   '<svg class="demo-arrow" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 6.2c4.6-.5 12.2-.4 18.4-.1M14.6 1.3c1.6 2.1 3.2 3.6 5.4 4.9-2.2 1.6-3.9 3.2-5.2 4.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+/** The river's arrow: the shaft is a ripple of the current. */
+const WAVE_ARROW =
+  '<svg class="demo-arrow" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 6.4c2.2-2.2 4.2-2.2 6.2 0s4 2.2 6.1 0c1.5-1.4 3.4-1.6 6.1-.3M14.6 1.3c1.6 2.1 3.2 3.6 5.4 4.9-2.2 1.6-3.9 3.2-5.2 4.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function entry(d: Demo): HTMLLIElement {
   const li = document.createElement('li');
   li.className = 'demo-item';
+  li.dataset.theme = d.theme;
   const a = document.createElement('a');
   a.className = 'demo';
   a.href = d.href;
   a.dataset.slug = d.slug;
+  a.dataset.theme = d.theme;
   a.innerHTML = `
     <canvas class="demo-art" aria-hidden="true"></canvas>
     <div class="demo-copy">
       <h3 class="demo-title"></h3>
       <p class="demo-summary"></p>
-      <span class="demo-cta"><span>Open the demonstration</span>${ARROW}</span>
+      <span class="demo-cta"><span>Open the demonstration</span>${d.theme === 'river' ? WAVE_ARROW : ARROW}</span>
     </div>`;
   a.querySelector('.demo-title')!.textContent = d.title;
   a.querySelector('.demo-summary')!.textContent = d.summary;
@@ -61,6 +67,7 @@ const previews = Array.from(list.querySelectorAll<HTMLCanvasElement>('.demo-art'
     if (w < 40 || Math.abs(w - lastW) < 2) return;
     lastW = w;
     await demo.paintPreview(canvas);
+    canvas.classList.add('painted');
   };
   const ro = new ResizeObserver(() => {
     window.clearTimeout(timer);

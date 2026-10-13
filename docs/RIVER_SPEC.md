@@ -2,7 +2,7 @@
 
 Second demonstration in the "Finance is beautiful" collection. Same world as Time to Grow: warm ivory paper,
 ink-and-watercolor illustration, light from the upper left, quiet type (Libre Caslon Display / Text italic,
-Figtree), collapsible right-hand controls panel, guided story that hands off to exploration, 30 fps motion cap.
+Figtree), collapsible right-hand controls panel, guided story that hands off to exploration, 60 fps for the river (30 fps elsewhere).
 
 ## The lesson (one sentence)
 Rising prices are a current: money that sits still drifts backwards, and it has to grow faster than prices to

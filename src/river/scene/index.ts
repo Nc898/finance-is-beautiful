@@ -8,14 +8,14 @@
  * rare bird. All decorative motion is wall-clock; positions come only from the frame.
  */
 import type { BoatId, RiverFrame, RiverSceneAPI, RiverScreenPoint } from '../types';
-import { ensurePaperTile } from '../../scene/sprites';
+import { ensurePaperTile, ensureSprites } from '../../scene/sprites';
 import { clamp } from '../../scene/prng';
 import { BOAT_SCALE, LANE_Y, MOOR_UP, MOOR_X, PLAQUE, POST_H, WORLD, mooringY, farEdge, fitCamera, nearEdge, postFootY, uOfX, xOfU, zoomTransform, type Camera, type Insets } from './geom';
 import { buildStatic, visibleX, waterPolyPath, type StaticLayers } from './world';
-import { buildFarTrees, type TreeSprite } from './farTrees';
+import { TREE_K, buildFarTrees, type TreeSprite } from './farTrees';
 import { Boats } from './boats';
 import { FLOW_K, WaterLayer } from './water';
-import { Bird, drawStartLine, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
+import { Bird, StartLine, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
 
 /** Extra (non-contract) methods the app can use. */
 export interface RiverSceneExtras {
@@ -46,6 +46,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
   let farReeds: Reed[] = [];
   let posts: Sprite[] = [];
   let moorPost: Sprite | null = null;
+  let startLine: StartLine | null = null;
   let water: WaterLayer | null = null;
   let boats: Boats | null = null;
   let waterClip: Path2D | null = null;
@@ -72,7 +73,8 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       const gd = c.dpr * 1.5;
       const tr = await buildFarTrees(c.s * gd, vis.xmin, vis.xmax);
       if (destroyed || my !== gen) return;
-      const L = await buildStatic(c, insets, tile, tr, () => destroyed || my !== gen);
+      const spr = await ensureSprites(c.s * gd * TREE_K);
+      const L = await buildStatic(c, insets, tile, tr, spr, () => destroyed || my !== gen);
       if (!L || destroyed || my !== gen) return;
       await tick();
       // reeds, posts, water sprites
@@ -83,6 +85,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       const fr: Reed[] = rs.far.map((r) => ({ x: r.x, y: r.y, k: r.k, ph: r.ph, spr: kinds[r.v]! }));
       const ps = [0, 1, 2].map((i) => makeMilepost(900 + i * 31, q));
       const mp = makeMooringPost(611, q, MOOR_UP);
+      const sl = new StartLine(q);
       const wl = new WaterLayer(c.s * gd, vis.xmin, vis.xmax);
       await tick();
       if (destroyed || my !== gen) return;
@@ -103,6 +106,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       farReeds = fr;
       posts = ps;
       moorPost = mp;
+      startLine = sl;
       water = wl;
       boats = bt;
       waterClip = waterPolyPath(vis.xmin, vis.xmax);
@@ -189,7 +193,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       // the start line across the river at u = 0, lined up with the "today" milepost
       {
         const sx = xOfU(0);
-        drawStartLine(ctx, sx, farEdge(sx), nearEdge(sx), t, reduced);
+        startLine!.draw(ctx, sx, farEdge(sx), nearEdge(sx), t, reduced);
       }
       // mooring posts for the two outer boats stand just behind their lanes (boats pass in front of them)
       for (const id of ['invest', 'savings'] as const) {
@@ -225,9 +229,12 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
       return { x: c.ox + x * c.s, y: c.oy + (postFootY(x) - POST_H) * c.s };
     },
     visibleU() {
+      // with the panel open on a wide screen the stage slides left by half the panel, so half its width is
+      // hidden at each end; report the river that is visible either way
       const c = cam ?? fitCamera(WORLD.width, WORLD.height, 1, insets);
       const v = visibleX(c, 0);
-      return { min: uOfX(v.xmax), max: uOfX(v.xmin) };
+      const hide = (insets.side ?? 0) / 2 / c.s;
+      return { min: uOfX(v.xmax - hide), max: uOfX(v.xmin + hide) };
     },
     setPosts(us: number[]) {
       postUs = us.slice();

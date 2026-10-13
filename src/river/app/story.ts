@@ -271,11 +271,11 @@ export function captionForBeat(beat: StoryBeat, inputs: RiverInputs): StoryCapti
         i > 0
           ? `Still ${formatCurrency(cash.nominal)} in cash. It ${buysToday(cash.real)}.`
           : `Still ${formatCurrency(cash.nominal)} in cash. With no inflation, it buys just what it did.`;
-      const bits = (b: typeof savings) => `${formatCurrency(b.nominal)}, which ${buysToday(b.real)}`;
+      // the boat labels already carry each boat's dollars, so the caption keeps to buying power, on one short line
       return {
         beat,
         primary: cashLine,
-        secondary: `After ${m.end} ${m.end === 1 ? 'year' : 'years'}: savings account ${bits(savings)}; investing ${bits(invest)}.`,
+        secondary: `In today's dollars, savings is worth ${formatCurrency(savings.real)} and investing ${formatCurrency(invest.real)}.`,
       };
     }
     case 'handoff':

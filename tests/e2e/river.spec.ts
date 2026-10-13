@@ -155,7 +155,7 @@ test.describe('Against the Current', () => {
     await page.waitForTimeout(800);
     const cap = page.locator('#caption .cap.on:not(.cap-ghost)');
     await expect(cap.locator('.cap-1')).toHaveText('Still $10,000 in cash. It buys what $4,120 buys today.');
-    await expect(cap.locator('.cap-2')).toContainText('$57,435');
+    await expect(cap.locator('.cap-2')).toContainText('$23,662');
     await seek(page, 22);
     await page.waitForTimeout(800);
     await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toHaveText('A savings account rows, but slower than the current.');

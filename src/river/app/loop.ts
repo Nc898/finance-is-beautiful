@@ -33,8 +33,13 @@ const clampU = (u: number): number => Math.max(-U_LIMIT, Math.min(U_LIMIT, u));
  */
 export function fitFactor(visible: { min: number; max: number }): number {
   const half = Math.min(-visible.min, visible.max);
-  return Math.max(0.35, Math.min(1, half - 0.08));
+  // keep the whole boat in view, not just its centre: with the cash boat's stowed blades out past the stern,
+  // a boat reaches about 0.32 u either side of its anchor
+  return Math.max(0.35, Math.min(1, half - BOAT_HALF_U));
 }
+
+/** half a boat's length in u, oars included (about 135 world units each side of its centre, 420 units per u) */
+export const BOAT_HALF_U = 0.32;
 
 /**
  * One boat's scene state from its snapshot. Position is logReal over the SHARED display scale; effort only

@@ -240,16 +240,17 @@ export class Boats {
 
   private oar(ctx: CanvasRenderingContext2D, id: BoatId, o: Pose['oarN'], far: boolean): void {
     const part = this.set.oars[id];
+    const wet = this.set.oarsWet[id];
     const dx = o.t[0] - o.h[0];
     const dy = o.t[1] - o.h[1];
     const len = Math.hypot(dx, dy);
     const ang = Math.atan2(dy, dx);
-    const draw = () => {
+    const draw = (p: Part) => {
       ctx.save();
       ctx.translate(o.h[0], o.h[1]);
       ctx.rotate(ang);
       ctx.scale(Math.max(0.12, len / 78), 1);
-      ctx.drawImage(part.cv, -part.px, -part.py, part.w, part.h);
+      ctx.drawImage(p.cv, -p.px, -p.py, p.w, p.h);
       ctx.restore();
     };
     if (o.dip > 0.05) {
@@ -258,16 +259,16 @@ export class Boats {
       ctx.beginPath();
       ctx.rect(-100, -100, 200, 100 + o.yWater);
       ctx.clip();
-      draw();
+      draw(part);
       ctx.restore();
       ctx.save();
       ctx.beginPath();
       ctx.rect(-100, o.yWater, 200, 100);
       ctx.clip();
-      ctx.globalAlpha = far ? 0.35 : 0.42;
-      draw();
+      ctx.globalAlpha = far ? 0.4 : 0.48;
+      draw(wet);
       ctx.restore();
-    } else draw();
+    } else draw(part);
   }
 
   /** the whole boat (back to front) into its buffer, in the boat's own bob and pitch */
@@ -294,11 +295,11 @@ export class Boats {
     // far arm
     {
       const el = ik(pose.shoulder, pose.handFar, UA, FA, 1);
-      this.part(c, set.upperFar, pose.shoulder[0] - 0.8, pose.shoulder[1] + 0.2, Math.atan2(el[1] - pose.shoulder[1], el[0] - pose.shoulder[0]));
+      this.part(c, set.upperFar[id], pose.shoulder[0] - 0.8, pose.shoulder[1] + 0.2, Math.atan2(el[1] - pose.shoulder[1], el[0] - pose.shoulder[0]));
       this.part(c, set.foreFar, el[0], el[1], Math.atan2(pose.handFar[1] - el[1], pose.handFar[0] - el[0]));
     }
     // scarf tails behind the head, then torso, head, legs
-    this.part(c, set.torso, pose.hip[0], pose.hip[1] + 1, pose.torsoAng);
+    this.part(c, set.torso[id], pose.hip[0], pose.hip[1] + 1, pose.torsoAng);
     this.part(c, set.tails[id], pose.neck[0] - Math.cos(pose.torsoAng) * 1.5, pose.neck[1] - Math.sin(pose.torsoAng) * 1.5, pose.tailAng + (speedFx > 0 ? 0 : 0));
     this.part(c, set.head[id], pose.neck[0], pose.neck[1], pose.headAng);
     this.part(c, set.thigh, pose.hip[0], pose.hip[1] - 0.5, Math.atan2(pose.knee[1] - pose.hip[1], pose.knee[0] - pose.hip[0]));
@@ -311,7 +312,7 @@ export class Boats {
     // near arm in front of the oar handle
     {
       const el = ik(pose.shoulder, pose.hand, UA, FA, 1);
-      this.part(c, set.upper, pose.shoulder[0], pose.shoulder[1], Math.atan2(el[1] - pose.shoulder[1], el[0] - pose.shoulder[0]));
+      this.part(c, set.upper[id], pose.shoulder[0], pose.shoulder[1], Math.atan2(el[1] - pose.shoulder[1], el[0] - pose.shoulder[0]));
       this.part(c, set.fore, el[0], el[1], Math.atan2(pose.hand[1] - el[1], pose.hand[0] - el[0]));
     }
     c.restore();
@@ -642,8 +643,15 @@ export class Boats {
     ctx.save();
     ctx.globalAlpha = a;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(204,176,128,1)';
-    ctx.lineWidth = 1.15;
+    // a soft cool shadow under the rope, then the rope itself as a slightly uneven brush stroke
+    ctx.strokeStyle = 'rgba(40,70,90,0.22)';
+    ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + 0.9);
+    ctx.quadraticCurveTo((sx + ex) / 2, (sy + ey) / 2 + sag + 0.9, ex, ey + 0.9);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(206,178,126,0.97)';
+    ctx.lineWidth = 1.25;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.quadraticCurveTo((sx + ex) / 2, (sy + ey) / 2 + sag, ex, ey);

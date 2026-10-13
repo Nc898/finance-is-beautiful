@@ -79,8 +79,8 @@ describe.each([false, true])('story (reduced=%s)', (reduced) => {
       const results = captionForBeat('results', inputs);
       const [cash, savings, invest] = allBoats(inputs, inputs.years);
       expect(results.primary).toContain(formatCurrency(inputs.start));
-      expect(results.secondary).toContain(formatCurrency(savings.nominal));
-      expect(results.secondary).toContain(formatCurrency(invest.nominal));
+      expect(results.secondary).toContain(formatCurrency(savings.real));
+      expect(results.secondary).toContain(formatCurrency(invest.real));
       if (inputs.inflation > 0) expect(results.primary).toContain(buysToday(cash.real));
     });
   });
@@ -141,10 +141,7 @@ describe('story captions', () => {
   it('gives the default results the documented numbers', () => {
     const c = captionForBeat('results', D);
     expect(c.primary).toBe('Still $10,000 in cash. It buys what $4,120 buys today.');
-    expect(c.secondary).toContain('$18,114');
-    expect(c.secondary).toContain('$7,463');
-    expect(c.secondary).toContain('$57,435');
-    expect(c.secondary).toContain('$23,662');
+    expect(c.secondary).toBe("In today's dollars, savings is worth $7,463 and investing $23,662.");
   });
 
   it('copy follows the scenario: still water, savings ahead, negative investing', () => {

@@ -13,7 +13,7 @@ import {
   rateToDraft,
 } from '../../src/river/app/store';
 import type { Reason } from '../../src/river/app/store';
-import { boatVisual, fitFactor } from '../../src/river/app/loop';
+import { BOAT_HALF_U, boatVisual, fitFactor } from '../../src/river/app/loop';
 import { STORY_DURATION } from '../../src/river/app/story';
 
 const D = DEFAULT_RIVER_INPUTS;
@@ -400,23 +400,23 @@ describe('scene frame values (boatVisual)', () => {
 
 describe('fitFactor (narrow screens)', () => {
   it('is 1 when the visible river is wider than the shared scale', () => {
-    expect(fitFactor({ min: -1.15, max: 1.15 })).toBe(1);
+    expect(fitFactor({ min: -1.4, max: 1.4 })).toBe(1);
     expect(fitFactor({ min: -2, max: 3 })).toBe(1);
   });
 
   it('shrinks every boat toward the dock by the same factor on a narrow slice, keeping them in view', () => {
     const k = fitFactor({ min: -0.67, max: 0.67 });
-    expect(k).toBeCloseTo(0.59, 2);
+    expect(k).toBeCloseTo(0.67 - BOAT_HALF_U, 6);
     const scale = riverScale(D);
     for (const snap of allBoats(D, 30)) {
       const v = boatVisual(snap, 0, scale / k, 0);
-      expect(Math.abs(v.u)).toBeLessThanOrEqual(0.67 - 0.08 + 1e-9);
+      expect(Math.abs(v.u)).toBeLessThanOrEqual(0.67 - BOAT_HALF_U + 1e-9);
       expect(v.u).toBeCloseTo((snap.logReal / scale) * k, 12);
     }
   });
 
   it('uses the tighter side and never collapses the river entirely', () => {
-    expect(fitFactor({ min: -0.5, max: 1.2 })).toBeCloseTo(0.42, 2);
+    expect(fitFactor({ min: -0.7, max: 1.2 })).toBeCloseTo(0.7 - BOAT_HALF_U, 6);
     expect(fitFactor({ min: -0.1, max: 0.1 })).toBe(0.35);
   });
 });
