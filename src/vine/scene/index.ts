@@ -170,7 +170,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       const placed: Placed[] = [
         { spr: makeBench(301, pq, SEAT_TOP), x: BENCH.minimum.x, y: BENCH.minimum.y },
         { spr: makeBench(307, pq, SEAT_TOP), x: BENCH.fixed.x, y: BENCH.fixed.y },
-        { spr: makeWheelbarrow(311, pq), x: 398, y: 614 },
+        { spr: makeWheelbarrow(311, pq), x: 214, y: 632 },
         {
           spr: makePumpkins(313, pq, [
             { dx: 0, dy: 0, r: 9, col: '#E0782E' },
@@ -180,14 +180,14 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
           x: 760,
           y: 492,
         },
-        { spr: makeHayBale(317, pq), x: 606, y: 612 },
+        { spr: makeHayBale(317, pq), x: 790, y: 628 },
         {
           spr: makePumpkins(331, pq, [
             { dx: 0, dy: 0, r: 7.5, col: '#E58A34' },
             { dx: 10, dy: 2, r: 5, col: '#D46C2C', kind: 'flat' },
           ]),
-          x: 636,
-          y: 622,
+          x: 842,
+          y: 640,
         },
         { spr: makeGardenWall('minimum', pq), x: WALL_STUB.minimum.x0, y: WALL_STUB.minimum.yBase },
         { spr: makeGardenWall('fixed', pq), x: WALL_STUB.fixed.x0, y: WALL_STUB.fixed.yBase },

@@ -43,11 +43,21 @@ export interface TreeSpec {
   trunk: number;
   mix: ReadonlyArray<readonly [string, number]>;
   haze: number;
+  /** how the tree is painted (trees.ts): world units per tree unit, maturity, foliage kit, mirrored */
+  look?: { k: number; m: number; kit: 'maple' | 'gold' | 'mixed'; flip?: boolean };
 }
+/**
+ * The crowns are Time to Grow's trees in autumn dress: a mature one is 560 tree units tall with its dome from
+ * 35 % up, so with k world units per tree unit the crown centre is 378 k above the foot, its half width 190 k and
+ * its half height 182 k. The two big ones stand just outside the cottages (their crowns spill into the sky
+ * over the corners); the third stands at the far end of the side yard, seen between the roofs.
+ */
 export const TREES: TreeSpec[] = [
-  { seed: 4101, x: 24, y: 350, cx: 22, cy: 178, rx: 112, ry: 96, trunk: 17, haze: 0, mix: [['crimson', 3], ['rust', 4], ['amber', 3], ['gold', 1]] },
-  { seed: 5207, x: 992, y: 352, cx: 986, cy: 172, rx: 118, ry: 100, trunk: 18, haze: 0, mix: [['gold', 4], ['amber', 4], ['rust', 2], ['olive', 1]] },
-  { seed: 6313, x: 500, y: 322, cx: 500, cy: 248, rx: 80, ry: 64, trunk: 10, haze: 0.2, mix: [['gold', 4], ['olive', 2], ['amber', 2]] },
+  { seed: 4101, x: -4, y: 470, cx: -2, cy: 175, rx: 146, ry: 140, trunk: 20, haze: 0, mix: [['crimson', 3], ['rust', 4], ['amber', 3], ['gold', 1]], look: { k: 0.78, m: 1, kit: 'maple' } },
+  { seed: 5207, x: 1004, y: 474, cx: 1004, cy: 172, rx: 150, ry: 144, trunk: 20, haze: 0, mix: [['gold', 4], ['amber', 4], ['rust', 2], ['olive', 1]], look: { k: 0.8, m: 1, kit: 'gold', flip: true } },
+  { seed: 6313, x: 520, y: 320, cx: 520, cy: 169, rx: 76, ry: 73, trunk: 10, haze: 0.14, mix: [['gold', 4], ['olive', 2], ['amber', 2]], look: { k: 0.4, m: 1, kit: 'mixed' } },
+  { seed: 3307, x: 462, y: 326, cx: 462, cy: 213, rx: 57, ry: 55, trunk: 8, haze: 0.2, mix: [['gold', 3], ['amber', 2]], look: { k: 0.3, m: 1, kit: 'gold' } },
+  { seed: 7733, x: 574, y: 330, cx: 574, cy: 228, rx: 51, ry: 49, trunk: 8, haze: 0.22, mix: [['rust', 2], ['amber', 2], ['crimson', 1]], look: { k: 0.27, m: 1, kit: 'maple', flip: true } },
 ];
 
 /** the pile's lawn spot, for convenience */

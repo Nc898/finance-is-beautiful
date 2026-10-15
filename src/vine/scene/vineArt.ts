@@ -7,7 +7,9 @@ import { Rand, clamp } from '../../scene/prng';
 import { deform, rgba, tracePoly } from '../../scene/watercolor';
 import { GROUND_Y } from './geom';
 import { COTTAGE } from './geom';
-import { INK, grain, newSprite, sway, tick, type Sprite } from './art';
+import { INK, newSprite, sway, tick, type Sprite } from './art';
+import { cpuSprite, finishSprite } from './propSprite';
+import { feather, mix } from '../../river/scene/boatInk';
 import { VineState, leafOpen, type VineModel } from './vineModel';
 import type { PlanId } from '../types';
 
@@ -61,7 +63,8 @@ function leafletPoly(len: number, wid: number, rnd: Rand): number[] {
 function paintLeaf(seed: number, q: number, color: number, shape: number): Sprite {
   const rnd = new Rand(seed);
   const [base, light, dark] = LEAF_COLS[color]!;
-  const { sp, ctx } = newSprite(30, 26, 15, 21, q);
+  const { sp, ctx } = cpuSprite(30, 26, 15, 21, q);
+  const accent = mix(base, color === 5 ? '#D4502A' : '#F4A83A', 0.6);
   // petiole
   ctx.strokeStyle = rgba('#7A3A34', 0.95);
   ctx.lineWidth = 0.95;
@@ -117,6 +120,14 @@ function paintLeaf(seed: number, q: number, color: number, shape: number): Sprit
     g.addColorStop(1, rgba(light, 0.26));
     ctx.fillStyle = g;
     ctx.fillRect(-wid * 1.2, -len * 1.05, wid * 2.4, len * 1.1);
+    // a second colour bleeding wet-in-wet near the tip, and the pale paper left at the lit shoulder
+    {
+      const bl: number[] = [];
+      const bx = rnd.range(-0.3, 0.3) * wid;
+      const by = -len * rnd.range(0.62, 0.86);
+      for (let k = 0; k < 8; k++) bl.push(bx + Math.cos(k * 0.785) * wid * 0.95 * rnd.range(0.8, 1.15), by + Math.sin(k * 0.785) * wid * 1.05 * rnd.range(0.8, 1.15));
+      feather(ctx, bl, accent, 0.5, rnd, 3, 1, 0.45, 0.12);
+    }
     // veins
     ctx.strokeStyle = rgba('#FFE2C0', 0.42);
     ctx.lineWidth = 0.34;
@@ -132,6 +143,17 @@ function paintLeaf(seed: number, q: number, color: number, shape: number): Sprit
     }
     ctx.stroke();
     ctx.restore();
+    // pigment pooled just inside the edge
+    ctx.save();
+    tracePoly(ctx, poly);
+    ctx.clip();
+    ctx.strokeStyle = rgba(dark, 0.16);
+    for (let k = 0; k < 2; k++) {
+      ctx.lineWidth = 0.5 + k * 0.5;
+      tracePoly(ctx, deform(poly, rnd, 1, 0.012));
+      ctx.stroke();
+    }
+    ctx.restore();
     ctx.strokeStyle = rgba(dark, 0.7);
     ctx.lineWidth = 0.34;
     ctx.setLineDash([3.2, 0.8, 1.6, 0.7]);
@@ -140,8 +162,7 @@ function paintLeaf(seed: number, q: number, color: number, shape: number): Sprit
     ctx.setLineDash([]);
     ctx.restore();
   }
-  grain(sp.cv, seed, 0.9, Math.max(1, Math.round(q * 0.5)));
-  return sp;
+  return finishSprite(sp, seed, q, 0.8);
 }
 
 function paintBerries(q: number): Sprite {

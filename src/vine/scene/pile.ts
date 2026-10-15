@@ -1,35 +1,94 @@
 /**
- * The clippings pile: a heap of red and brown leaves whose volume tracks `pile` (interest paid so far over the
- * starting balance; both cottages share one scale). Leaves sit on the surface of a mound in a fixed seeded
- * arrangement; the heap's width, height and leaf count follow the volume continuously, and each leaf scales in
- * as the heap reaches it, so growth is smooth. The picture is cached and repainted only when the volume has
- * moved enough to show. Past a volume of 3 the first heap stops growing and a second one starts beside it.
+ * The clippings pile: a raked heap of autumn leaves whose volume tracks `pile` (interest paid so far over the
+ * starting balance; both cottages share one scale). The heap is built from hundreds of individual painted leaves
+ * laid over a lumpy dome: each leaf lies on the surface (foreshortened by the slope it sits on, turned a little
+ * downhill), is lit by the sun on the upper left (light, middle or shaded tone), and casts a small shadow on the
+ * ones under it. The leaves are a fixed, evenly spread sequence, so at any volume the visible prefix covers the
+ * whole dome and the heap grows smoothly as leaves are added and the dome swells. A few leaves have tumbled off
+ * the foot. The picture is cached and repainted only when the volume has moved enough to show. Past a volume of 3
+ * the first heap stops growing and a second one starts beside it.
  */
 import { Rand, clamp } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
+import { feather } from '../../river/scene/boatInk';
 import type { PlanId } from '../types';
-import { LEAF_GROUPS, type LeafSet } from './leaves';
+import { LEAF_GROUPS, LEAF_LEN, type LeafSet } from './leaves';
 
 export const HEAP_MAX = 3;
 /** half width and height of one heap of volume v */
 export const heapR = (v: number): number => 46 * Math.sqrt(Math.max(0, v));
-export const heapH = (v: number): number => 30 * Math.pow(Math.max(0, v), 0.45);
+export const heapH = (v: number): number => 34 * Math.pow(Math.max(0, v), 0.48);
 
-const NMAX = 460;
-const RM = heapR(HEAP_MAX) + 16;
-const HM = heapH(HEAP_MAX) + 14;
-const DEPTH = 0.17;
+const GN = 1500;
+const GROUND_SHARE = 0.15;
+const RM = heapR(HEAP_MAX) * 1.34 + 14;
+const HM = heapH(HEAP_MAX) + 26;
+const DEPTH = 0.24;
+/** the camera looks down on the lawn at about this elevation (sets how much a flat leaf is squashed) */
+const ELEV = (30 * Math.PI) / 180;
+const VV = [0, Math.sin(ELEV), Math.cos(ELEV)] as const;
+const UU = [0, Math.cos(ELEV), -Math.sin(ELEV)] as const;
+const LIGHT = norm3(-0.62, 0.7, 0.34);
+
+function norm3(x: number, y: number, z: number): [number, number, number] {
+  const l = Math.hypot(x, y, z) || 1;
+  return [x / l, y / l, z / l];
+}
 
 interface HLeaf {
+  /** footprint position, -1…1 (ground leaves reach beyond 1) */
   x: number;
   z: number;
+  /** height of the dome there, 0…1 */
+  hh: number;
+  /** the way the tip points (radians, in the leaf's own plane) */
   rot: number;
   group: number;
   shape: number;
-  rank: number;
   tone: number;
-  hh: number;
+  /** the compression of the leaf as seen: direction (radians) and ratio */
+  phi: number;
+  cc: number;
+  rank: number;
+  ground: boolean;
+  size: number;
   sy: number;
+}
+
+/** the heap's radial profile, 0�1 */
+const prof = (r: number): number => Math.pow(Math.max(0, 1 - Math.pow(r, 2.3)), 0.6);
+/** inverse of the surface-area distribution over the footprint radius, so leaves lie evenly over the SURFACE of the dome */
+const AREA_CDF: number[] = (() => {
+  const N = 160;
+  const c = [0];
+  for (let i = 1; i <= N; i++) {
+    const r = (i - 0.5) / N;
+    const d = ((prof(Math.min(0.9995, r + 0.004)) - prof(Math.max(0, r - 0.004))) / 0.008) * 0.74;
+    c.push(c[i - 1]! + r * Math.sqrt(1 + d * d) / N);
+  }
+  const t = c[N]!;
+  return c.map((v) => v / t);
+})();
+function radiusAt(u: number): number {
+  let lo = 0;
+  let hi = AREA_CDF.length - 1;
+  while (hi - lo > 1) {
+    const m = (lo + hi) >> 1;
+    if (AREA_CDF[m]! < u) lo = m;
+    else hi = m;
+  }
+  const a = AREA_CDF[lo]!;
+  const b = AREA_CDF[hi]!;
+  return (lo + (b > a ? (u - a) / (b - a) : 0)) / (AREA_CDF.length - 1);
+}
+
+/** the dome's height at a footprint point, 0…1, a lumpy heap that leans a little toward the upper left */
+function dome(x: number, z: number): number {
+  const rr = Math.hypot(x, z);
+  if (rr >= 1) return 0;
+  const lump = 1 + 0.1 * Math.sin(3.1 * x + 1.0) * Math.cos(2.3 * z + 0.4) + 0.06 * Math.sin(5.2 * (x + z) + 2.0);
+  const lean = 1 + 0.12 * (-x * 0.7 - z * 0.3);
+  return prof(rr) * lump * lean;
 }
 
 export class PileView {
@@ -46,7 +105,7 @@ export class PileView {
     this.q = q;
     this.dir = id === 'minimum' ? 1 : -1;
     const rnd = new Rand(id === 'minimum' ? 12011 : 12037);
-    const w = [0.22, 0.18, 0.26, 0.2, 0.14];
+    const w = [0.14, 0.18, 0.26, 0.06, 0.24, 0.12];
     const pickGroup = () => {
       let r = rnd.next();
       for (let g = 0; g < w.length; g++) {
@@ -55,29 +114,69 @@ export class PileView {
       }
       return 2;
     };
-    // a seeded scatter over the mound's footprint; rank decides when each leaf is reached by the growing heap
-    const raw: Array<Omit<HLeaf, 'rank'>> = [];
-    for (let i = 0; i < NMAX; i++) {
-      const rr = Math.sqrt(rnd.next()) * 0.98;
-      const th = rnd.range(0, Math.PI * 2);
+    // colour patches: neighbouring leaves tend to share a colour, as a raked heap does
+    const patchOrder = [2, 4, 1, 2, 0, 5, 4, 3].map((g) => g);
+    const ph1 = rnd.range(0, 6.28);
+    const ph2 = rnd.range(0, 6.28);
+    const patch = (x: number, z: number): number => {
+      const f = Math.sin(2.3 * x + ph1) + Math.sin(2.9 * z - ph2) + 0.7 * Math.sin(3.8 * (x + z) + ph1 * 1.7);
+      return patchOrder[clamp(Math.floor(((f + 2.7) / 5.4) * patchOrder.length), 0, patchOrder.length - 1)]!;
+    };
+    const hRatio = 0.74;
+    const dh = 0.02;
+    const build = (i: number, ground: boolean): HLeaf => {
+      // a low-discrepancy sequence: every prefix is spread evenly over the disc
+      const u = (0.5 + i * 0.7548776662466927 + rnd.range(-0.02, 0.02)) % 1;
+      const wv = (0.5 + i * 0.5698402909980532 + rnd.range(-0.02, 0.02)) % 1;
+      const rr = ground ? (i % 5 < 3 ? 0.9 + 0.12 * u : 1.03 + 0.3 * u) : radiusAt(u) * 0.99;
+      const th = wv * Math.PI * 2;
       const x = Math.cos(th) * rr;
       const z = Math.sin(th) * rr;
-      const hh = Math.max(0, 1 - x * x - z * z);
-      const lit = x < -0.1 && hh > 0.35;
-      const shade = x > 0.38 || z > 0.45;
-      let tone = lit ? 0 : shade ? 2 : 1;
-      if (rnd.chance(0.2)) tone = clamp(tone + (rnd.chance(0.5) ? 1 : -1), 0, 2);
-      raw.push({ x, z, rot: rnd.range(0, Math.PI * 2), group: pickGroup(), shape: rnd.int(0, 2), tone, hh: Math.pow(hh, 0.8), sy: 0 });
-    }
-    // reach order: the centre first, the rim last (a growing heap fills outward and upward)
-    const reach = raw.map((l, i) => ({ i, k: Math.hypot(l.x, l.z) * 0.8 + rnd.next() * 0.35 }));
-    reach.sort((a, b) => a.k - b.k);
-    const rankOf = new Array<number>(NMAX);
-    reach.forEach((r, n) => (rankOf[r.i] = n));
-    const withRank = raw.map((l, i) => ({ ...l, rank: rankOf[i]!, sy: l.z * DEPTH - l.hh }));
+      const hh = dome(x, z);
+      // the slope normal (world), for the light and the foreshortening
+      let nx = 0;
+      let ny = 1;
+      let nz = 0;
+      if (!ground || rr < 1.0) {
+        const gx = ((dome(x + dh, z) - dome(x - dh, z)) / (2 * dh)) * hRatio;
+        const gz = ((dome(x, z + dh) - dome(x, z - dh)) / (2 * dh)) * hRatio;
+        [nx, ny, nz] = norm3(-gx, 1, -gz);
+      }
+      const d = nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2];
+      let tone = d > 0.7 ? 0 : d > 0.1 ? 1 : 2;
+      if (tone === 2 && rnd.chance(0.4)) tone = 1;
+      if (rnd.chance(0.16)) tone = clamp(tone + (rnd.chance(0.5) ? 1 : -1), 0, 2);
+      if (ground && rr >= 1.0) tone = rnd.chance(0.6) ? 1 : 0;
+      const nv = nx * VV[0] + ny * VV[1] + nz * VV[2];
+      const nu = nx * UU[0] + ny * UU[1] + nz * UU[2];
+      const cc = clamp(Math.abs(nv), 0.28, 1);
+      const phi = Math.atan2(-nu, nx);
+      const outA = Math.atan2(x, -(z * DEPTH * 3 - hh * 0.3 + 0.001));
+      const rot = rnd.chance(ground ? 0.2 : 0.3) ? outA + rnd.gauss() * 0.7 : rnd.range(0, Math.PI * 2);
+      const group = rnd.chance(0.5) ? patch(x, z) : pickGroup();
+      return {
+        x,
+        z,
+        hh,
+        rot,
+        group,
+        shape: rnd.int(0, 2),
+        tone,
+        phi,
+        cc: ground && rr >= 1.0 ? 0.5 : cc,
+        rank: i,
+        ground,
+        size: rnd.range(0.84, 1.14),
+        sy: z * DEPTH * 46 - hh * 34,
+      };
+    };
+    const list: HLeaf[] = [];
+    const nG = Math.round(GN * GROUND_SHARE);
+    for (let i = 0; i < GN - nG; i++) list.push(build(i, false));
+    for (let i = 0; i < nG; i++) list.push(build(i + 5, true));
     // paint order: back and high first, front and low last
-    withRank.sort((a, b) => a.sy - b.sy);
-    this.leaves = withRank;
+    list.sort((a, b) => a.sy - b.sy);
+    this.leaves = list;
   }
 
   setSprites(spr: LeafSet, q: number): void {
@@ -127,64 +226,91 @@ export class PileView {
     const R = heapR(v);
     const Hh = heapH(v);
     const rnd = new Rand(900 + k);
-    // contact shadow, to the lower right
-    ctx.save();
-    ctx.translate(R * 0.16, R * 0.05);
-    ctx.scale(1, DEPTH + 0.05);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 1.18);
-    g.addColorStop(0, 'rgba(54,40,44,0.46)');
-    g.addColorStop(0.7, 'rgba(54,40,44,0.28)');
-    g.addColorStop(1, 'rgba(54,40,44,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, R * 1.18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    // the dark mass under the leaves so no gap shows paper
+    // the dome's under-wash, a warm brown seen between the leaves (lighter high up and on the left, deep at the foot)
     const poly: number[] = [];
-    const n = 28;
+    const n = 30;
     for (let i = 0; i <= n; i++) {
-      const a = (i / n) * Math.PI;
-      poly.push(Math.cos(a) * R * 0.97, -Math.pow(Math.sin(a), 0.85) * Hh * 0.94 + R * DEPTH * 0.45);
+      const u = -1 + (2 * i) / n;
+      poly.push(u * R * 0.97, -dome(u * 0.97, 0) * Hh * 0.96 + R * DEPTH * 0.1);
     }
     for (let i = n; i >= 0; i--) {
-      const a = (i / n) * Math.PI;
-      poly.push(Math.cos(a) * R * 0.95, R * DEPTH * (0.55 + 0.45 * Math.sin(a)));
+      const u = -1 + (2 * i) / n;
+      poly.push(u * R * 0.95, R * DEPTH * Math.sqrt(Math.max(0, 1 - u * u)) * 0.62);
     }
-    ctx.fillStyle = rgba('#5A2E24', 0.96);
-    tracePoly(ctx, deform(poly, rnd, 1, 0.01));
+    const under = deform(poly, rnd, 1, 0.012);
+    const ug = ctx.createLinearGradient(-R * 0.4, -Hh, R * 0.3, R * DEPTH);
+    ug.addColorStop(0, '#CC8446');
+    ug.addColorStop(0.6, '#B0663A');
+    ug.addColorStop(1, '#84483A');
+    ctx.fillStyle = ug;
+    tracePoly(ctx, under);
     ctx.fill();
-    // the leaves reached so far; the one at the frontier scales in
-    const area = 1.4 * 1.57 * R * Hh;
-    const sz = 0.78 + 0.22 * Math.sqrt(v);
-    const nLeaves = clamp((3.2 * area) / (this.spr.size * sz * 0.62 * this.spr.size * sz * 0.5), 0, NMAX);
+    // the leaves reached so far; each one scales in as the heap reaches it
     const size = this.spr.size;
+    const len = 10.5 * (0.82 + 0.18 * Math.sqrt(v));
+    const area = 1.57 * (R * Hh * 0.85 + R * R * DEPTH);
+    const nLeaves = clamp((3.3 * area) / (0.27 * len * len), 0, GN * (1 - GROUND_SHARE));
+    const nGround = nLeaves * GROUND_SHARE * 1.1;
+    const sc = len / size;
     for (const l of this.leaves) {
-      const vis = clamp((nLeaves - l.rank) / 2, 0, 1);
+      const vis = clamp(((l.ground ? nGround : nLeaves) - l.rank) / 2.5, 0, 1);
       if (vis <= 0.01) continue;
       const px = l.x * R;
       const py = l.z * R * DEPTH - l.hh * Hh;
       const sp = this.spr.spr[l.group]![l.tone]![l.shape]!;
-      const s = (size / sp.w) * (sp.w / 14) * sz * (0.35 + 0.65 * vis);
+      const s = sc * l.size * (0.4 + 0.6 * vis) * (l.ground ? 0.9 : 1);
+      // the compression of the leaf along the direction of its surface's tilt, then its turn about its own axis
+      const cp = Math.cos(l.phi);
+      const sp2 = Math.sin(l.phi);
+      const m00 = cp * cp + l.cc * sp2 * sp2;
+      const m01 = (1 - l.cc) * sp2 * cp;
+      const m11 = sp2 * sp2 + l.cc * cp * cp;
       const co = Math.cos(l.rot) * s;
       const si = Math.sin(l.rot) * s;
-      ctx.setTransform(q * co, q * si, -q * si * 0.78, q * co * 0.78, (ox + px) * q, (oy + py) * q);
+      const a = m00 * co + m01 * si;
+      const b = m01 * co + m11 * si;
+      const c = -m00 * si + m01 * co;
+      const d = -m01 * si + m11 * co;
+      // a small shadow under the leaf, on the ones below it
+      ctx.setTransform(q, 0, 0, q, (ox + px) * q, (oy + py) * q);
+      ctx.fillStyle = l.ground ? 'rgba(44,28,44,0.16)' : `rgba(52,22,30,${0.13 + 0.05 * l.tone})`;
+      ctx.beginPath();
+      ctx.ellipse(1.1 * s * 1.2, 1.5 * s * 1.1, 4.3 * s, 2.6 * s, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.setTransform(q * a, q * b, q * c, q * d, (ox + px) * q, (oy + py) * q);
       ctx.drawImage(sp.cv, -sp.px, -sp.py, sp.w, sp.h);
     }
     ctx.setTransform(q, 0, 0, q, ox * q, oy * q);
-    // the sun on the upper left of the heap, a little shade low on the right
+    // the sun on the upper left of the heap and the shade low on the right, as washes over the finished leaves
     ctx.save();
     ctx.globalCompositeOperation = 'source-atop';
-    const lg = ctx.createRadialGradient(-R * 0.35, -Hh * 0.85, 0, -R * 0.35, -Hh * 0.85, R * 1.1);
-    lg.addColorStop(0, 'rgba(255,230,170,0.24)');
-    lg.addColorStop(1, 'rgba(255,230,170,0)');
+    const lg = ctx.createRadialGradient(-R * 0.38, -Hh * 0.95, 0, -R * 0.38, -Hh * 0.95, R * 1.0);
+    lg.addColorStop(0, 'rgba(255,232,170,0.26)');
+    lg.addColorStop(1, 'rgba(255,232,170,0)');
     ctx.fillStyle = lg;
-    ctx.fillRect(-R * 1.3, -Hh * 1.4, R * 2.6, Hh * 1.8 + R * DEPTH * 2);
-    const sg = ctx.createLinearGradient(R * 0.2, -Hh, R * 0.9, R * DEPTH);
-    sg.addColorStop(0, 'rgba(60,24,40,0)');
-    sg.addColorStop(1, 'rgba(60,24,40,0.3)');
+    ctx.fillRect(-R * 1.5, -Hh * 1.4, R * 3, Hh * 1.8 + R * DEPTH * 2);
+    const sg = ctx.createLinearGradient(R * 0.1, -Hh, R * 0.95, R * DEPTH);
+    sg.addColorStop(0, 'rgba(70,28,50,0)');
+    sg.addColorStop(1, 'rgba(70,28,50,0.2)');
     ctx.fillStyle = sg;
-    ctx.fillRect(-R * 1.3, -Hh * 1.4, R * 2.6, Hh * 1.8 + R * DEPTH * 2);
+    ctx.fillRect(-R * 1.5, -Hh * 1.4, R * 3, Hh * 1.8 + R * DEPTH * 2);
+    // the foot of the heap is darker, tucked in shadow
+    const fg = ctx.createLinearGradient(0, -Hh * 0.3, 0, R * DEPTH * 0.9);
+    fg.addColorStop(0, 'rgba(60,24,40,0)');
+    fg.addColorStop(1, 'rgba(60,24,40,0.17)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(-R * 1.5, -Hh * 0.3, R * 3, Hh * 0.3 + R * DEPTH * 1.2);
+    ctx.restore();
+    // the contact shadow, behind everything, to the lower right
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    const sp: number[] = [];
+    for (let i = 0; i < 22; i++) {
+      const t = (i / 22) * Math.PI * 2;
+      const j = 1 + 0.06 * Math.sin(t * 3 + k);
+      sp.push(R * 0.2 + Math.cos(t) * R * 1.12 * j, R * DEPTH * 0.18 + Math.sin(t) * R * DEPTH * 0.95 * j);
+    }
+    feather(ctx, sp, '#3C2A40', 0.44, rnd, 7, 1, 0.45, 0.04);
     ctx.restore();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -212,3 +338,5 @@ export class PileView {
 }
 
 void LEAF_GROUPS;
+void LEAF_LEN;
+void rgba;
