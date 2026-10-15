@@ -5,7 +5,7 @@
  * lawn, paths, fence, the big trees), the two cottages, the vine's leaf sprites, the small loose leaves, and the
  * props. Per frame: the geese, the world, the cottages and their chimney smoke, the two vines, the clippings
  * falling from the shears and lying at the wall foot, then (sorted by depth) the piles, benches, props and the
- * gardeners, and finally the leaves drifting down from the trees.
+ * gardeners; leaves fall from the trees' painted foliage (behind the cottages for the side-yard trees).
  *
  * How the vine and the gardener work together (the scene decides WHAT, the gardener decides HOW):
  * - Every month the vine grows back by the month's interest: new shoots unfurl at its tips.
@@ -31,7 +31,7 @@ import { VineView, buildLeafSprites, toWorldX, toWorldY, wallXf, type LeafSprite
 import { buildLeafSet, type LeafSet } from './leaves';
 import { PileView } from './pile';
 import { makeBench, makeGardenWall, makeHayBale, makePumpkins, makeWheelbarrow } from './props';
-import { WALL_STUB, TREES } from './layout';
+import { WALL_STUB } from './layout';
 import { wind, type Sprite } from './art';
 import { Clippings, Drifting } from './fall';
 import { createGardener, SEAT_TOP } from './gardener';
@@ -201,9 +201,8 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
         if (!gd.pile) gd.pile = new PileView(id, lq);
         gd.pile.setSprites(lo, lq);
       }
-      const driftSprites: Sprite[] = [];
-      for (const g of lo.spr) for (let t = 0; t < 2; t++) for (const s of g[t]!) driftSprites.push(s);
-      const dr = drift ?? new Drifting(TREES.map((t) => ({ cx: t.cx, cy: t.cy, rx: t.rx, ry: t.ry })), driftSprites, 16);
+      // leaves fall from the painted foliage of the trees as they are at this size
+      const dr = new Drifting(W.foliage, lo, 18);
       // swap everything in together: the previous size keeps rendering until the new caches are complete
       cam = c;
       canvas.width = Math.round(c.cssW * c.dpr);
@@ -250,8 +249,6 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     refreshExtent(gd.st);
     const feet = gd.g!.feet();
     const sh = gd.g!.shears();
-    // which way the gardener faces: the shears are held out in front
-    const face = sh.x >= feet.x ? 1 : -1;
     let best: number | null = null;
     let bs = Infinity;
     for (const c of gd.st.candidates()) {
@@ -259,18 +256,15 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       if (w.y < REACH_TOP + 3) continue;
       const fit = Math.abs(Math.log(Math.max(c.mass, 1e-5) / chunk));
       const dx = Math.abs(w.x - feet.x);
-      // growth behind the gardener means lowering the arms, turning round and raising them again
-      const behindBack = (w.x - feet.x) * face < -2 ? 45 : 0;
+      // within a side-step (about 28 units) the gardener keeps the shears up; further means arms down, a pivot,
+      // a walk and a pivot back to the wall, so it is worth it only for growth that really needs cutting
+      const move = dx > 28 ? (behind ? 50 : 70) : 0;
       // only growth that can be cut whole from where the shears will be
       if (!withinArm(gd, c.i, w)) continue;
       const ds = Math.hypot(w.x - sh.x, w.y - sh.y);
       // keeping up: the next stem is the one the hand reaches soonest (near the shears, without a walk);
       // behind: a branch big enough to make up the difference, even if it means a few steps to reach it
-      const s =
-        behindBack +
-        (behind
-          ? (dx > 34 ? 80 : 0) + fit * 12 + ds * 0.2 + (w.y < REACH_TOP + 30 ? 6 : 0)
-          : ds * 0.45 + (dx > 34 ? 70 : 0) + fit * 10 + (w.y < REACH_TOP + 30 ? 6 : 0));
+      const s = move + (behind ? fit * 12 + ds * 0.2 : ds * 0.45 + fit * 10) + (w.y < REACH_TOP + 30 ? 6 : 0);
       if (s < bs) {
         bs = s;
         best = c.i;
@@ -517,6 +511,11 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
         tend(gd, cv, mps, dt, t, reduced);
         gd.pile.update(cv.pile, dt, reduced);
       }
+      // ---- leaves falling from the trees in the side yard, behind the cottages
+      if (drift && !reduced) {
+        if (dt > 0) drift.update(dt, t);
+        drift.draw(ctx, true);
+      }
       // ---- cottages, smoke, vines, clippings
       for (const id of PLANS) {
         const s = cottages[id].sprite;
@@ -555,11 +554,8 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       }
       items.sort((a, b) => a.y - b.y);
       for (const it of items) it.draw();
-      // ---- leaves drifting down from the trees, in front of everything
-      if (drift && !reduced) {
-        if (dt > 0) drift.update(dt, t);
-        drift.draw(ctx);
-      }
+      // ---- leaves falling from the big trees, in front
+      if (drift && !reduced) drift.draw(ctx, false);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     },
     labelAnchor(id) {

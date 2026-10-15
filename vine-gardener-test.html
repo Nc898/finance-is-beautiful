@@ -35,10 +35,14 @@
 <script type="module">
 import { createGardener } from '/src/vine/scene/gardener.ts';
 import { COTTAGE, PATH_Y, PILE, BENCH, GROUND_Y, WORLD } from '/src/vine/scene/geom.ts';
+import { SEAT_TOP } from '/src/vine/scene/gardener.ts';
+import { makeBench } from '/src/vine/scene/props.ts';
 
 const cv = document.getElementById('cv');
 const $ = (id) => document.getElementById(id);
 const Q = 3;
+let benchSpr = null;
+const benchSprite = () => (benchSpr ??= makeBench(301, Q, SEAT_TOP));
 
 /* ------------------------------------------------------------ state */
 const H = (window.H = {
@@ -99,12 +103,8 @@ function backdrop(c, view) {
   c.ellipse(pl.x, pl.y, 34, 18, 0, Math.PI, 0);
   c.fill();
   const b = BENCH[H.id];
-  c.fillStyle = '#8A6A44';
-  c.fillRect(b.x - 34, b.y - 31, 68, 5);
-  c.fillRect(b.x - 30, b.y - 26, 4, 26);
-  c.fillRect(b.x + 26, b.y - 26, 4, 26);
-  c.fillStyle = '#6E5236';
-  c.fillRect(b.x - 34, b.y - 62, 68, 4);
+  const bs = benchSprite();
+  if (bs) c.drawImage(bs.cv, b.x - bs.px, b.y - bs.py, bs.w, bs.h);
   if (H.grid) {
     c.lineWidth = 0.5;
     for (let x = Math.floor(view.x0 / 10) * 10; x < view.x1; x += 10) {
@@ -156,7 +156,7 @@ H.render = (c, view, opts = {}) => {
     const d = H.g.debug();
     for (const ct of d.contacts) {
       c.fillStyle = ct.grounded ? '#f40' : '#07f';
-      for (const p of [ct.heel, ct.toe]) { c.beginPath(); c.arc(p[0], p[1], 0.7, 0, 7); c.fill(); }
+      for (const p of [ct.heel, ct.toe]) { c.beginPath(); c.arc(p.x, p.y, 0.7, 0, 7); c.fill(); }
     }
   }
   c.restore();
@@ -237,6 +237,7 @@ H.measure = (frames, drive, dt = 1 / 60) => {
   let lastSnips = H.g.snips, lastStrokes = H.g.strokes;
   const t0 = H.frame;
   let maxSpeed = 0;
+  let prevElbow = null, elbowTurn = 0, elbowTurnAt = -1, prevYaw = null, maxYawStep = 0;
   for (let f = 0; f < frames; f++) {
     if (drive) drive(f);
     H.advance(1, dt);
@@ -256,15 +257,24 @@ H.measure = (frames, drive, dt = 1 / 60) => {
       }
       prev[j] = J[j];
     }
-    const turning = d.state.yaw > 0.02 && d.state.yaw < Math.PI - 0.02;
+    // joints with a sign: how far each elbow's direction off the shoulder-hand line turns in a frame (a flip is a big turn)
+    if (prevElbow) for (let k = 0; k < 2; k++) {
+      const a0 = prevElbow[k], a1 = d.elbowDir[k];
+      const dp = Math.max(-1, Math.min(1, a0[0] * a1[0] + a0[1] * a1[1] + a0[2] * a1[2]));
+      const ang = Math.acos(dp);
+      if (ang > elbowTurn) { elbowTurn = ang; elbowTurnAt = f; }
+    }
+    prevElbow = d.elbowDir.map((v) => v.slice());
+    if (prevYaw !== null) { const dy = Math.abs(d.state.yaw - prevYaw); if (dy > maxYawStep) { maxYawStep = dy; } }
+    prevYaw = d.state.yaw;
     d.contacts.forEach((ct, i) => {
       for (const [nm, p] of [['heel', ct.heel], ['toe', ct.toe]]) {
         const key = i + nm;
-        const on = !turning && ct.grounded && Math.abs(p[1] - ct.gy) < 0.35;
+        const on = ct.grounded && Math.abs(p.h) < 0.35;
         if (on) {
-          if (!hold[key]) hold[key] = { x: p[0], y: p[1], f };
+          if (!hold[key]) hold[key] = { x: p.x, y: p.y, f };
           else {
-            const s = Math.hypot(p[0] - hold[key].x, p[1] - hold[key].y);
+            const s = Math.hypot(p.x - hold[key].x, p.y - hold[key].y);
             if (s > slide) { slide = s; slideAt = { f, key, from: hold[key].f }; }
           }
         } else hold[key] = null;
@@ -274,7 +284,7 @@ H.measure = (frames, drive, dt = 1 / 60) => {
     if (H.g.strokes !== lastStrokes) { strokes.push(f); lastStrokes = H.g.strokes; }
   }
   const r = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, +(+v).toFixed(2)]));
-  return { frames: H.frame - t0, maxV: r(maxV), maxA: r(maxA), maxVAt, maxAAt, slide: +slide.toFixed(3), slideAt, snips, strokes, maxSpeed: +maxSpeed.toFixed(1) };
+  return { frames: H.frame - t0, maxV: r(maxV), maxA: r(maxA), maxVAt, maxAAt, slide: +slide.toFixed(3), slideAt, snips, strokes, maxSpeed: +maxSpeed.toFixed(1), elbowTurn: +elbowTurn.toFixed(3), elbowTurnAt, maxYawStep: +maxYawStep.toFixed(4) };
 };
 
 /* ------------------------------------------------------------ interactive */

@@ -129,6 +129,13 @@ export class Mover {
   get moving(): boolean {
     return this.t < this.T;
   }
+  /** where the current glide will be `dt` seconds from now (the target if it has ended by then) */
+  peek(dt: number): number {
+    if (this.t >= this.T) return this.v;
+    const t = this.t + dt;
+    if (t >= this.T) return this.target;
+    return this.x0 + this.v0 * t + 0.5 * this.a0 * t * t + this.c3 * t * t * t + this.c4 * t * t * t * t + this.c5 * t * t * t * t * t;
+  }
   update(dt: number): number {
     if (this.t >= this.T) return this.v;
     this.t = Math.min(this.T, this.t + dt);
@@ -203,3 +210,127 @@ export class Spring1 {
 
 /** shortest-arc interpolation of angles */
 export const lerpAngle = (a: number, b: number, t: number): number => a + wrapPi(b - a) * t;
+
+/* ------------------------------------------------------------------ 3D (x right, z toward the viewer, h up) */
+
+/** a point or vector in the figure's 3D frame: [x right, z toward the viewer, h up] */
+export type V3 = [number, number, number];
+
+export const v3 = (x = 0, z = 0, h = 0): V3 => [x, z, h];
+export const add3 = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+export const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const scale3 = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
+/** a + b * k */
+export const madd3 = (a: V3, b: V3, k: number): V3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+export const dot3 = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const len3 = (a: V3): number => Math.hypot(a[0], a[1], a[2]);
+export const lerp3 = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+export const norm3 = (a: V3): V3 => {
+  const l = len3(a) || 1;
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+export const cross3 = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/** a direction swung from a to b about the origin (both unit vectors): the shortest arc, with a stable axis if they oppose */
+export function slerp3(a: V3, b: V3, t: number): V3 {
+  const d = clamp(dot3(a, b), -1, 1);
+  if (d > 0.9995) return norm3(lerp3(a, b, t));
+  let ang = Math.acos(d);
+  let axis = cross3(a, b);
+  let al = len3(axis);
+  if (al < 1e-4) {
+    axis = Math.abs(a[2]) < 0.9 ? cross3(a, [0, 0, 1]) : cross3(a, [1, 0, 0]);
+    al = len3(axis);
+    ang = Math.PI;
+  }
+  axis = scale3(axis, 1 / al);
+  // rotate a about axis by ang * t (Rodrigues)
+  const th = ang * t;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  const kxa = cross3(axis, a);
+  const kd = dot3(axis, a);
+  return [a[0] * c + kxa[0] * s + axis[0] * kd * (1 - c), a[1] * c + kxa[1] * s + axis[1] * kd * (1 - c), a[2] * c + kxa[2] * s + axis[2] * kd * (1 - c)];
+}
+
+/** a point swung round `pivot` from a to b: the direction by shortest arc, the distance blended */
+export function swing3(pivot: V3, a: V3, b: V3, t: number): V3 {
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  const va = sub3(a, pivot);
+  const vb = sub3(b, pivot);
+  const la = len3(va) || 1e-6;
+  const lb = len3(vb) || 1e-6;
+  const dir = slerp3(scale3(va, 1 / la), scale3(vb, 1 / lb), t);
+  return madd3(pivot, dir, lerp(la, lb, t));
+}
+
+export interface IK3Out {
+  joint: V3;
+  end: V3;
+  reach: boolean;
+}
+
+/**
+ * Two-bone IK in 3D. Root r, target t, bone lengths a (root to joint) and b (joint to end). The joint is put on
+ * the side of the root-to-target line that the `pole` vector points to (a knee forward, an elbow back and out).
+ * If the target is out of reach the chain straightens toward it; `end` is where the chain actually ends.
+ */
+export function ik3(r: V3, t: V3, a: number, b: number, pole: V3, out: IK3Out): void {
+  let dx = t[0] - r[0];
+  let dz = t[1] - r[1];
+  let dh = t[2] - r[2];
+  let d = Math.hypot(dx, dz, dh);
+  const max = (a + b) * 0.9995;
+  const min = Math.abs(a - b) * 1.001 + 0.02;
+  out.reach = d <= max;
+  if (d > max) {
+    const k = max / d;
+    dx *= k;
+    dz *= k;
+    dh *= k;
+    d = max;
+  } else if (d < min) {
+    if (d < 1e-6) {
+      dx = 0;
+      dz = 0;
+      dh = -1;
+      d = 1;
+    }
+    const k = min / d;
+    dx *= k;
+    dz *= k;
+    dh *= k;
+    d = min;
+  }
+  const ux = dx / d;
+  const uz = dz / d;
+  const uh = dh / d;
+  // the pole's part across the root-to-target line
+  const pd = pole[0] * ux + pole[1] * uz + pole[2] * uh;
+  let px = pole[0] - pd * ux;
+  let pz = pole[1] - pd * uz;
+  let ph = pole[2] - pd * uh;
+  let pl = Math.hypot(px, pz, ph);
+  if (pl < 1e-4) {
+    // the pole lies along the line: any perpendicular will do, but a steady one
+    if (Math.abs(uh) < 0.9) {
+      px = -uz;
+      pz = ux;
+      ph = 0;
+    } else {
+      px = 1;
+      pz = 0;
+      ph = 0;
+    }
+    pl = Math.hypot(px, pz, ph);
+  }
+  px /= pl;
+  pz /= pl;
+  ph /= pl;
+  const c = clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
+  const cs = c;
+  const sn = Math.sqrt(Math.max(0, 1 - c * c));
+  out.joint = [r[0] + a * (ux * cs + px * sn), r[1] + a * (uz * cs + pz * sn), r[2] + a * (uh * cs + ph * sn)];
+  out.end = [r[0] + dx, r[1] + dz, r[2] + dh];
+}

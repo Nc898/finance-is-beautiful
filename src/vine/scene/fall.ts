@@ -11,6 +11,8 @@ import type { Sprite } from './art';
 import { wind } from './art';
 import { GROUND_Y } from './geom';
 import type { PlanId } from '../types';
+import type { FoliagePoint } from './landscape';
+import { LEAF_GROUPS, LEAF_PAL, type LeafSet } from './leaves';
 
 /** a clipping: a vine leaf or a twig, falling or lying */
 interface Piece {
@@ -183,9 +185,12 @@ export class Clippings {
   }
 }
 
-/* ---------------------------------------------------------------- leaves drifting down from the trees */
+/* ---------------------------------------------------------------- leaves falling from the trees */
 
 interface Drift {
+  /** where it hung in the crown */
+  hx: number;
+  hy: number;
   x: number;
   y: number;
   vx: number;
@@ -193,38 +198,41 @@ interface Drift {
   rot: number;
   spin: number;
   ph: number;
+  /** where it lands */
   floor: number;
-  /** 0 falling, 1 settled */
-  state: 0 | 1;
+  /** 0 hanging on the tree (fluttering, about to let go), 1 falling, 2 lying on the ground */
+  state: 0 | 1 | 2;
   t: number;
-  life: number;
+  /** how long it hangs before it lets go */
+  hold: number;
   spr: Sprite;
   size: number;
+  /** behind the cottages (a tree in the side yard) or in front */
+  back: boolean;
 }
 
-export interface Crown {
-  cx: number;
-  cy: number;
-  rx: number;
-  ry: number;
-}
+const hexRgb = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const GROUP_RGB = LEAF_GROUPS.map((g) => LEAF_PAL[g].map(hexRgb));
 
 /**
- * A steady few leaves falling from the big trees' crowns. Each fades in just under the crown, drifts down on
- * the breeze with a flutter and a spin, settles on the lawn, rests a moment and fades out; then another starts.
+ * Leaves falling from the trees. Each one starts ON the painted foliage of a tree (a point sampled from the
+ * crown, with a leaf of the nearest colour, so it is already part of the crown), flutters there a moment in
+ * the breeze, lets go, and falls: gravity to a gentle terminal speed, the wind carrying it sideways, a
+ * flutter and a tumble. It lands under its tree, lies a while and sinks into the lawn's own leaf litter.
  */
 export class Drifting {
   private leaves: Drift[] = [];
   private rnd = new Rand(31337);
   constructor(
-    private crowns: Crown[],
-    private sprites: Sprite[],
+    private points: FoliagePoint[],
+    private set: LeafSet,
     n: number,
   ) {
+    if (!points.length) return;
     for (let i = 0; i < n; i++) {
       const d = this.spawn();
-      // spread them through their fall so the first frames already have leaves in the air
-      const pre = this.rnd.range(0, 6);
+      // stagger them through their lives so the first frames already have leaves on the way down
+      const pre = this.rnd.range(0, 7);
       for (let k = 0; k < pre * 20; k++) this.step(d, 0.05, k * 0.05);
       this.leaves.push(d);
     }
@@ -232,62 +240,98 @@ export class Drifting {
 
   private spawn(): Drift {
     const r = this.rnd;
-    const c = this.crowns[r.int(0, this.crowns.length - 1)]!;
-    const a = r.range(0, Math.PI * 2);
-    const rr = Math.sqrt(r.next()) * 0.85;
+    const p = this.points[r.int(0, this.points.length - 1)]!;
+    // the leaf whose colour is nearest the foliage it hangs in
+    let best = 0;
+    let bt = 0;
+    let bd = Infinity;
+    GROUP_RGB.forEach((tones, g) =>
+      tones.forEach(([R, G, B], tone) => {
+        const d = (R - p.r) ** 2 + (G - p.g) ** 2 + (B - p.b) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = g;
+          bt = tone;
+        }
+      }),
+    );
+    const shapes = this.set.spr[best]![Math.min(bt, 2)]!;
+    const floor = p.footY + r.range(-4, 26) + Math.abs(r.gauss()) * p.spread * 0.18;
     return {
-      x: c.cx + Math.cos(a) * c.rx * rr,
-      y: c.cy + Math.abs(Math.sin(a)) * c.ry * rr * 0.6,
+      hx: p.x,
+      hy: p.y,
+      x: p.x,
+      y: p.y,
       vx: 0,
       vy: 0,
       rot: r.range(0, 6.28),
-      spin: r.range(-1.8, 1.8),
+      spin: r.range(-1.6, 1.6),
       ph: r.range(0, 6.28),
-      floor: r.range(GROUND_Y + 30, 630),
+      floor: Math.max(floor, p.y + 20),
       state: 0,
       t: 0,
-      life: 0,
-      spr: this.sprites[r.int(0, this.sprites.length - 1)]!,
-      size: r.range(0.75, 1.15),
+      hold: r.range(0.8, 2.6),
+      spr: shapes[r.int(0, shapes.length - 1)]!,
+      size: r.range(0.7, 1.0),
+      // every garden tree stands behind the cottages' front walls (GROUND_Y), so its leaves pass behind the roofs
+      back: p.footY < GROUND_Y,
     };
   }
 
   private step(d: Drift, dt: number, t: number): void {
-    d.life += dt;
+    d.t += dt;
     if (d.state === 0) {
-      d.t += dt;
-      d.vy = Math.min(22, d.vy + 40 * dt);
-      const flutter = Math.sin(d.t * 2.6 + d.ph) * 14;
-      d.vx += ((wind(t) * 10 + 6 + flutter) - d.vx) * (1 - Math.exp(-dt * 2));
-      d.x += d.vx * dt;
-      d.y += d.vy * dt * (0.75 + 0.25 * Math.sin(d.t * 2.6 + d.ph + 1.2));
-      d.rot += d.spin * dt;
-      if (d.y >= d.floor) {
+      // hanging by its stalk: it trembles and swings in the breeze, more and more, then lets go
+      const k = Math.min(1, d.t / d.hold);
+      const w = wind(t);
+      d.x = d.hx + Math.sin(d.t * 7.3 + d.ph) * (0.3 + 0.9 * k) + w * 0.6 * k;
+      d.y = d.hy + Math.sin(d.t * 5.1 + d.ph) * 0.4 * k;
+      d.rot += Math.sin(d.t * 6.2 + d.ph) * dt * (1 + 3 * k);
+      if (d.t >= d.hold) {
+        // it leaves with the breeze that tore it off, from exactly where it was swinging
+        d.vx = w * 9 + Math.cos(d.t * 7.3 + d.ph) * 4;
+        d.vy = 2;
         d.state = 1;
         d.t = 0;
       }
-    } else d.t += dt;
-  }
-
-  update(dt: number, t: number): void {
-    for (let i = 0; i < this.leaves.length; i++) {
-      const d = this.leaves[i]!;
-      this.step(d, dt, t);
-      if (d.state === 1 && d.t > 3.5) this.leaves[i] = this.spawn();
+    } else if (d.state === 1) {
+      d.vy = Math.min(21, d.vy + 34 * dt);
+      const flutter = Math.sin(d.t * 2.6 + d.ph) * 13 * Math.min(1, d.t * 1.5);
+      d.vx += (wind(t) * 11 + 4 + flutter - d.vx) * (1 - Math.exp(-dt * 1.8));
+      d.x += d.vx * dt;
+      d.y += d.vy * dt * (0.72 + 0.28 * Math.sin(d.t * 2.6 + d.ph + 1.2));
+      d.rot += d.spin * dt;
+      if (d.y >= d.floor) {
+        d.y = d.floor;
+        d.state = 2;
+        d.t = 0;
+      }
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  update(dt: number, t: number): void {
+    if (!this.points.length) return;
+    for (let i = 0; i < this.leaves.length; i++) {
+      const d = this.leaves[i]!;
+      this.step(d, dt, t);
+      if (d.state === 2 && d.t > 5) this.leaves[i] = this.spawn();
+    }
+  }
+
+  /** draw the leaves of the trees behind the cottages (back) or in front of them */
+  draw(ctx: CanvasRenderingContext2D, back: boolean): void {
     const m0 = ctx.getTransform();
     for (const d of this.leaves) {
-      // fade in under the crown, fade out after resting a moment on the lawn
-      const a = clamp(d.life / 0.8, 0, 1) * (d.state === 1 ? clamp(1 - (d.t - 2) / 1.5, 0, 1) : 1);
+      if (d.back !== back) continue;
+      // it appears among leaves of its own colour, so it simply becomes visible as it starts to move; on the
+      // ground it sinks into the litter over a couple of seconds
+      const a = d.state === 0 ? clamp(d.t / 0.5, 0, 1) : d.state === 2 ? clamp(1 - (d.t - 2.5) / 2.5, 0, 1) : 1;
       if (a <= 0.01) continue;
       ctx.globalAlpha = a;
       const c = Math.cos(d.rot);
       const s = Math.sin(d.rot);
-      // falling leaves tumble: their width breathes as they turn over
-      const turn = d.state === 0 ? 0.45 + 0.55 * Math.abs(Math.cos(d.t * 2.1 + d.ph)) : 0.6;
+      // falling leaves tumble: their width breathes as they turn over; lying ones lie flat
+      const turn = d.state === 1 ? 0.45 + 0.55 * Math.abs(Math.cos(d.t * 2.1 + d.ph)) : d.state === 2 ? 0.55 : 1;
       const k = d.size;
       ctx.setTransform(m0.a * c * k * turn, m0.a * s * k * turn, -m0.a * s * k, m0.a * c * k, m0.e + m0.a * d.x, m0.f + m0.a * d.y);
       ctx.drawImage(d.spr.cv, -d.spr.px, -d.spr.py, d.spr.w, d.spr.h);

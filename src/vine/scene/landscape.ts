@@ -13,7 +13,9 @@ import { Rand } from '../../scene/prng';
 import { bucketFor } from '../../scene/sprites';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
 import { SoftLayer, bloom } from '../../river/scene/paint';
-import { type Camera } from './geom';
+import { COTTAGE, type Camera } from './geom';
+import { cottageRoofY } from './cottage';
+import { PLANS } from '../types';
 import { TREES } from './layout';
 import { PAPER, tick } from './art';
 import { dressFoot, layTree, renderTree, type TreePlan } from './trees';
@@ -30,6 +32,58 @@ export interface WorldLayer {
   xmin: number;
   xmax: number;
   ymax: number;
+  /** points on the trees' painted foliage (world units, with the paint's colour), where falling leaves start */
+  foliage: FoliagePoint[];
+}
+
+export interface FoliagePoint {
+  x: number;
+  y: number;
+  /** the foliage colour there */
+  r: number;
+  g: number;
+  b: number;
+  /** the tree's trunk foot (leaves land around it) and spread of its crown */
+  footX: number;
+  footY: number;
+  spread: number;
+}
+
+/**
+ * Sample the painted crown of a rendered tree for places a leaf could hang: opaque, well-saturated foliage
+ * (not bark, not paper), above the lower trunk, and not hidden behind a cottage roof or wall.
+ */
+function sampleFoliage(plan: TreePlan, r: { cv: HTMLCanvasElement; fx: number; fy: number }, A: number, spread: number, out: FoliagePoint[], seed: number): void {
+  const { cv } = r;
+  const w = cv.width;
+  const h = cv.height;
+  if (w < 4 || h < 4) return;
+  const data = cv.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h).data;
+  const rnd = new Rand(seed);
+  const hidden = (x: number, y: number) =>
+    PLANS.some((id) => {
+      const c = COTTAGE[id];
+      return x > c.wall.x0 - 20 && x < c.wall.x1 + 20 && y > cottageRoofY(id, x) - 2;
+    });
+  let found = 0;
+  for (let k = 0; k < 4000 && found < 90; k++) {
+    const px = Math.floor(rnd.range(0, w));
+    const py = Math.floor(rnd.range(0, h * 0.78));
+    const i = (py * w + px) * 4;
+    const R = data[i]!;
+    const G = data[i + 1]!;
+    const B = data[i + 2]!;
+    if (data[i + 3]! < 235) continue;
+    const mx = Math.max(R, G, B);
+    const mn = Math.min(R, G, B);
+    // foliage is saturated and fairly bright; bark is dull brown, paper is pale
+    if (mx < 110 || (mx - mn) / mx < 0.38) continue;
+    const x = plan.x + (plan.flip ? -1 : 1) * (px - r.fx) / A;
+    const y = plan.y + (py - r.fy) / A;
+    if (hidden(x, y)) continue;
+    out.push({ x, y, r: R, g: G, b: B, footX: plan.x, footY: plan.y, spread });
+    found++;
+  }
 }
 
 export interface View {
@@ -122,12 +176,14 @@ export async function buildWorld(cam: Camera, tile: CanvasImageSource, check: ()
   if (!check()) return null;
 
   // ---- the trees (behind the cottages, in front of the hedge), the far ones first
+  const foliage: FoliagePoint[] = [];
   for (const t of [...TREES].sort((a, b) => a.y - b.y)) {
     if (!t.look || t.x + t.rx < v.xmin - 20 || t.x - t.rx > v.xmax + 20) continue;
     const plan: TreePlan = { seed: t.seed, x: t.x, y: t.y, k: t.look.k, m: t.look.m, kit: t.look.kit, haze: t.haze, flip: t.look.flip };
     const r = await renderTree(plan, A, sdTree, tick, check);
     if (!r) return null;
     layTree(ctx, plan, r, A);
+    sampleFoliage(plan, r, A, t.rx, foliage, t.seed + 17);
     dressFoot(ctx, new Rand(t.seed + 9), t.x, t.y, t.trunk * 0.5);
     lg('tree');
   }
@@ -135,7 +191,7 @@ export async function buildWorld(cam: Camera, tile: CanvasImageSource, check: ()
   // ---- the autumn border along the bottom edge
   paintBorder(ctx, new Rand(4242), v, gd);
   lg('done');
-  return { cv, gd, xmin: v.xmin, xmax: v.xmax, ymax: v.ymax };
+  return { cv, gd, xmin: v.xmin, xmax: v.xmax, ymax: v.ymax, foliage };
 }
 
 /* ------------------------------------------------------------------ hills */
