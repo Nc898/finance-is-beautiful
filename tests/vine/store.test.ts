@@ -331,7 +331,7 @@ describe('playback', () => {
 
   it('seekStory moves the shared clock with the story', () => {
     const s = createStore();
-    s.actions.seekStory(21);
+    s.actions.seekStory(21.5);
     expect(s.state.mode).toBe('story');
     expect(s.state.months).toBeCloseTo(34, 12);
     s.actions.seekStory(1e6);

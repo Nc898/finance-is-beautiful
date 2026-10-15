@@ -4,8 +4,8 @@
  * Story time drives the shared clock, in MONTHS. Normal motion runs 52 s at 1x:
  *   0-6    intro      month 0              two cottages, the same vine (camera close on both)
  *   6-12   interest   month 0 -> 3         the camera eases out; both gardeners start pruning
- *   12-22  fixed      month 3 -> payoff    the fixed plan clears (at t = 21), its gardener rests
- *   22-40  minimum    -> the later payoff  months speed up through the long minimum stretch
+ *   12-25  fixed      month 3 -> payoff    the fixed plan clears (at t = 21.5), its gardener finishes and rests
+ *   25-40  minimum    -> the later payoff  months speed up through the long minimum stretch
  *   40-48  results    the later payoff     live numbers
  *   48-52  handoff    the later payoff     "Explore your own garden"
  * The month marks come from the engine, so they follow the inputs. If the fixed payment is no more than the
@@ -36,9 +36,10 @@ export type StoryBeat = 'intro' | 'interest' | 'fixed' | 'minimum' | 'results' |
 export const BEATS: readonly StoryBeat[] = ['intro', 'interest', 'fixed', 'minimum', 'results', 'handoff'];
 
 /** Story second at which each beat starts (normal motion). */
-export const BEAT_STARTS: Record<StoryBeat, number> = { intro: 0, interest: 6, fixed: 12, minimum: 22, results: 40, handoff: 48 };
+export const BEAT_STARTS: Record<StoryBeat, number> = { intro: 0, interest: 6, fixed: 12, minimum: 25, results: 40, handoff: 48 };
 /** The story second by which the fixed plan has cleared (a little before the "minimum" beat opens up). */
-export const FIXED_DONE_AT = 21;
+/** the fixed balance reaches zero here; the beat runs on a few seconds so its gardener can snip the last tendrils */
+export const FIXED_DONE_AT = 21.5;
 
 interface Knot {
   t: number;

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nip It in the Bud - vine scene harness</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#FBF6EA; color:var(--ink); font: 12px/1.35 system-ui, sans-serif; overflow:hidden; }
+  #cv { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .anchor { position:fixed; transform:translate(-50%,-100%); font:600 11px system-ui; padding:1px 5px; background:rgba(251,246,234,.85); border:1px solid rgba(47,42,34,.5); border-radius:3px; pointer-events:none; white-space:nowrap; }
+  #ui { position:fixed; right:8px; top:8px; width:290px; max-height:calc(100vh - 16px); overflow:auto; background:rgba(251,246,234,.94); padding:10px 12px; box-shadow:0 1px 5px rgba(60,40,10,.3); }
+  #ui.hidden { display:none; }
+  #ui label { display:block; margin:6px 0 0; font-weight:600; font-size:11px; }
+  #ui input[type=range] { width:100%; margin:0; }
+  #ui output { color:var(--muted); font-variant-numeric:tabular-nums; font-weight:400; }
+  #ui button { margin:5px 4px 0 0; padding:4px 8px; border:1px solid var(--ink); background:var(--shade); font:inherit; cursor:pointer; }
+  #ui .row { display:flex; gap:12px; align-items:center; margin-top:6px; }
+  #stat { margin-top:8px; color:var(--muted); white-space:pre-wrap; font-size:11px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="anchors"></div>
+<div id="ui">
+  <b>Nip It in the Bud</b> · scene harness
+  <div id="sl"></div>
+  <div class="row"><label><input id="play" type="checkbox" /> play story-like sim</label><label><input id="reduced" type="checkbox" /> reduced motion</label></div>
+  <div>
+    <button data-p="open">open</button><button data-p="half">half</button><button data-p="late">late</button><button data-p="end">paid off</button><button data-p="hide">hide ui</button>
+  </div>
+  <div id="stat"></div>
+</div>
+<script type="module">
+  import { createVineScene } from '/src/vine/scene/index.ts';
+  import { COTTAGE } from '/src/vine/scene/geom.ts';
+  const canvas = document.getElementById('cv');
+  const scene = createVineScene(canvas);
+  const P = new URLSearchParams(location.search);
+  const state = {
+    vineL: 1, vineR: 1, pileL: 0.35, pileR: 1.62, regrowth: 0.0183, pruningL: 0.028, pruningR: 0.04, mps: 0, paidL: false, paidR: false, reduced: false,
+    zoom: 1, focus: 'both',
+  };
+  const defs = [
+    ['vineL', 0, 1, 0.005], ['vineR', 0, 1, 0.005], ['pileL', 0, 6, 0.01], ['pileR', 0, 6, 0.01], ['regrowth', 0, 0.05, 0.001], ['pruningL', 0, 0.1, 0.001], ['pruningR', 0, 0.1, 0.001], ['mps', 0, 12, 0.1], ['zoom', 1, 2.5, 0.01],
+  ];
+  const sl = document.getElementById('sl');
+  const outs = {};
+  for (const [k, a, b, s] of defs) {
+    const l = document.createElement('label');
+    l.innerHTML = `${k} <output></output><input type="range" min="${a}" max="${b}" step="${s}" value="${state[k]}">`;
+    const i = l.querySelector('input'); const o = l.querySelector('output');
+    outs[k] = [i, o];
+    const upd = () => { state[k] = +i.value; o.textContent = (+i.value).toFixed(3); };
+    i.addEventListener('input', upd); upd();
+    sl.appendChild(l);
+  }
+  const setAll = (o) => { Object.assign(state, o); for (const [k, [i, out]] of Object.entries(outs)) { i.value = state[k]; out.textContent = (+state[k]).toFixed(3); } };
+  window.__h = { scene, state, setAll, t: 0, simOn: false, advance: null, frames: 0, ms: [] };
+  const reduced = document.getElementById('reduced');
+  const frame = (t) => ({
+    timeMs: t,
+    monthsPerSecond: state.mps,
+    cottages: [
+      { id: 'minimum', vine: state.vineL, regrowth: state.regrowth, pruning: state.pruningL, pile: state.pileL, paidOff: state.paidL },
+      { id: 'fixed', vine: state.vineR, regrowth: state.regrowth, pruning: state.pruningR, pile: state.pileR, paidOff: state.paidR },
+    ],
+    reducedMotion: reduced.checked || state.reduced,
+    camera: state.zoom > 1.001 ? { zoom: state.zoom, focus: state.focus } : undefined,
+  });
+  window.__h.frame = frame;
+  // a tiny stand-in for the engine: defaults ($5,000, 22%, min 1% + interest, $25 floor, fixed $200)
+  const sim = { m: 0, bL: 5000, bR: 5000, iL: 0, iR: 0 };
+  const stepMonth = () => {
+    const apr = 0.22;
+    const iL = sim.bL * apr / 12; const iR = sim.bR * apr / 12;
+    const minDue = (b, i) => Math.min(b + i, Math.max(25, i + 0.01 * b));
+    const pL = sim.bL > 0 ? minDue(sim.bL, iL) : 0;
+    const pR = sim.bR > 0 ? Math.min(sim.bR + iR, Math.max(200, minDue(sim.bR, iR))) : 0;
+    sim.iL += sim.bL > 0 ? iL : 0; sim.iR += sim.bR > 0 ? iR : 0;
+    sim.bL = Math.max(0, sim.bL + iL - pL); sim.bR = Math.max(0, sim.bR + iR - pR);
+    if (sim.bL < 0.005) sim.bL = 0; if (sim.bR < 0.005) sim.bR = 0;
+    sim.m++;
+    return { iL, iR, pL, pR };
+  };
+  let last = { iL: 91.67, iR: 91.67, pL: 141.67, pR: 200 };
+  window.__h.sim = sim;
+  window.__h.simAdvance = (months) => {
+    let k = 0; while (k < months) { last = stepMonth(); k++; }
+    setAll({ vineL: sim.bL / 5000, vineR: sim.bR / 5000, pileL: sim.iL / 5000, pileR: sim.iR / 5000, regrowth: last.iL / 5000, pruningL: last.pL / 5000, pruningR: last.pR / 5000, paidL: sim.bL === 0, paidR: sim.bR === 0 });
+  };
+  const doc = document;
+  const anchors = doc.getElementById('anchors');
+  const mk = (id) => { const d = doc.createElement('div'); d.className = 'anchor'; d.id = id; anchors.appendChild(d); return d; };
+  const aL = mk('aL'), aR = mk('aR'), pL = mk('pL'), pR = mk('pR');
+  const stat = doc.getElementById('stat');
+  const resize = () => scene.resize(innerWidth, innerHeight, Math.min(2, devicePixelRatio || 1));
+  addEventListener('resize', resize); resize();
+  scene.setInsets({ top: +(P.get('top') || 0), bottom: +(P.get('bottom') || 0), side: +(P.get('side') || 0) });
+  let t0 = performance.now(); let simT = 0; let lastNow = t0;
+  const ms = [];
+  const tickFn = (now) => {
+    const real = !window.__h.manual;
+    const dt = now - lastNow; lastNow = now;
+    if (real) {
+      if (doc.getElementById('play').checked) {
+        const mps = state.mps; // months per second from the slider
+        simT += (dt / 1000) * mps;
+        while (simT >= 1) { simT -= 1; window.__h.simAdvance(1); }
+        // fractional month: interpolate balances a little for smoothness
+      }
+      window.__h.t = now - t0;
+    }
+    const a = performance.now();
+    scene.render(frame(window.__h.t));
+    const b = performance.now();
+    ms.push(b - a); if (ms.length > 120) ms.shift();
+    window.__h.ms = ms;
+    for (const [d, id, fn] of [[aL, 'minimum', 'labelAnchor'], [aR, 'fixed', 'labelAnchor'], [pL, 'minimum', 'pileAnchor'], [pR, 'fixed', 'pileAnchor']]) {
+      const p = scene[fn](id); d.style.left = p.x + 'px'; d.style.top = p.y + 'px'; d.textContent = fn === 'labelAnchor' ? id : 'pile ' + id;
+    }
+    if (real && (window.__h.frames++ % 20 === 0)) {
+      const s = ms.slice().sort((x, y) => x - y);
+      stat.textContent = `render ms: avg ${(ms.reduce((x, y) => x + y, 0) / ms.length).toFixed(2)} p95 ${s[Math.floor(s.length * 0.95)].toFixed(2)}`;
+    }
+    requestAnimationFrame(tickFn);
+  };
+  scene.ready.then(() => { window.__h.ready = true; requestAnimationFrame(tickFn); });
+  document.querySelectorAll('button[data-p]').forEach((b) => b.addEventListener('click', () => {
+    const p = b.dataset.p;
+    if (p === 'open') setAll({ vineL: 1, vineR: 1, pileL: 0, pileR: 0, paidL: false, paidR: false });
+    if (p === 'half') setAll({ vineL: 0.5, vineR: 0.5, pileL: 0.8, pileR: 0.9 });
+    if (p === 'late') setAll({ vineL: 0.36, vineR: 0, pileL: 1.62, pileR: 0.35, paidR: true });
+    if (p === 'end') setAll({ vineL: 0, vineR: 0, pileL: 1.62, pileR: 0.35, paidL: true, paidR: true });
+    if (p === 'hide') document.getElementById('ui').classList.add('hidden');
+  }));
+  void COTTAGE;
+</script>
+</body>
+</html>

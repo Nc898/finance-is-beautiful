@@ -5,7 +5,7 @@
  * Two single-storey stone cottages stand side by side on a lawn, the minimum-payment cottage on the left and
  * the fixed-payment cottage on the right, with a low fence and a path between their gardens. Each gardener
  * prunes from the path along the foot of the wall, rakes clippings onto a pile at the outer front corner of
- * the garden, and rests on a bench by the middle fence once the vine is cleared.
+ * the garden, and rests on a bench on its own lawn once the vine is cleared.
  */
 import type { PlanId } from '../types';
 
@@ -70,8 +70,8 @@ export const PILE: Record<PlanId, { x: number; y: number }> = {
   fixed: { x: 882, y: 574 },
 };
 export const BENCH: Record<PlanId, { x: number; y: number }> = {
-  minimum: { x: 452, y: 540 },
-  fixed: { x: 548, y: 540 },
+  minimum: { x: 240, y: 566 },
+  fixed: { x: 760, y: 566 },
 };
 
 /** the gardener's height (boots to hat top) at the path, and the highest point the shears can reach from it */

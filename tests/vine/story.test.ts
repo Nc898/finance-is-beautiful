@@ -96,12 +96,12 @@ describe('story timing (normal motion, defaults)', () => {
 
   it('puts each beat where the table says', () => {
     const beat = (t: number) => storyBeat(t, D);
-    expect(BEAT_STARTS).toEqual({ intro: 0, interest: 6, fixed: 12, minimum: 22, results: 40, handoff: 48 });
+    expect(BEAT_STARTS).toEqual({ intro: 0, interest: 6, fixed: 12, minimum: 25, results: 40, handoff: 48 });
     expect(beat(0)).toBe('intro');
     expect(beat(5.99)).toBe('intro');
     expect(beat(6)).toBe('interest');
     expect(beat(12)).toBe('fixed');
-    expect(beat(22)).toBe('minimum');
+    expect(beat(25)).toBe('minimum');
     expect(beat(40)).toBe('results');
     expect(beat(48)).toBe('handoff');
   });

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nip It in the Bud - gardener harness</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--paper); color:var(--ink); font: 12px/1.35 system-ui, sans-serif; }
+  #cv { display:block; width:100%; background:#E9DFC5; }
+  #ui { padding:8px 10px; display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; background:var(--shade); }
+  #ui button, #ui select { font:inherit; padding:3px 8px; border:1px solid var(--ink); background:var(--paper); cursor:pointer; }
+  #ui label { display:inline-flex; gap:4px; align-items:center; }
+  #stat { padding:4px 10px; white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="ui">
+  <b>Gardener harness</b>
+  <label>plan <select id="id"><option>minimum</option><option>fixed</option></select></label>
+  <button data-a="idle">idle</button>
+  <button data-a="prune">prune (click the scene to aim)</button>
+  <button data-a="rake">rake</button>
+  <button data-a="rest">rest</button>
+  <label>pace <input id="pace" type="range" min="0" max="3" step="0.1" value="1.5" /><output id="paceo">1.5</output></label>
+  <label><input id="reduced" type="checkbox" /> reduced</label>
+  <label><input id="grid" type="checkbox" checked /> grid</label>
+  <label><input id="follow" type="checkbox" /> follow</label>
+  <button id="play">pause</button>
+  <button id="step">step 1/60</button>
+</div>
+<canvas id="cv" width="1000" height="560"></canvas>
+<div id="stat"></div>
+<script type="module">
+import { createGardener } from '/src/vine/scene/gardener.ts';
+import { COTTAGE, PATH_Y, PILE, BENCH, GROUND_Y, WORLD } from '/src/vine/scene/geom.ts';
+
+const cv = document.getElementById('cv');
+const $ = (id) => document.getElementById(id);
+const Q = 3;
+
+/* ------------------------------------------------------------ state */
+const H = (window.H = {
+  id: 'minimum',
+  g: null,
+  intent: { activity: 'idle', target: null, pace: 1.5 },
+  reduced: false,
+  grid: true,
+  follow: false,
+  t: 0,
+  frame: 0,
+  trace: null,
+});
+
+H.make = (id = H.id) => {
+  H.id = id;
+  H.g = createGardener(id, Q);
+  H.t = 0;
+  H.frame = 0;
+  H.intent = { activity: 'idle', target: null, pace: 1.5 };
+  return H.g;
+};
+H.set = (activity, target = null, pace = 1.5) => {
+  H.intent = { activity, target, pace };
+};
+H.advance = (frames = 1, dt = 1 / 60) => {
+  for (let i = 0; i < frames; i++) {
+    H.t += dt;
+    H.frame++;
+    H.g.update(dt, H.intent, H.t, H.reduced);
+    if (H.trace) H.trace(H);
+  }
+};
+
+/* ------------------------------------------------------------ drawing */
+function backdrop(c, view) {
+  c.fillStyle = '#BFDDF2';
+  c.fillRect(-200, -100, 1400, WORLD.horizon + 100);
+  c.fillStyle = '#C9C08A';
+  c.fillRect(-200, WORLD.horizon, 1400, 900);
+  const cot = COTTAGE[H.id];
+  c.fillStyle = '#D8CBB0';
+  c.fillRect(cot.wall.x0, cot.wall.y0, cot.wall.x1 - cot.wall.x0, cot.wall.y1 - cot.wall.y0);
+  c.fillStyle = '#8B7A62';
+  c.fillRect(cot.door.x0, cot.door.y0, cot.door.x1 - cot.door.x0, cot.door.y1 - cot.door.y0);
+  c.fillStyle = '#7FA3B8';
+  for (const w of cot.windows) c.fillRect(w.x0, w.y0, w.x1 - w.x0, w.y1 - w.y0);
+  c.strokeStyle = 'rgba(170,40,40,.35)';
+  c.lineWidth = 1;
+  c.strokeRect(cot.vine.x0, cot.vine.y0, cot.vine.x1 - cot.vine.x0, cot.vine.y1 - cot.vine.y0);
+  c.fillStyle = '#B9AE90';
+  c.fillRect(-200, GROUND_Y + 4, 1400, 56);
+  c.fillStyle = '#A99D80';
+  for (let x = -200; x < 1200; x += 34) c.fillRect(x, GROUND_Y + 6 + ((x / 34) % 2) * 3, 30, 3);
+  const pl = PILE[H.id];
+  c.fillStyle = 'rgba(190,80,40,.8)';
+  c.beginPath();
+  c.ellipse(pl.x, pl.y, 34, 18, 0, Math.PI, 0);
+  c.fill();
+  const b = BENCH[H.id];
+  c.fillStyle = '#8A6A44';
+  c.fillRect(b.x - 34, b.y - 31, 68, 5);
+  c.fillRect(b.x - 30, b.y - 26, 4, 26);
+  c.fillRect(b.x + 26, b.y - 26, 4, 26);
+  c.fillStyle = '#6E5236';
+  c.fillRect(b.x - 34, b.y - 62, 68, 4);
+  if (H.grid) {
+    c.lineWidth = 0.5;
+    for (let x = Math.floor(view.x0 / 10) * 10; x < view.x1; x += 10) {
+      c.strokeStyle = x % 50 === 0 ? 'rgba(40,40,160,.45)' : 'rgba(40,40,160,.18)';
+      c.beginPath();
+      c.moveTo(x, view.y0);
+      c.lineTo(x, view.y1);
+      c.stroke();
+    }
+    c.strokeStyle = 'rgba(160,40,40,.5)';
+    c.beginPath();
+    c.moveTo(view.x0, PATH_Y);
+    c.lineTo(view.x1, PATH_Y);
+    c.stroke();
+  }
+}
+
+H.render = (c, view, opts = {}) => {
+  c.save();
+  const sx = opts.w / (view.x1 - view.x0);
+  c.translate(-view.x0 * sx + (opts.ox || 0), -view.y0 * sx + (opts.oy || 0));
+  c.scale(sx, sx);
+  c.beginPath();
+  c.rect(view.x0, view.y0, view.x1 - view.x0, view.y1 - view.y0);
+  c.clip();
+  backdrop(c, view);
+  const f = H.g.feet();
+  c.fillStyle = 'rgba(40,30,20,.22)';
+  c.beginPath();
+  c.ellipse(f.x, f.y + 1, 22, 4, 0, 0, Math.PI * 2);
+  c.fill();
+  H.g.draw(c);
+  const t = H.intent.target;
+  if (t && H.intent.activity === 'prune') {
+    c.strokeStyle = '#1b6';
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.moveTo(t.x - 4, t.y); c.lineTo(t.x + 4, t.y); c.moveTo(t.x, t.y - 4); c.lineTo(t.x, t.y + 4);
+    c.stroke();
+  }
+  if (opts.cut) {
+    const s = H.g.shears();
+    c.fillStyle = '#e0f';
+    c.beginPath();
+    c.arc(s.x, s.y, 0.9, 0, Math.PI * 2);
+    c.fill();
+  }
+  if (opts.contacts) {
+    const d = H.g.debug();
+    for (const ct of d.contacts) {
+      c.fillStyle = ct.grounded ? '#f40' : '#07f';
+      for (const p of [ct.heel, ct.toe]) { c.beginPath(); c.arc(p[0], p[1], 0.7, 0, 7); c.fill(); }
+    }
+  }
+  c.restore();
+};
+
+function followView(w = 260, h = 190, dy = 0) {
+  const f = H.g.feet();
+  const y1 = f.y + 16 + dy;
+  return { x0: f.x - w / 2, x1: f.x + w / 2, y0: y1 - h, y1 };
+}
+
+/* ------------------------------------------------------------ saving frames (a tiny local writer on :5199) */
+H.save = async (name, canvas) => {
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+  try {
+    const res = await fetch('http://localhost:5199/save?name=' + encodeURIComponent(name), { method: 'POST', body: blob });
+    return res.ok ? name : 'FAILED ' + res.status;
+  } catch (e) { return 'FAILED ' + e; }
+};
+
+/**
+ * A strip of frames: `n` panels, one every `every` frames, each a crop around the gardener (or a fixed view).
+ * `drive(frameIndex)` runs before each simulated frame (to change the intent at given times).
+ */
+H.strip = async (o) => {
+  const w = o.w || 150, h = o.h || 200, cols = o.cols || 8, scale = o.scale || 1.6;
+  const n = o.n;
+  const rows = Math.ceil(n / cols);
+  const pw = Math.round(w * scale), ph = Math.round(h * scale);
+  const out = document.createElement('canvas');
+  out.width = pw * Math.min(cols, n); out.height = ph * rows;
+  const c = out.getContext('2d');
+  const every = o.every || 3;
+  let frame = 0;
+  let lock = null;
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < every; k++) { if (o.drive) o.drive(frame); H.advance(1); frame++; }
+    let view = o.fixed ? { ...o.fixed } : followView(w, h, o.dy || 0);
+    if (o.follow === 'lock') {
+      if (lock === null) lock = (view.x0 + view.x1) / 2;
+      view = { ...view, x0: lock - w / 2, x1: lock + w / 2 };
+    }
+    const col = i % cols, row = Math.floor(i / cols);
+    H.render(c, view, { w: pw, ox: col * pw, oy: row * ph, cut: o.cut !== false, contacts: o.contacts });
+    c.fillStyle = 'rgba(0,0,0,.75)';
+    c.font = '11px monospace';
+    c.fillText(String(frame - 1), col * pw + 4, row * ph + 12);
+    c.strokeStyle = 'rgba(0,0,0,.25)';
+    c.strokeRect(col * pw + 0.5, row * ph + 0.5, pw - 1, ph - 1);
+  }
+  return H.save(o.name, out);
+};
+
+/* ------------------------------------------------------------ metrics */
+const JOINTS = ['hip', 'knees0', 'knees1', 'ankles0', 'ankles1', 'shoulder', 'elbows0', 'elbows1', 'gloves0', 'gloves1', 'neck', 'cut'];
+function jointsOf(d) {
+  return {
+    hip: d.hip, knees0: d.knees[0], knees1: d.knees[1], ankles0: d.ankles[0], ankles1: d.ankles[1], shoulder: d.shoulder,
+    elbows0: d.elbows[0], elbows1: d.elbows[1], gloves0: d.gloves[0], gloves1: d.gloves[1], neck: d.neck, cut: [d.cut.x, d.cut.y],
+  };
+}
+const dist = (a, t) => (t ? Math.hypot(a.x - t.x, a.y - t.y) : null);
+
+/**
+ * Run `frames` of the sim (calling drive(frame) first each frame) and report: the largest per-frame joint
+ * displacement and change of velocity (jerk) for each joint, foot sliding (a contact point that is on the ground
+ * must not move), and the shears' distance to the target at each snip.
+ */
+H.measure = (frames, drive, dt = 1 / 60) => {
+  const prev = {}, prevV = {};
+  const maxV = Object.fromEntries(JOINTS.map((j) => [j, 0]));
+  const maxA = Object.fromEntries(JOINTS.map((j) => [j, 0]));
+  const maxVAt = {}, maxAAt = {};
+  const hold = {};
+  let slide = 0, slideAt = null;
+  const snips = [];
+  const strokes = [];
+  let lastSnips = H.g.snips, lastStrokes = H.g.strokes;
+  const t0 = H.frame;
+  let maxSpeed = 0;
+  for (let f = 0; f < frames; f++) {
+    if (drive) drive(f);
+    H.advance(1, dt);
+    const d = H.g.debug();
+    maxSpeed = Math.max(maxSpeed, d.state.speed);
+    const J = jointsOf(d);
+    for (const j of JOINTS) {
+      if (prev[j]) {
+        const vx = J[j][0] - prev[j][0], vy = J[j][1] - prev[j][1];
+        const v = Math.hypot(vx, vy);
+        if (v > maxV[j]) { maxV[j] = v; maxVAt[j] = f; }
+        if (prevV[j]) {
+          const a = Math.hypot(vx - prevV[j][0], vy - prevV[j][1]);
+          if (a > maxA[j]) { maxA[j] = a; maxAAt[j] = f; }
+        }
+        prevV[j] = [vx, vy];
+      }
+      prev[j] = J[j];
+    }
+    const turning = d.state.yaw > 0.02 && d.state.yaw < Math.PI - 0.02;
+    d.contacts.forEach((ct, i) => {
+      for (const [nm, p] of [['heel', ct.heel], ['toe', ct.toe]]) {
+        const key = i + nm;
+        const on = !turning && ct.grounded && Math.abs(p[1] - ct.gy) < 0.35;
+        if (on) {
+          if (!hold[key]) hold[key] = { x: p[0], y: p[1], f };
+          else {
+            const s = Math.hypot(p[0] - hold[key].x, p[1] - hold[key].y);
+            if (s > slide) { slide = s; slideAt = { f, key, from: hold[key].f }; }
+          }
+        } else hold[key] = null;
+      }
+    });
+    if (H.g.snips !== lastSnips) { snips.push({ f, err: +dist(H.g.shears(), H.intent.target)?.toFixed(2), n: H.g.snips }); lastSnips = H.g.snips; }
+    if (H.g.strokes !== lastStrokes) { strokes.push(f); lastStrokes = H.g.strokes; }
+  }
+  const r = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, +(+v).toFixed(2)]));
+  return { frames: H.frame - t0, maxV: r(maxV), maxA: r(maxA), maxVAt, maxAAt, slide: +slide.toFixed(3), slideAt, snips, strokes, maxSpeed: +maxSpeed.toFixed(1) };
+};
+
+/* ------------------------------------------------------------ interactive */
+let playing = true;
+let last = performance.now();
+H.make('minimum');
+const mainView = () => (H.follow ? followView(300, 190) : { x0: 0, x1: 1000, y0: 180, y1: 640 });
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (playing) H.advance(1, dt);
+  cv.width = cv.clientWidth;
+  cv.height = Math.round(cv.clientWidth * 0.56);
+  const c = cv.getContext('2d');
+  const view = mainView();
+  c.clearRect(0, 0, cv.width, cv.height);
+  H.render(c, view, { w: cv.width, cut: true, contacts: false });
+  const d = H.g.debug();
+  $('stat').textContent = JSON.stringify(d.state) + '\npelvis ' + d.pelvis.map((v) => v.toFixed(1)).join(', ') + '  snips ' + H.g.snips + '  strokes ' + H.g.strokes;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+document.querySelectorAll('button[data-a]').forEach((b) => b.addEventListener('click', () => {
+  const a = b.dataset.a;
+  if (a === 'prune') { const cot = COTTAGE[H.id]; H.set('prune', { x: (cot.vine.x0 + cot.vine.x1) / 2, y: 410 }, +$('pace').value); }
+  else H.set(a, null, +$('pace').value);
+}));
+$('pace').addEventListener('input', () => { H.intent.pace = +$('pace').value; $('paceo').textContent = $('pace').value; });
+$('reduced').addEventListener('change', () => (H.reduced = $('reduced').checked));
+$('grid').addEventListener('change', () => (H.grid = $('grid').checked));
+$('follow').addEventListener('change', () => (H.follow = $('follow').checked));
+$('id').addEventListener('change', () => H.make($('id').value));
+$('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'pause' : 'play'; });
+$('step').addEventListener('click', () => { playing = false; $('play').textContent = 'play'; H.advance(1); });
+H.pause = () => { playing = false; $('play').textContent = 'play'; };
+H.resume = () => { playing = true; $('play').textContent = 'pause'; };
+cv.addEventListener('click', (e) => {
+  const r = cv.getBoundingClientRect();
+  const view = mainView();
+  const k = (view.x1 - view.x0) / r.width;
+  H.set('prune', { x: view.x0 + (e.clientX - r.left) * k, y: view.y0 + (e.clientY - r.top) * k }, +$('pace').value);
+});
+window.__ready = true;
+</script>
+</body>
+</html>
