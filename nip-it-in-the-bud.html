@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="Two cottages, the same credit card balance. Interest grows the vine back every month: paying only the minimum keeps the gardener pruning for years, while a steady fixed payment clears it much sooner." />
+<title>Nip It in the Bud</title>
+</head>
+<body>
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two cottages with autumn vines, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="plan-label" id="lab-minimum" data-plan="minimum">
+          <p class="pl-id"><span data-emblem="minimum"></span><span class="pl-name"></span></p>
+          <p class="pl-owed"></p>
+        </div>
+        <div class="plan-label" id="lab-fixed" data-plan="fixed">
+          <p class="pl-id"><span data-emblem="fixed"></span><span class="pl-name"></span></p>
+          <p class="pl-owed"></p>
+        </div>
+        <div class="pile-tag" id="tag-minimum" data-plan="minimum"><p class="pt-amount"></p></div>
+        <div class="pile-tag" id="tag-fixed" data-plan="fixed"><p class="pt-amount"></p></div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0, month 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="Nip It in the Bud, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Nip It in the Bud</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-replay">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Replay<span class="long"> story</span></span>
+          </button>
+          <button type="button" class="btn quiet" id="btn-skip">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Skip<span class="long"> to explore</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play story</span>
+          </button>
+
+          <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
+            <label class="speed"><input type="radio" name="speed" value="0.5" /><span>0.5×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="1" checked /><span>1×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="2" /><span>2×</span></label>
+            <label class="speed"><input type="radio" name="speed" value="4" /><span>4×</span></label>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="230" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field" data-field="balance">
+            <label for="f-balance">Card balance ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease card balance">−</button>
+              <input id="f-balance" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-balance" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase card balance">+</button>
+            </div>
+            <p class="field-error" id="err-balance" hidden></p>
+          </div>
+          <div class="field" data-field="apr">
+            <label for="f-apr">Interest rate (APR %)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease interest rate">−</button>
+              <input id="f-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-apr" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase interest rate">+</button>
+            </div>
+            <p class="field-error" id="err-apr" hidden></p>
+          </div>
+          <div class="field wide" data-field="fixedPayment">
+            <label for="f-fixedPayment"><span data-emblem="fixed"></span>Fixed monthly payment ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease fixed payment">−</button>
+              <input id="f-fixedPayment" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-fixedPayment note-fixedPayment" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase fixed payment">+</button>
+            </div>
+            <p class="field-error" id="err-fixedPayment" hidden></p>
+            <p class="field-note" id="note-fixedPayment" hidden></p>
+          </div>
+          <fieldset class="rule">
+            <legend><span data-emblem="minimum"></span>Minimum payment rule</legend>
+            <p class="rule-hint">The card asks for the interest plus a share of the balance, but never less than the floor.</p>
+            <div class="rule-fields">
+              <div class="field" data-field="minPercent">
+                <label for="f-minPercent">Share of balance (%)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease share of balance">−</button>
+                  <input id="f-minPercent" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-minPercent" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase share of balance">+</button>
+                </div>
+                <p class="field-error" id="err-minPercent" hidden></p>
+              </div>
+              <div class="field" data-field="minFloor">
+                <label for="f-minFloor">Floor ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease floor">−</button>
+                  <input id="f-minFloor" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-minFloor" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase floor">+</button>
+                </div>
+                <p class="field-error" id="err-minFloor" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: a fixed interest rate, with no new purchases, fees or penalties. Minimum payment rules vary by card. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">The whole plan</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-plan">
+                <caption class="sr-only">Each plan from start to finish</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col" id="th-minimum"><span data-emblem="minimum"></span><span class="th-name">Minimum</span></th>
+                    <th scope="col" id="th-fixed"><span data-emblem="fixed"></span><span class="th-name">Fixed</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Time to pay off</th><td data-cell="minimum.payoff"></td><td data-cell="fixed.payoff"></td></tr>
+                  <tr><th scope="row">Months</th><td data-cell="minimum.months"></td><td data-cell="fixed.months"></td></tr>
+                  <tr><th scope="row">Total paid</th><td data-cell="minimum.paid"></td><td data-cell="fixed.paid"></td></tr>
+                  <tr class="strong"><th scope="row">Total interest</th><td data-cell="minimum.interest"></td><td data-cell="fixed.interest"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">At <span id="how-age">year 0, month 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-now">
+                <caption class="sr-only">Each plan at the current month</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span data-emblem="minimum"></span><span class="th-name">Minimum</span></th>
+                    <th scope="col"><span data-emblem="fixed"></span><span class="th-name">Fixed</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Still owed</th><td data-cell="minimum.owed"></td><td data-cell="fixed.owed"></td></tr>
+                  <tr><th scope="row">Interest so far</th><td data-cell="minimum.sofar"></td><td data-cell="fixed.sofar"></td></tr>
+                  <tr><th scope="row">This month's payment</th><td data-cell="minimum.pay"></td><td data-cell="fixed.pay"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">The first months</h2>
+            <div class="table-wrap">
+              <table class="compare excerpt" id="excerpt-minimum">
+                <caption class="excerpt-cap">Minimum payments</caption>
+                <thead><tr><th scope="col">Month</th><th scope="col">Interest</th><th scope="col">Payment</th><th scope="col">Owed</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table class="compare excerpt" id="excerpt-fixed">
+                <caption class="excerpt-cap">Fixed payment</caption>
+                <thead><tr><th scope="col">Month</th><th scope="col">Interest</th><th scope="col">Payment</th><th scope="col">Owed</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <ul class="conventions">
+              <li>Each month the interest is the balance × rate ÷ 12. It is added first, then the payment comes off.</li>
+              <li>Owed next month = owed + interest − payment. The last payment is whatever is left.</li>
+              <li>The minimum due is the larger of the floor and (interest + share × balance), and never more than what is owed.</li>
+              <li>The fixed plan pays the larger of its fixed amount and the minimum due, because a card requires at least the minimum.</li>
+              <li>The vine is what is still owed. The pile of clippings is the interest paid so far. Both cottages share one scale, so the comparison stays honest.</li>
+              <li>A fixed rate, with no new purchases, fees or penalties. Real cards vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/vine/main.ts"></script>
+</body>
+</html>
