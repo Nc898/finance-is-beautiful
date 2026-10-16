@@ -57,6 +57,13 @@ interface Garden {
   raking: boolean;
   /** the vine target last frame (to recognise jumps) */
   lastTarget: number;
+  /** seconds left of "the timeline is being scrubbed": the scene shows the moment directly */
+  scrub: number;
+  /** where the rake's tines land for the next pull, and the tines last frame */
+  rakeAt: { x: number; y: number } | null;
+  lastHead: { x: number; y: number } | null;
+  /** the month raking began: the clippings stop rotting while they are being raked */
+  rakeMonth: number;
 }
 
 interface Placed {
@@ -120,6 +127,8 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
   };
   let lastZ: ZoomXf = { a: 1, bx: 0, by: 0 };
   let lastT = -1;
+  /** the story clock in months, accumulated from the frames' rate (it only drives the rotting of clippings) */
+  let monthClock = 0;
   let gen = 0;
   let destroyed = false;
   let last: VineFrame | null = null;
@@ -141,6 +150,10 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       lastStrokes: 0,
       raking: false,
       lastTarget: 1,
+      scrub: 0,
+      rakeAt: null,
+      lastHead: null,
+      rakeMonth: 0,
     };
   }
 
@@ -324,7 +337,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     let leaves = 0;
     for (const i of nodes) leaves += model.nodes[i]!.leaves.length;
     // a big cut drops a representative handful, not every leaf (the rest is hidden in the tumble)
-    const every = Math.max(1, Math.ceil(leaves / 16));
+    const every = Math.max(1, Math.ceil(leaves / 10));
     let k = 0;
     let twigs = 0;
     for (const i of nodes) {
@@ -347,10 +360,40 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
   };
 
   /** decide what the gardener does this frame, and advance the vine */
+  /** a ready stance at the wall for this moment: the growth nearest the gardener, shears up, no cutting */
+  const readyAt = (gd: Garden): GardenerIntent => {
+    const a = chooseAim(gd, 0.02, false);
+    if (a === null) return { activity: 'idle', target: null, pace: 0 };
+    const n = model.nodes[a]!;
+    return { activity: 'prune', target: candWorld(gd, n.sx + (n.ex - n.sx) * 0.35, n.sy + (n.ey - n.sy) * 0.35), pace: 0 };
+  };
+
+  /** the next place to rake from: just beyond the lying clipping farthest from the pile, so the pull gathers it */
+  const nextRake = (gd: Garden): { x: number; y: number } | null => {
+    const pile = PILE[gd.id];
+    // what is left lies right by the pile: one last sweep and it all joins the heap
+    gd.clip.gatherNear(pile, 42);
+    const far = gd.clip.farthestFrom(pile);
+    if (!far) return null;
+    const dx = far.x - pile.x;
+    const dy = far.y - pile.y;
+    const d = Math.hypot(dx, dy) || 1;
+    return { x: far.x + (dx / d) * 5, y: far.y + (dy / d) * 5 };
+  };
+
+  /**
+   * Decide what the gardener does this frame, and advance the vine.
+   *
+   * Two regimes. Scrubbing (the timeline moved while paused, or jumped): the scene shows that moment directly:
+   * the vine and pile are set to it, loose clippings are cleared, and the gardener is placed where that moment
+   * has them (at the wall ready to cut, or on the bench once paid off). Playing: the vine regrows by the month's
+   * interest and shrinks only at the gardener's snips; once the wall is clear the clippings are raked to the pile
+   * (only the ones the tines touch move) and the gardener rests.
+   */
   const tend = (gd: Garden, cv: VineFrame['cottages'][number], mps: number, dt: number, t: number, reduced: boolean) => {
     const g = gd.g!;
     const target = Math.max(0, Math.min(1, cv.vine));
-    const jumped = Math.abs(target - gd.lastTarget) > 0.06;
+    const moved = Math.abs(target - gd.lastTarget);
     gd.lastTarget = target;
     if (reduced) {
       setDirect(gd, target, dt, true);
@@ -361,22 +404,41 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       gd.lastStrokes = g.strokes;
       return;
     }
-    if (jumped) gd.clip.clear();
+    // scrubbing: any change of the moment while paused, or a big jump while playing (replay, a new input)
+    if ((mps === 0 && moved > 1e-6) || moved > 0.06) gd.scrub = 0.3;
+    else gd.scrub = Math.max(0, gd.scrub - dt);
+    if (gd.scrub > 0) {
+      setDirect(gd, target, dt, true);
+      gd.clip.clear();
+      gd.raking = false;
+      gd.rakeAt = null;
+      gd.lastHead = null;
+      gd.aim = null;
+      g.place(cv.paidOff ? { activity: 'rest', target: null, pace: 0 } : readyAt(gd));
+      gd.lastSnips = g.snips;
+      gd.lastStrokes = g.strokes;
+      return;
+    }
     // the month's interest grows the vine back at its tips
     if (!cv.paidOff && mps > 0 && dt > 0) gd.st.grow(cv.regrowth * mps * dt, dt, 1.4);
     let mass = gd.st.mass();
-    // jumps of the timeline are set directly; a small shortfall while playing grows back from the tips
-    if (jumped || (mps === 0 && Math.abs(mass - target) > 0.01)) {
+    // paused and out of step (shouldn't happen after a scrub) is set directly; a shortfall while playing regrows
+    if (mps === 0 && Math.abs(mass - target) > 0.01) {
       setDirect(gd, target, dt, false);
       mass = gd.st.mass();
     } else if (target > mass + 0.002 && dt > 0) {
       gd.st.grow(Math.min(target - mass, 0.12 * dt), dt, 1.4);
       mass = gd.st.mass();
     }
-    const excess = mass - target;
     const clear = target <= 0.0005;
+    // paid off with only a few stub ends left: they wither back on their own
+    if (clear && mass > 1e-4 && mass < 0.03) {
+      setDirect(gd, 0, dt, false);
+      mass = gd.st.mass();
+    }
+    const excess = mass - target;
     // paid off with only scraps left: the last cut is at the root, and what remains comes down with it
-    let finalCut = clear && mass > 0 && mass < 0.15;
+    let finalCut = clear && mass >= 0.03 && mass < 0.15;
     // how much one snip should take: enough to keep up at this speed, never so much that a branch vanishes
     const rate = Math.max(0, cv.pruning * mps);
     // a working gardener manages a snip about every 0.6 s (hand to the next stem, open, close), so one snip takes
@@ -385,22 +447,29 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     // snips that happened since last frame
     while (gd.lastSnips < g.snips) {
       gd.lastSnips++;
-      if (mass - target > 0.0015 || clear) snip(gd, chunk, target, finalCut);
+      if (mass - target > 0.0015 || (clear && mass >= 0.03)) snip(gd, chunk, target, finalCut);
       mass = gd.st.mass();
     }
-    // rake strokes move clippings toward the pile
-    while (gd.lastStrokes < g.strokes) {
-      gd.lastStrokes++;
-      gd.clip.rake(40, PILE[gd.id]);
+    // raking: only the clippings the tines pass over move, along with the tines; at the pile they join it
+    const head = g.rakeHead();
+    if (head && head.contact && gd.lastHead) gd.clip.drag(gd.lastHead, head, PILE[gd.id]);
+    gd.lastHead = head && head.contact ? { x: head.x, y: head.y } : null;
+    if (gd.lastStrokes < g.strokes) {
+      gd.lastStrokes = g.strokes;
+      gd.rakeAt = nextRake(gd);
     }
     // what next
-    const needCut = (excess > 0.004 || (clear && mass > 0)) && (mps > 0 || clear);
+    const needCut = (excess > 0.004 || (clear && mass >= 0.03)) && (mps > 0 || clear);
     const lying = gd.clip.lying;
     // raking waits until the wall is clear (the clippings lie at the wall foot meanwhile)
     if (gd.raking && (lying === 0 || excess > 0.02)) gd.raking = false;
-    if (!gd.raking && lying > 0 && cv.paidOff && mass <= 0) gd.raking = true;
+    if (!gd.raking && lying > 0 && cv.paidOff && mass <= 1e-4) {
+      gd.raking = true;
+      gd.rakeMonth = monthClock;
+      gd.rakeAt = nextRake(gd);
+    }
     let intent: GardenerIntent;
-    if (gd.raking) intent = { activity: 'rake', target: null, pace: 1.4 };
+    if (gd.raking && gd.rakeAt) intent = { activity: 'rake', target: gd.rakeAt, pace: 1.3 };
     else if (needCut) {
       if (gd.aim === null || gd.st.g[gd.aim]! < 0.999) gd.aim = finalCut ? 0 : chooseAim(gd, chunk, excess > 0.08);
       // the wall is due to be clear and only stubs are left: the last cut is at the root
@@ -418,14 +487,15 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       // full pace when behind; otherwise just enough to keep up with the month's payments
       const pace = excess > 0.03 ? 3 : Math.max(0.7, Math.min(3, (rate + excess / 1.2) / chunk));
       intent = tp ? { activity: 'prune', target: tp, pace } : { activity: 'idle', target: null, pace: 0 };
-    } else if (cv.paidOff && mass <= 0) intent = { activity: 'rest', target: null, pace: 0 };
-    else if (mps > 0 && gd.aim !== null && gd.st.g[gd.aim]! >= 0.999) {
-      // waiting for the vine to grow back: keep the shears ready at the last spot
+    } else if (cv.paidOff && mass <= 1e-4) intent = { activity: 'rest', target: null, pace: 0 };
+    else if (!cv.paidOff && gd.aim !== null && gd.st.g[gd.aim]! >= 0.999) {
+      // waiting for the vine to grow back (or paused): keep the shears ready at the last spot, facing the wall
       const n = model.nodes[gd.aim]!;
       intent = { activity: 'prune', target: candWorld(gd, n.sx + (n.ex - n.sx) * 0.35, n.sy + (n.ey - n.sy) * 0.35), pace: 0 };
-    } else intent = { activity: 'idle', target: null, pace: 0 };
+    } else if (!cv.paidOff) intent = readyAt(gd);
+    else intent = { activity: 'idle', target: null, pace: 0 };
     g.update(dt, intent, t, false);
-    gd.clip.update(dt, t);
+    gd.clip.update(dt, t, gd.raking ? gd.rakeMonth : monthClock);
   };
 
   /* ---------------------------------------------------------------- smoke */
@@ -493,6 +563,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       const dt = lastT < 0 || t < lastT ? 0 : Math.min(0.1, t - lastT);
       lastT = t;
       const mps = Math.max(0, frame.monthsPerSecond);
+      monthClock += mps * dt;
       // ---- screen space: paper and sky, the geese
       ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
       ctx.globalAlpha = 1;
@@ -509,7 +580,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
         const gd = gardens[cv.id];
         if (!gd.g || !gd.pile) continue;
         tend(gd, cv, mps, dt, t, reduced);
-        gd.pile.update(cv.pile, dt, reduced);
+        gd.pile.update(cv.pile, dt, reduced || gd.scrub > 0);
       }
       // ---- leaves falling from the trees in the side yard, behind the cottages
       if (drift && !reduced) {

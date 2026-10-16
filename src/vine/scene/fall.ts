@@ -38,7 +38,12 @@ interface Piece {
   rx1: number;
   ry1: number;
   alpha: number;
+  /** the story month it landed (lying clippings rot into the lawn a few months later) */
+  landed: number;
 }
+
+/** story months a clipping lies on the lawn before it has rotted away (it fades over a short while) */
+const ROT_MONTHS = 2.5;
 
 const G = 70;
 const TERMINAL = 34;
@@ -89,6 +94,7 @@ export class Clippings {
       rx1: 0,
       ry1: 0,
       alpha: 1,
+      landed: -1,
     });
     // never let the ground carpet grow without bound: the oldest lying pieces wither into the grass
     let lying = 0;
@@ -100,19 +106,67 @@ export class Clippings {
     }
   }
 
-  /** a rake stroke: up to `n` lying pieces slide off toward the pile and fade into it */
-  rake(n: number, pile: { x: number; y: number }): void {
-    const r = this.rnd;
-    let k = 0;
-    for (const p of this.pieces) {
-      if (p.state !== 1 || k >= n) continue;
-      p.state = 2;
-      p.t = 0;
-      p.rx0 = p.x;
-      p.ry0 = p.y;
-      p.rx1 = pile.x + r.range(-16, 16);
-      p.ry1 = pile.y + r.range(-8, 4);
-      k++;
+  /** the lying piece farthest from a point (where raking should start), or null when none lie */
+  farthestFrom(p: { x: number; y: number }): { x: number; y: number } | null {
+    let best: Piece | null = null;
+    let bd = -1;
+    for (const q of this.pieces) {
+      if (q.state !== 1) continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d > bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  /**
+   * The rake's tines moved from `a` to `b` on the ground: every lying piece the tines pass over is carried along
+   * with them (a little behind the tines, spread across their width). Pieces brought within reach of the pile
+   * join it (they slide in and fade into the heap).
+   */
+  drag(a: { x: number; y: number }, b: { x: number; y: number }, pile: { x: number; y: number }): void {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-4) return;
+    const ux = dx / len;
+    const uy = dy / len;
+    // the tine row is about 16 units wide (across the pull) and catches what lies just in front of it
+    for (const q of this.pieces) {
+      if (q.state !== 1) continue;
+      const rx = q.x - a.x;
+      const ry = q.y - a.y;
+      const along = rx * ux + ry * uy;
+      const across = Math.abs(-rx * uy + ry * ux);
+      if (across > 12 || along < -3 || along > len + 3) continue;
+      // carried: it ends up just ahead of the tines, keeping its place across the row
+      const off = -rx * uy + ry * ux;
+      q.x = b.x + ux * 2 + -uy * off * 0.9;
+      q.y = b.y + uy * 2 + ux * off * 0.9;
+      q.rot += (this.rnd.next() - 0.5) * 0.4;
+      if (Math.hypot(q.x - pile.x, q.y - pile.y) < 26) {
+        q.state = 2;
+        q.t = 0;
+        q.rx0 = q.x;
+        q.ry0 = q.y;
+        q.rx1 = pile.x + this.rnd.range(-12, 12);
+        q.ry1 = pile.y + this.rnd.range(-6, 2);
+      }
+    }
+  }
+
+  /** lying pieces within `r` of the pile slide in and join it */
+  gatherNear(pile: { x: number; y: number }, r: number): void {
+    for (const q of this.pieces) {
+      if (q.state !== 1 || Math.hypot(q.x - pile.x, q.y - pile.y) > r) continue;
+      q.state = 2;
+      q.t = 0;
+      q.rx0 = q.x;
+      q.ry0 = q.y;
+      q.rx1 = pile.x + this.rnd.range(-12, 12);
+      q.ry1 = pile.y + this.rnd.range(-6, 2);
     }
   }
 
@@ -121,10 +175,24 @@ export class Clippings {
     this.pieces.length = 0;
   }
 
-  update(dt: number, t: number): void {
+  /**
+   * Advance by dt seconds of wall clock; `month` is the story clock. Lying clippings rot away a few months after
+   * they land (nothing rots while the story is paused), so only the latest ones are left for the rake.
+   */
+  update(dt: number, t: number, month: number): void {
     const w = wind(t);
     for (let i = this.pieces.length - 1; i >= 0; i--) {
       const p = this.pieces[i]!;
+      if (p.state === 1) {
+        if (p.landed < 0) p.landed = month;
+        if (month - p.landed > ROT_MONTHS) {
+          p.alpha = Math.min(p.alpha, 1) - dt * 1.2;
+          if (p.alpha <= 0) {
+            this.pieces.splice(i, 1);
+            continue;
+          }
+        }
+      }
       if (p.state === 0) {
         p.t += dt;
         // gravity to a gentle terminal speed, a flutter sideways and a breeze to the right

@@ -138,12 +138,19 @@ H.render = (c, view, opts = {}) => {
   c.fill();
   H.g.draw(c);
   const t = H.intent.target;
-  if (t && H.intent.activity === 'prune') {
+  if (t && (H.intent.activity === 'prune' || H.intent.activity === 'rake')) {
     c.strokeStyle = '#1b6';
     c.lineWidth = 0.8;
     c.beginPath();
     c.moveTo(t.x - 4, t.y); c.lineTo(t.x + 4, t.y); c.moveTo(t.x, t.y - 4); c.lineTo(t.x, t.y + 4);
     c.stroke();
+  }
+  if (opts.rake !== false) {
+    const rh = H.g.rakeHead && H.g.rakeHead();
+    if (rh) {
+      c.fillStyle = rh.contact ? '#0c4' : '#e80';
+      c.beginPath(); c.arc(rh.x, rh.y, rh.contact ? 1.6 : 1.1, 0, Math.PI * 2); c.fill();
+    }
   }
   if (opts.cut) {
     const s = H.g.shears();
@@ -200,7 +207,7 @@ H.strip = async (o) => {
       view = { ...view, x0: lock - w / 2, x1: lock + w / 2 };
     }
     const col = i % cols, row = Math.floor(i / cols);
-    H.render(c, view, { w: pw, ox: col * pw, oy: row * ph, cut: o.cut !== false, contacts: o.contacts });
+    H.render(c, view, { w: pw, ox: col * pw, oy: row * ph, cut: o.cut !== false, contacts: o.contacts, rake: o.rake });
     c.fillStyle = 'rgba(0,0,0,.75)';
     c.font = '11px monospace';
     c.fillText(String(frame - 1), col * pw + 4, row * ph + 12);

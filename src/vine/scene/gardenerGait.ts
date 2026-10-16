@@ -320,9 +320,11 @@ export class Gait {
     return this.turnSteps.length > 0;
   }
 
+  /** a foot's offset from the line of the walk: across the path when walking forward, across the body when side-stepping */
   private latOff(i: 0 | 1): [number, number] {
     const sg = i === 0 ? 1 : -1;
-    return [sg * FOOT_W * this.lx, sg * FOOT_W * this.ld];
+    if (this.side) return [sg * FOOT_W * this.lx, sg * FOOT_W * this.ld];
+    return [sg * FOOT_W * -this.dd, sg * FOOT_W * this.dx];
   }
 
   private sOf(f: Foot): number {

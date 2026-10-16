@@ -86,49 +86,51 @@ const idleYaw = (id: PlanId): number => (id === 'minimum' ? 1.1 : PI - 1.1);
 const rakeYaw = (id: PlanId): number => (id === 'minimum' ? PI - 0.62 : 0.62);
 const grabYaw = (id: PlanId): number => (id === 'minimum' ? 0.62 : PI - 0.62);
 
-type Action = { kind: 'pocket' | 'draw' | 'grab' | 'put'; t: number; s: number };
+type Action = { kind: 'grab' | 'put'; t: number; s: number };
+type ShearsAct = { kind: 'pocket' | 'draw'; t: number; s: number };
 
-interface RakePose {
-  /** head joint on the ground, in the body frame (forward, to the right), lifted by `lift` */
-  a: number;
-  b: number;
-  lift: number;
-  /** pole elevation above horizontal, lean of the torso and a forward shift of the hips */
-  e: number;
-  lean: number;
-  shift: number;
-}
+const deg = (d: number): number => (d * PI) / 180;
 
 /**
- * The stroke: the rake's head starts out in front of the gardener, sweeps away toward the pile, lifts, and comes
- * back. The pole always runs from the head back to the hands, which are held in front of the body.
+ * The rake (true ground units, as the gait's): at the start of a pull the tines' centre is RAKE_REACH ahead of the
+ * gardener's feet; a pull draws them toward the pile by about RAKE_PULL_WORLD world units (never more than
+ * RAKE_PULL_MAX of ground, which is what the arms can do), then the tines lift and swing back out.
  */
-const RAKE_SWEEP = 28;
-const RAKE_HEAD_A = 50;
-const RAKE_HEAD_B = 8;
+export const RAKE_REACH = 66;
+export const RAKE_PULL_WORLD = 28;
+const RAKE_PULL_MIN = 14;
+const RAKE_PULL_MAX = 40;
+/** the tine row's centre lies this far beyond the head joint (away from the gardener) along the ground */
+const TINE_OFF = 13;
 /** where the pole points to, in the body's frame (forward, to the right): the middle of the hands */
 const GRIP_A = 8;
 const GRIP_B = 8;
-const deg = (d: number): number => (d * PI) / 180;
+const E_FAR = deg(46);
+const E_NEAR = deg(60);
+const LEAN_FAR = 0.24;
+const LEAN_NEAR = 0.06;
+const SHIFT_FAR = 4;
+const SHIFT_NEAR = -3;
+/** the rake carried while walking or turning: its head in the body's frame */
+const CARRY_A = 46;
+const CARRY_B = 8;
+const CARRY_E = deg(56);
+/** a rake-target move smaller than this (true ground units) is followed with side-steps, the rake still down */
+const FOLLOW_MAX = 60;
+/** the largest turn (rad) a walk begins with: bigger ones are one turn on the spot first */
+const WALK_TURN = 2.0;
 
-const T0 = (): RakePose => ({ a: RAKE_HEAD_A, b: RAKE_HEAD_B, lift: 0, e: deg(56), lean: 0.08, shift: -4 });
-const T1 = (id: PlanId): RakePose => {
-  // the pile is to the side of where the figure faces: sweep that way
-  const d = sweepAngle(id);
-  return { a: RAKE_HEAD_A + Math.cos(d) * RAKE_SWEEP, b: RAKE_HEAD_B + Math.sin(d) * RAKE_SWEEP, lift: 0, e: deg(34), lean: 0.26, shift: 5 };
-};
-/** the direction of the pile from where the figure faces when raking (radians, positive to the right) */
-const sweepAngle = (id: PlanId): number => wrapPi((id === 'minimum' ? PI : 0) - rakeYaw(id));
-/** the pole's direction in the body's frame (forward, right, up) for a pose: from the head toward the hands */
-const poleBody = (rp: RakePose, extraE = 0): V3 => {
-  let ua = GRIP_A - rp.a;
-  let ub = GRIP_B - rp.b;
-  const l = Math.hypot(ua, ub) || 1;
-  ua /= l;
-  ub /= l;
-  const e = rp.e + extraE;
-  return [Math.cos(e) * ua, Math.cos(e) * ub, Math.sin(e)];
-};
+interface RakePlan {
+  /** where the gardener stands (world), and the way they face there */
+  gx: number;
+  gy: number;
+  yaw: number;
+  /** the tines' centre at the start and at the end of a pull (world) */
+  fx: number;
+  fy: number;
+  nx: number;
+  ny: number;
+}
 
 const mk = (): IK3Out => ({ joint: [0, 0, 0], end: [0, 0, 0], reach: true });
 
@@ -164,13 +166,29 @@ class GardenerImpl implements Gardener {
   private readonly adShiftX = new Spring1(0);
   private readonly sway = new Spring1(0);
   private readonly tip = new Spring2();
+  /** the tines' start and end of a pull (world), gliding after the target when the scene moves it */
+  private readonly tF = new Spring2();
+  private readonly tN = new Spring2();
+  private rpInit = false;
   private readonly speed = new Spring1(0);
+  private readonly workK = new Spring1(0);
   private readonly swingN = new Spring1(0);
   private readonly gripT = new Spring1(RAKE.HIGH);
   private readonly swingF = new Spring1(0);
 
   // director state
   private action: Action | null = null;
+  private shAct: ShearsAct | null = null;
+  private rp: RakePlan = { gx: 0, gy: 0, yaw: 0, fx: 0, fy: 0, nx: 0, ny: 0 };
+  private rakeIntent = false;
+  private gate: 0 | 1 | 2 = 0;
+  private followStep = false;
+  /** in-place turns made so far (pivot steps), for the harness */
+  turnCount = 0;
+  private sp = 0;
+  private sl = 0;
+  private rakeReach = 40;
+  private rakeTineU: V3 = [0, 0, 0];
   private clock = 0;
   private inBand = false;
   private goal: GaitGoal | null = null;
@@ -179,7 +197,6 @@ class GardenerImpl implements Gardener {
   private walkOK = true;
   private sideMode = false;
   private sideKeep = false;
-  private idleT = 0;
   private reducedSig = '';
   private glanceAt = 3;
   private glanceUntil = 0;
@@ -290,11 +307,20 @@ class GardenerImpl implements Gardener {
     return { x: this.fx, y: this.wy };
   }
 
-  /** the rake head's world position while the rake is being used (null while it leans at rest) */
-  rakeHead(): { x: number; y: number } | null {
+  /** the tines' centre on the ground while the rake is in hand, and whether they are drawing (a pull in progress) */
+  rakeHead(): { x: number; y: number; contact: boolean } | null {
     if (this.rakeK.v < 0.02) return null;
-    const p = this.scr(this.rakeHeadU);
-    return { x: p[0], y: p[1] };
+    const p = this.scr([this.rakeTineU[0], this.rakeTineU[1], 0]);
+    return { x: p[0], y: p[1], contact: this.sPhase === 'pull' && this.workK.x > 0.9 && this.rakeK.v > 0.99 };
+  }
+
+  /** straight into the settled pose for an intent, where it happens; motion carries on from there (scrubbing) */
+  place(it: GardenerIntent): void {
+    const pace = this.pace;
+    this.settle(it);
+    this.pace = pace;
+    this.reducedSig = '';
+    this.solve();
   }
 
   /** the rake is in the gardener's hands (or being picked up or put down) */
@@ -327,6 +353,10 @@ class GardenerImpl implements Gardener {
     this.action = { kind, t: 0, s: 0 };
   }
 
+  private startShears(kind: ShearsAct['kind']): void {
+    this.shAct = { kind, t: 0, s: 0 };
+  }
+
   private runAction(h: number): void {
     const a = this.action!;
     a.t += h;
@@ -338,13 +368,6 @@ class GardenerImpl implements Gardener {
       }
     };
     switch (a.kind) {
-      case 'pocket':
-      case 'draw':
-        step(1, 0, () => this.wPocket.go(1, 0.55));
-        step(2, 0.66, () => this.kPocket.go(a.kind === 'pocket' ? 1 : 0, 0.32));
-        step(3, 1.04, () => this.wPocket.go(0, 0.45));
-        if (t >= 1.52) this.action = null;
-        break;
       case 'grab':
         step(1, 0, () => this.wRake.go(1, 0.65));
         step(2, 0.75, () => this.rakeK.go(1, 0.95));
@@ -358,10 +381,29 @@ class GardenerImpl implements Gardener {
     }
   }
 
+  /** putting the shears in the apron pocket (or drawing them): the hand goes to it in whatever view, walking or not */
+  private runShears(h: number): void {
+    const a = this.shAct;
+    if (!a) return;
+    a.t += h;
+    const t = a.t;
+    const step = (n: number, at: number, f: () => void) => {
+      if (a.s < n && t >= at) {
+        a.s = n;
+        f();
+      }
+    };
+    step(1, 0, () => this.wPocket.go(1, 0.55));
+    step(2, 0.66, () => this.kPocket.go(a.kind === 'pocket' ? 1 : 0, 0.32));
+    step(3, 1.04, () => this.wPocket.go(0, 0.45));
+    if (t >= 1.52) this.shAct = null;
+  }
+
   /* ---------------------------------------------------------------- the director */
 
   private step(h: number, it: GardenerIntent): void {
     this.clock += h;
+    this.runShears(h);
     this.direct(h, it);
     this.driveYaw();
     // advance the continuous quantities
@@ -374,14 +416,19 @@ class GardenerImpl implements Gardener {
     this.rakeK.update(h);
     this.carry.update(h);
     this.pull.update(h);
+    this.workK.update(h, this.workTarget(), 6);
+    this.tF.update(h, this.rp.fx, this.rp.fy, 8);
+    this.tN.update(h, this.rp.nx, this.rp.ny, 8);
     // walking (never while seated, mid-action, with the arms up, or turning round)
-    const armsOK = this.armsDown() || (this.sideMode && this.sideKeep);
+    const armsOK = this.wPrune.v < 0.25 || (this.sideMode && this.sideKeep);
+    const gateOK = this.gate === 0 || (this.gate === 1 ? this.sPhase === 'dwell' : this.sPhase !== 'pull');
     const allow =
       this.seat.v < 0.004 &&
       !this.action &&
-      !this.yaw.moving &&
+      (!this.yaw.moving || this.sideMode || this.followStep) &&
       !this.gait.turning &&
       armsOK &&
+      gateOK &&
       this.walkOK &&
       this.gait.feet[0].tipRoll < 0.02 &&
       (this.adTip.x < 0.03 || (this.sideMode && this.sideKeep));
@@ -406,18 +453,83 @@ class GardenerImpl implements Gardener {
     const d = wrapPi(this.yawWant - this.yaw.target);
     if (gp.walking) {
       // follow the way of travel (a goal that has swung right round waits until the walk is done)
-      if (this.yawTrack && Math.abs(d) > 0.03 && Math.abs(d) < 1.2) this.yaw.retarget(this.yaw.target + d, 0.5);
+      if (this.yawTrack && Math.abs(d) > 0.03 && Math.abs(d) < 1.9) this.yaw.retarget(this.yaw.target + d, 0.5);
       return;
     }
-    if (gp.turning || this.yaw.moving) return;
+    if (gp.turning) return;
     const dv = wrapPi(this.yawWant - this.yaw.v);
+    if (this.yaw.moving) {
+      // a small correction in progress (the heap moved a little): follow it
+      if (this.followStep && Math.abs(d) > 0.03 && Math.abs(d) < 0.5) this.yaw.retarget(this.yaw.target + d, 0.45);
+      return;
+    }
     if (Math.abs(dv) <= 0.09) return;
     const calm =
       this.seat.v < 0.004 && !this.seat.moving && !this.action && this.wPrune.v < 0.25 && gp.feet[0].tipRoll < 0.02 && gp.feet[0].state === STANCE && gp.feet[1].state === STANCE && gp.feet[0].tLand > 0.12 && gp.feet[1].tLand > 0.12;
     if (!calm) return;
-    const dur = 0.26 + 0.0022 * (Math.abs(dv) * 180) / PI;
+    if (Math.abs(dv) > 0.35 && this.sPhase !== 'dwell') return;
+    const dur = Math.abs(dv) > 0.35 ? 0.26 + 0.0022 * (Math.abs(dv) * 180) / PI : 0.45;
     this.yaw.retarget(this.yaw.v + dv, dur);
-    if (Math.abs(dv) > 0.35) gp.startTurn(this.yaw.v, dv, dur, Math.abs(dv) < 1.22 ? 2 : Math.abs(dv) < 2.44 ? 3 : 4);
+    if (Math.abs(dv) > 0.35) {
+      this.turnCount++;
+      gp.startTurn(this.yaw.v, dv, dur, Math.abs(dv) < 1.22 ? 2 : Math.abs(dv) < 2.44 ? 3 : 4);
+    }
+  }
+
+  /** the rake's plan for an intent: where to stand, how to face, where the tines start and end a pull (world) */
+  private planRake(it: GardenerIntent): void {
+    const id = this.id;
+    const pile = PILE[id];
+    const rp = this.rp;
+    if (it.target) {
+      const tx = it.target.x;
+      const td = it.target.y / KAPPA;
+      let ux = pile.x - tx;
+      let ud = pile.y / KAPPA - td;
+      const l = Math.hypot(ux, ud);
+      if (l < 1e-3) {
+        ux = -dirIn(id);
+        ud = 0;
+      } else {
+        ux /= l;
+        ud /= l;
+      }
+      const w = Math.hypot(ux, ud * KAPPA);
+      const Lt = clamp(RAKE_PULL_WORLD / w, RAKE_PULL_MIN, RAKE_PULL_MAX);
+      rp.gx = tx + ux * RAKE_REACH;
+      rp.gy = (td + ud * RAKE_REACH) * KAPPA;
+      rp.yaw = Math.atan2(-ud, -ux);
+      rp.fx = tx;
+      rp.fy = it.target.y;
+      rp.nx = tx + ux * Lt;
+      rp.ny = (td + ud * Lt) * KAPPA;
+    } else {
+      const st = rakeStation(id);
+      const yaw = rakeYaw(id);
+      const fx = Math.cos(yaw);
+      const fd = Math.sin(yaw);
+      const sd = st.y / KAPPA;
+      rp.gx = st.x;
+      rp.gy = st.y;
+      rp.yaw = yaw;
+      rp.fx = st.x + fx * RAKE_REACH;
+      rp.fy = (sd + fd * RAKE_REACH) * KAPPA;
+      rp.nx = st.x + fx * (RAKE_REACH - 30);
+      rp.ny = (sd + fd * (RAKE_REACH - 30)) * KAPPA;
+    }
+    if (!this.rpInit) {
+      this.rpInit = true;
+      this.tF.snap(rp.fx, rp.fy);
+      this.tN.snap(rp.nx, rp.ny);
+    }
+  }
+
+  /** whether the tines are working at the target (down on the ground, following it) rather than carried */
+  private workTarget(): number {
+    if (this.sPhase !== 'dwell') return 1;
+    if (!this.rakeIntent || this.rakeK.v < 0.99 || this.wRake.v < 0.99 || this.action) return 0;
+    const d = Math.hypot(this.rp.gx - this.gait.px, this.rp.gy / KAPPA - this.gait.pd);
+    return d < FOLLOW_MAX + 12 ? 1 : 0;
   }
 
   private direct(h: number, it: GardenerIntent): void {
@@ -428,10 +540,12 @@ class GardenerImpl implements Gardener {
     this.walkOK = true;
     this.sideMode = false;
     this.sideKeep = false;
+    this.followStep = false;
+    this.rakeIntent = false;
+    this.gate = this.rakeK.target > 0.5 ? 1 : 0;
     let pruneReady = false;
     this.pruneT = null;
     const gp = this.gait;
-    this.idleT = act === 'idle' ? this.idleT + h : 0;
 
     if (this.action) {
       this.runAction(h);
@@ -463,53 +577,61 @@ class GardenerImpl implements Gardener {
     // the arms come down for anything else but pruning
     if (act !== 'prune') this.wPrune.go(0, 1.0);
 
+    // the shears go into the apron (or come out) in whatever view the hand finds itself, walking or standing
+    if (!this.shAct && !rakeHeld) {
+      if (!pocketed && wantShears === 'pocket' && this.wPrune.v < 0.5) this.startShears('pocket');
+      else if (pocketed && wantShears === 'hand') this.startShears('draw');
+    }
+
     if (rakeHeld && wantRake === 'rest') {
       // finish the stroke in progress first, so the rake never jumps back to rest; face the leaning rake to put it back
       if (this.goTo(st, grabYaw(this.id), 1.5) && this.still && this.sPhase === 'dwell') this.startAction('put');
       this.wPrune.go(0, 1.0);
       return;
     }
-    if (!pocketed && wantShears === 'pocket') {
-      // the shears go into the apron pocket at the front: face the viewer to do it
-      this.wPrune.go(0, 1.0);
-      this.yawWant = idleYaw(this.id);
-      if (this.still && this.wPrune.v < 0.05 && this.facing(idleYaw(this.id))) this.startAction('pocket');
-      else if (!this.still) this.holdYaw();
-      return;
-    }
-    if (pocketed && wantShears === 'hand') {
-      this.wPrune.go(0, 1.0);
-      this.yawWant = idleYaw(this.id);
-      if (this.still && this.facing(idleYaw(this.id))) this.startAction('draw');
-      return;
-    }
     if (!rakeHeld && wantRake === 'held') {
-      if (this.goTo(st, grabYaw(this.id), 1.5) && this.still) this.startAction('grab');
+      const ready = this.kPocket.v > 0.98 && !this.shAct;
+      if (this.goTo(st, grabYaw(this.id), 1.5) && this.still && ready) this.startAction('grab');
       return;
     }
 
     switch (act) {
       case 'rake': {
-        // holding the rake: stand at the station facing the pile
-        this.goTo(st, rakeYaw(this.id), 1.5);
+        this.planRake(it);
+        this.rakeIntent = true;
+        const P = this.rp;
+        const gd = P.gy / KAPPA;
+        const d = Math.hypot(P.gx - gp.px, gd - gp.pd);
+        const holding = this.rakeK.v > 0.99 && this.wRake.v > 0.99;
+        if (holding && d < FOLLOW_MAX && Math.abs(wrapPi(P.yaw - this.yaw.v)) < 0.9) {
+          // the heap moved a little: follow it with small steps, the rake still down and the body still facing it
+          this.followStep = true;
+          this.yawWant = P.yaw;
+          this.yawTrack = false;
+          this.gate = 2;
+          if (d > 5.5 || gp.walking) {
+            this.goal = { x: P.gx, d: gd, spread: 0, minWalk: 2.5, side: true };
+            this.sideMode = true;
+            this.sideKeep = true;
+          }
+        } else this.goTo({ x: P.gx, y: P.gy }, P.yaw, 2.0);
         break;
       }
       case 'rest': {
         const sit = benchStand(this.id);
         const wp = this.benchRoute(sit);
         if (wp) this.goTo(wp, null, 4);
-        else if (this.goTo(sit, SIT_YAW, 1.2) && this.still && this.wPrune.v < 0.05) this.seat.go(1, 1.25);
+        else if (this.goTo(sit, SIT_YAW, 1.2) && this.still && this.wPrune.v < 0.05 && this.kPocket.v > 0.98 && !this.shAct) this.seat.go(1, 1.25);
         break;
       }
       case 'prune': {
-        pruneReady = this.directPrune(it);
+        pruneReady = this.directPrune(it) && !this.shAct && this.kPocket.v < 0.02;
         break;
       }
       case 'idle':
       default: {
-        // stand easy; after a while face the viewer, three-quarters on
+        // stand easy where you are, whichever way you face (a debugging hook can ask for a turn)
         if (this.debugYaw !== null) this.yawWant = this.debugYaw;
-        else if (this.idleT > 4 && this.armsDown()) this.yawWant = idleYaw(this.id);
         break;
       }
     }
@@ -532,17 +654,33 @@ class GardenerImpl implements Gardener {
     return null;
   }
 
-  /** aim for a spot: returns true once there (within `tol`) and facing as asked (null: any way) */
-  private goTo(spot: { x: number; y: number }, finalYaw: number | null, tol: number): boolean {
+  /**
+   * Aim for a spot: returns true once there (within `tol`) and facing as asked (null: any way). The body turns into
+   * the way of travel as the walk begins (or in one turn on the spot if that is more than about 100 degrees), and
+   * swings round to the final facing over the last strides, so it arrives already facing the work.
+   */
+  private goTo(spot: { x: number; y: number }, finalYaw: number | null, tolIn: number): boolean {
     const gp = this.gait;
+    // the gait works in true ground units, where a world y step counts 2.5 times: never ask for more than this
+    const tol = Math.max(tolIn, 3);
     const sd = spot.y / KAPPA;
     const d = Math.hypot(spot.x - gp.px, sd - gp.pd);
     if (d > tol || gp.walking) {
       const heading = Math.atan2(sd - gp.pd, spot.x - gp.px);
       this.goal = { x: spot.x, d: sd, spread: 3, minWalk: tol };
-      this.yawWant = heading;
-      this.yawTrack = gp.walking || Math.abs(wrapPi(heading - this.yaw.v)) <= 0.6;
-      this.walkOK = Math.abs(wrapPi(heading - this.yaw.v)) <= 0.6;
+      if (gp.walking) {
+        let want = heading;
+        if (finalYaw !== null && (d < 12 || (d < 45 && Math.abs(wrapPi(finalYaw - heading)) <= 1.8))) want = finalYaw;
+        this.yawWant = want;
+        this.yawTrack = true;
+        this.walkOK = true;
+      } else {
+        const dyaw = wrapPi(heading - this.yaw.v);
+        // the facing already right for it: just go. Otherwise turn once, into the walk.
+        this.walkOK = Math.abs(dyaw) <= WALK_TURN;
+        this.yawWant = this.walkOK ? null : heading;
+        this.yawTrack = true;
+      }
       return false;
     }
     if (finalYaw === null) return true;
@@ -688,7 +826,7 @@ class GardenerImpl implements Gardener {
 
   private snipping(h: number): void {
     const target = this.pruneT;
-    const ready = this.wPrune.v > 0.97 && !!target && this.still && this.reachOK && this.kPocket.v < 0.02 && this.inBand;
+    const ready = this.wPrune.v > 0.97 && !!target && this.still && this.reachOK && this.kPocket.v < 0.02 && !this.shAct && this.inBand;
     this.working = ready;
     // the tip follows the target when the arm is engaged
     if (target) {
@@ -785,25 +923,28 @@ class GardenerImpl implements Gardener {
     }
   }
 
-  private rakePoseAt(ph: 'dwell' | 'pull' | 'recover', u: number): RakePose {
-    const a = T0();
-    const b = T1(this.id);
-    if (ph === 'dwell') return a;
-    const mix = (p: RakePose, q: RakePose, t: number, lift: number): RakePose => ({
-      a: lerp(p.a, q.a, t),
-      b: lerp(p.b, q.b, t),
-      lift,
-      e: lerp(p.e, q.e, t) + (lift > 0 ? 0.1 * Math.sin(PI * u) : 0),
-      lean: lerp(p.lean, q.lean, t),
-      shift: lerp(p.shift, q.shift, t),
-    });
-    if (ph === 'pull') return mix(a, b, sstep(u), 0);
-    return mix(b, a, sstep(u), 7 * Math.pow(Math.sin(PI * u), 0.8));
+  /** how far along a pull the tines are (0 at the target, 1 at the end of the pull) and how high they are lifted */
+  private calcStroke(): void {
+    const u = this.sDur > 0 ? clamp(this.sT / this.sDur, 0, 1) : 1;
+    if (this.sPhase === 'dwell') {
+      this.sp = 0;
+      this.sl = 0;
+    } else if (this.sPhase === 'pull') {
+      this.sp = sstep(u);
+      this.sl = 0;
+    } else {
+      this.sp = 1 - sstep(u);
+      this.sl = 7 * Math.pow(Math.sin(PI * u), 0.8);
+    }
   }
 
   private raking(h: number): void {
-    const active = this.rakeK.v > 0.99 && this.wRake.v > 0.99 && this.still && !this.action && this.facing(rakeYaw(this.id), 0.2);
+    const gp = this.gait;
+    const held = this.rakeK.v > 0.99 && this.wRake.v > 0.99 && !this.action && this.rakeIntent && this.workK.x > 0.85;
+    const steady = !gp.walking && !gp.turning && gp.feet[0].state === STANCE && gp.feet[1].state === STANCE;
+    const aimed = Math.abs(wrapPi(this.rp.yaw - this.yaw.v)) < 0.3;
     const midStroke = this.sPhase !== 'dwell';
+    const active = held && aimed && (steady || midStroke);
     if (!active && !midStroke) {
       this.sT = 0;
       this.sDur = 0.35;
@@ -819,7 +960,7 @@ class GardenerImpl implements Gardener {
     }
     this.sT += h;
     if (this.sPhase === 'dwell') {
-      if (pace > 0.05 && this.sT >= this.sDur) {
+      if (pace > 0.05 && this.sT >= this.sDur && Math.hypot(this.tF.x - this.rp.fx, this.tF.y - this.rp.fy) < 1.5) {
         this.sPhase = 'pull';
         this.sT = 0;
         this.sDur = clamp(0.4 / pace, 0.36, 0.8);
@@ -841,11 +982,6 @@ class GardenerImpl implements Gardener {
 
   /* ---------------------------------------------------------------- body adaptation (reach) */
 
-  private currentRakePose(): RakePose {
-    const u = this.sDur > 0 ? clamp(this.sT / this.sDur, 0, 1) : 1;
-    return this.rakePoseAt(this.sPhase, u);
-  }
-
   private adaptTargets(it: GardenerIntent): { tip: number; crouch: number; lean: number; shiftA: number; shiftX: number; twist: number } {
     const out = { tip: 0, crouch: 0, lean: 0, shiftA: 0, shiftX: 0, twist: 0 };
     const S = this.S;
@@ -859,21 +995,17 @@ class GardenerImpl implements Gardener {
       out.shiftX = clamp(0.1 * X, -5, 5);
       out.twist = clamp(0.55 * Math.atan(X / 28), -0.62, 0.62);
     } else if (this.wRake.target > 0.5 || this.rakeK.v > 0.01) {
-      // the rake: how far the lower hand has to reach
+      // the rake: how far the lower hand has to reach, and the lean into the pull
       const k = this.rakeK.v;
-      const rp = this.currentRakePose();
-      const reach = this.lowHandReach(rp);
-      out.crouch = 0.45 * sstep(clamp((reach - 44) / 14, 0, 1)) * k;
-      out.lean = lerp(0, rp.lean, k);
-      out.shiftA = lerp(0, rp.shift, k);
+      this.calcStroke();
+      const wk = this.workK.x;
+      const lean = lerp(0.08, lerp(LEAN_FAR, LEAN_NEAR, this.sp), wk);
+      const shift = lerp(-4, lerp(SHIFT_FAR, SHIFT_NEAR, this.sp), wk);
+      out.crouch = 0.5 * sstep(clamp((this.rakeReach - 44) / 14, 0, 1)) * k;
+      out.lean = lerp(0, lean, k);
+      out.shiftA = lerp(0, shift, k);
     }
     return out;
-  }
-
-  /** the distance the rake's lower hand is from the shoulder */
-  private lowHandReach(rp: RakePose): number {
-    const pb = poleBody(rp);
-    return Math.hypot(rp.a + pb[0] * RAKE.LOW - 3, rp.b + pb[1] * RAKE.LOW - 4, rp.lift + pb[2] * RAKE.LOW - 94);
   }
 
   private updateAdapt(h: number, it: GardenerIntent): void {
@@ -887,7 +1019,7 @@ class GardenerImpl implements Gardener {
     let tw = t.twist * this.wPrune.v;
     if (this.yaw.moving || this.gait.turning) tw += clamp(0.3 * wrapPi(this.yaw.target - this.yaw.v), -0.45, 0.45);
     this.twist.update(h, tw, 9);
-    this.carry.go(this.rakeK.v > 0.5 && (this.yaw.moving || this.gait.turning) ? 1 : 0, 0.3);
+    this.carry.go(this.rakeK.v > 0.5 && this.workK.x < 0.5 && (this.yaw.moving || this.gait.turning || this.gait.walking) ? 1 : 0, 0.3);
     this.gait.setTip(this.adTip.x * FAR_ROLL);
   }
 
@@ -897,12 +1029,14 @@ class GardenerImpl implements Gardener {
     const act = it.activity;
     const gp = this.gait;
     this.action = null;
+    this.shAct = null;
     this.working = false;
     const pocket = act === 'rake' || act === 'rest';
     this.kPocket.snap(pocket ? 1 : 0);
     this.wPocket.snap(0);
     this.rakeK.snap(act === 'rake' ? 1 : 0);
     this.wRake.snap(act === 'rake' ? 1 : 0);
+    this.workK.snap(act === 'rake' ? 1 : 0);
     this.carry.snap(0);
     this.seat.snap(act === 'rest' ? 1 : 0);
     this.wPrune.snap(0);
@@ -911,14 +1045,27 @@ class GardenerImpl implements Gardener {
     this.look.snap(0);
     this.headYaw.snap(0);
     this.sway.snap(0);
+    this.speed.snap(0);
+    this.swingN.snap(0);
+    this.swingF.snap(0);
     this.sPhase = 'dwell';
-    this.sT = 0;
+    this.sT = act === 'rake' ? 0.12 : 0;
+    this.sDur = 0.5;
     this.cyc = 'idle';
+    this.cycT = 0;
     this.recoil = 0;
     this.recoilShown = 0;
+    this.pullT = 9;
     this.blade = 0;
     this.crossed = false;
-    this.idleT = 0;
+    this.snapElbows = true;
+    this.debugYaw = null;
+    this.rakeIntent = act === 'rake';
+    this.followStep = false;
+    this.sideMode = false;
+    this.sideKeep = false;
+    this.goal = null;
+    this.yawWant = null;
     let x = gp.px;
     let y = KAPPA * gp.pd;
     let yaw = idleYaw(this.id);
@@ -928,10 +1075,12 @@ class GardenerImpl implements Gardener {
       y = s.y;
       yaw = SIT_YAW;
     } else if (act === 'rake') {
-      const s = rakeStation(this.id);
-      x = s.x;
-      y = s.y;
-      yaw = rakeYaw(this.id);
+      this.planRake(it);
+      this.tF.snap(this.rp.fx, this.rp.fy);
+      this.tN.snap(this.rp.nx, this.rp.ny);
+      x = this.rp.gx;
+      y = this.rp.gy;
+      yaw = this.rp.yaw;
     } else if (act === 'prune' && it.target) {
       const T = it.target;
       const hT = PATH_Y - T.y;
@@ -957,16 +1106,22 @@ class GardenerImpl implements Gardener {
     this.wy = y;
     this.S = depthScale(y);
     this.pace = 0;
-    const t = this.adaptTargets(it);
-    this.adTip.snap(t.tip);
-    this.adCrouch.snap(t.crouch);
-    this.adLean.snap(t.lean);
-    this.adShiftA.snap(t.shiftA);
-    this.adShiftX.snap(t.shiftX);
-    this.twist.snap(t.twist * this.wPrune.v);
-    gp.setTip(t.tip * FAR_ROLL);
-    for (const f of gp.feet) f.place(f.ax, f.ad, f.yaw);
-    for (const f of gp.feet) f.update(0);
+    this.calcStroke();
+    // the reach of the rake hand is read from the last pose: solve once so the adaptations settle on the same values
+    for (let pass = 0; pass < 2; pass++) {
+      const t = this.adaptTargets(it);
+      this.adTip.snap(t.tip);
+      this.adCrouch.snap(t.crouch);
+      this.adLean.snap(t.lean);
+      this.adShiftA.snap(t.shiftA);
+      this.adShiftX.snap(t.shiftX);
+      this.twist.snap(t.twist * this.wPrune.v);
+      gp.setTip(t.tip * FAR_ROLL);
+      for (const f of gp.feet) f.place(f.ax, f.ad, f.yaw);
+      for (const f of gp.feet) f.update(0);
+      this.solve();
+      this.snapElbows = true;
+    }
   }
 
   /* ---------------------------------------------------------------- the pose */
@@ -1024,7 +1179,7 @@ class GardenerImpl implements Gardener {
       const hip: V3 = [hipC[0] + lP[0] * sg * DIM.HIPW, hipC[1] + lP[1] * sg * DIM.HIPW, H];
       this.hips[i] = hip;
       const dy = wrapPi(f.yaw - yaw);
-      const py = Math.abs(dy) > 1.9 ? yaw : yaw + dy * 0.5;
+      const py = yaw + dy * 0.5 * (1 - sstep((Math.abs(dy) - 1.0) / 0.9));
       const pole: V3 = [Math.cos(py) + lP[0] * sg * 0.15, Math.sin(py) + lP[1] * sg * 0.15, 0];
       ik3(hip, A[i]!, DIM.THIGH, DIM.SHIN, pole, this.ikA);
       this.knee[i] = this.ikA.joint;
@@ -1095,21 +1250,52 @@ class GardenerImpl implements Gardener {
     const pocketFinal = pocketPt(0);
     const pocketHold = pocketPt(8);
     const gPocket: V3 = [pocketHold[0] - dP[0] * DIM.PIV, pocketHold[1] - dP[1] * DIM.PIV, pocketHold[2] - dP[2] * DIM.PIV];
-    // the rake: its head and pole, from leaning at rest to held in the hands
+    // the rake: its head and pole, from leaning at rest to held in the hands, and from carried to working at the target
     const kk = this.rakeK.v;
-    const rp = this.currentRakePose();
+    this.calcStroke();
+    const wk = this.workK.x;
+    const p = this.sp;
     const rest = this.restRakeU();
-    const lift = rp.lift + 8 * this.carry.v;
-    const hb: V3 = [fP[0] * rp.a + lP[0] * rp.b, fP[1] * rp.a + lP[1] * rp.b, lift];
-    // the pole leans toward the hands' middle (in front of the body, a little to the right)
-    const pb = poleBody(rp, 0);
-    const dirHeld: V3 = [fP[0] * pb[0] + lP[0] * pb[1], fP[1] * pb[0] + lP[1] * pb[1], pb[2]];
-    const J = lerp3(rest.head, hb, kk);
-    const dir = kk <= 0 ? rest.dir : kk >= 1 ? dirHeld : norm3(lerp3(rest.dir, dirHeld, kk));
+    const gripB: V3 = [fP[0] * GRIP_A + lP[0] * GRIP_B, fP[1] * GRIP_A + lP[1] * GRIP_B, 0];
+    const horiz = (fx: number, fz: number): [number, number] => {
+      const vx = gripB[0] - fx;
+      const vz = gripB[1] - fz;
+      const l = Math.hypot(vx, vz);
+      return l < 1e-3 ? [-fP[0], -fP[1]] : [vx / l, vz / l];
+    };
+    // carried: out in front of the body, a little raised while moving
+    const jc: V3 = [fP[0] * CARRY_A + lP[0] * CARRY_B, fP[1] * CARRY_A + lP[1] * CARRY_B, 6 * this.carry.v];
+    const hc = horiz(jc[0], jc[1]);
+    const dirCarry: V3 = [hc[0] * Math.cos(CARRY_E), hc[1] * Math.cos(CARRY_E), Math.sin(CARRY_E)];
+    // working: the tines' centre on the world target, drawn along the pull; out of reach, they stay on the ground nearer
+    let tx = (lerp(this.tF.x, this.tN.x, p) - gp.px) / S;
+    let tz = (lerp(this.tF.y, this.tN.y, p) - wy) / (S * KAPPA);
+    const tr = Math.hypot(tx, tz);
+    const rMax = RAKE_REACH + 8;
+    const rMin = 26;
+    if (tr > rMax) {
+      tx *= rMax / tr;
+      tz *= rMax / tr;
+    } else if (tr < rMin && tr > 1e-3) {
+      tx *= rMin / tr;
+      tz *= rMin / tr;
+    }
+    const hw = horiz(tx, tz);
+    const jw: V3 = [tx + hw[0] * TINE_OFF, tz + hw[1] * TINE_OFF, this.sl];
+    const eW = lerp(E_FAR, E_NEAR, p);
+    const dirWork: V3 = [hw[0] * Math.cos(eW), hw[1] * Math.cos(eW), Math.sin(eW)];
+    const JH = lerp3(jc, jw, wk);
+    const dirH = wk <= 0 ? dirCarry : wk >= 1 ? dirWork : norm3(lerp3(dirCarry, dirWork, wk));
+    const J = lerp3(rest.head, JH, kk);
+    const dir = kk <= 0 ? rest.dir : kk >= 1 ? dirH : norm3(lerp3(rest.dir, dirH, kk));
     this.rakeHeadU = J;
     this.rakeDirU = dir;
+    const hl = Math.hypot(dir[0], dir[1]) || 1;
+    this.rakeTineU = [J[0] - (dir[0] / hl) * TINE_OFF, J[1] - (dir[1] / hl) * TINE_OFF, 0];
     const gLow: V3 = [J[0] + dir[0] * RAKE.LOW, J[1] + dir[1] * RAKE.LOW, J[2] + dir[2] * RAKE.LOW];
     const gHigh: V3 = [J[0] + dir[0] * RAKE.HIGH, J[1] + dir[1] * RAKE.HIGH, J[2] + dir[2] * RAKE.HIGH];
+    // how far the lower hand has to reach from a standing shoulder (the crouch is chosen from this)
+    this.rakeReach = Math.hypot(gLow[0] - 3 * fT[0], gLow[1] - 3 * fT[1], gLow[2] - 94);
     // blend: later wins by weight; a hand's target swings round the shoulder, the way an arm lifts (a straight blend
     // would cut past the shoulder, where the elbow's bend is unstable and would whip round in a frame)
     gN = swing3(sh0, gN, gPocket, wPocket);
@@ -1288,7 +1474,10 @@ class GardenerImpl implements Gardener {
       contacts,
       elbowDir: [this.elbowDir[0], this.elbowDir[1]],
       pelvis: [gp.px, KAPPA * gp.pd],
+      rakeTine: this.rakeHead(),
       state: {
+        turns: this.turnCount,
+        workK: this.workK.x,
         seat: this.seat.v,
         yaw: this.yaw.v,
         yawWrapped: wrapPi(this.yaw.v),
@@ -1444,9 +1633,15 @@ class GardenerImpl implements Gardener {
         k: kf,
         f: () => {
           bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(kf - 6), set.elbow, 0.7);
-          if (i === 0) this.drawShears(ctx, base, put);
         },
       });
+      if (i === 0) {
+        // the shears sort with the hand that holds them, or with the apron pocket they are in (hidden behind the body
+        // when the figure faces away)
+        const kp = this.toolPocket;
+        const ks = kp > 0.3 ? this.toolPivot[1] : kf + 0.05;
+        items.push({ k: ks, f: () => this.drawShears(ctx, base, put) });
+      }
     }
     if (this.rakeK.v > 0.005 || this.wRake.v > 0.005) {
       const hd = this.rakeHeadU;
@@ -1515,7 +1710,7 @@ class GardenerImpl implements Gardener {
 
 export const createGardener: CreateGardener = (id: PlanId, spriteQ: number): Gardener => {
   const g = new GardenerImpl(id, Math.max(1, spriteQ));
-  const api: Gardener & { rakeHead(): { x: number; y: number } | null; debug(): Record<string, unknown>; debugFace(yaw: number): void; debugTurn(yaw: number | null): void } = {
+  const api: Gardener & { debug(): Record<string, unknown>; debugFace(yaw: number): void; debugTurn(yaw: number | null): void } = {
     id,
     get snips() {
       return g.snips;
@@ -1534,6 +1729,10 @@ export const createGardener: CreateGardener = (id: PlanId, spriteQ: number): Gar
     shears: () => g.shears(),
     feet: () => g.feet(),
     rakeHead: () => g.rakeHead(),
+    place(intent) {
+      g.pace = intent.pace;
+      g.place(intent);
+    },
     debug: () => g.debug(),
     debugFace: (yaw) => g.debugFace(yaw),
     debugTurn: (yaw) => {

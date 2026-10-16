@@ -17,7 +17,12 @@ import type { PlanId } from '../types';
 export type GardenerActivity =
   /** walk to stand in reach of `target` on the wall and cut there, `pace` snips per second */
   | 'prune'
-  /** walk to the pile and rake clippings onto it, `pace` strokes per second */
+  /**
+   * rake clippings toward the pile, `pace` strokes per second. With a `target`, each pull starts with the tines
+   * on the ground at the target and draws them toward the pile (PILE in geom.ts): the gardener stands on the
+   * pile side of the target, facing it, a rake's reach away. The scene moves only the clippings the tines touch
+   * (see rakeHead) and moves the target along as the heap of raked leaves travels toward the pile.
+   */
   | 'rake'
   /** the vine is cleared: put the shears in the apron, walk to the bench, sit, rest (a slow breath, a look round) */
   | 'rest'
@@ -26,7 +31,8 @@ export type GardenerActivity =
 
 export interface GardenerIntent {
   activity: GardenerActivity;
-  /** prune: the point on the wall to cut at (world units). The gardener stands on the path in reach of it. */
+  /** prune: the point on the wall to cut at (world units). The gardener stands on the path in reach of it.
+   *  rake: where the tines land at the start of each pull (world units, on the lawn). */
   target: { x: number; y: number } | null;
   /** prune: snips per second wanted (0 … 3); rake: strokes per second (0 … 1.5). Ignored otherwise. */
   pace: number;
@@ -51,6 +57,16 @@ export interface Gardener {
   readonly working: boolean;
   /** Feet position (world units), for the scene's shadow and depth sorting. */
   feet(): { x: number; y: number };
+  /**
+   * The rake's tines this frame (world units, the middle of the tine row on the ground) and whether they are
+   * on the ground and drawing toward the gardener (a pull in progress). Null while the rake is not in hand.
+   */
+  rakeHead(): { x: number; y: number; contact: boolean } | null;
+  /**
+   * Put the gardener straight into the settled pose for this intent, where it happens (no walking): used when
+   * the timeline is scrubbed, so the gardener matches the moment shown. Normal motion carries on from there.
+   */
+  place(intent: GardenerIntent): void;
 }
 
 /** Implemented in src/vine/scene/gardener.ts */
