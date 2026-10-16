@@ -8,7 +8,7 @@ import { Rand } from '../../scene/prng';
 import { almond, deform, rgba, tracePoly } from '../../scene/watercolor';
 import { flowerDab, grassTuft } from '../../river/scene/paint';
 import { FENCE } from './layout';
-import { INK } from './art';
+import { INK, newSprite, type Sprite } from './art';
 
 const PAINT = ['#EFE4C6', '#E8DCBA', '#F1E7CC', '#E2D5B2', '#EBDEBC'];
 const BARE = '#C9AE82';
@@ -162,6 +162,19 @@ function post(ctx: CanvasRenderingContext2D, rnd: Rand, x: number, base: number,
   tracePoly(ctx, p);
   ctx.stroke();
   ctx.setLineDash([]);
+}
+
+/** the world box the fence (with its grass, posts and gate) paints into */
+const FENCE_BOX = { x0: FENCE.x0 - 24, y0: FENCE.y - 50, x1: FENCE.x1 + 24, y1: FENCE.y + 22 };
+
+/**
+ * The fence painted into its own sprite, so the scene can draw it in front of the cottages (its ends stand
+ * against the cottage corners) and depth-sort it with the gardeners and props. Blit it at world (0, 0).
+ */
+export function buildFenceSprite(q: number): Sprite {
+  const { sp, ctx } = newSprite(FENCE_BOX.x1 - FENCE_BOX.x0, FENCE_BOX.y1 - FENCE_BOX.y0, -FENCE_BOX.x0, -FENCE_BOX.y0, q);
+  paintPicketFence(ctx, new Rand(4889));
+  return sp;
 }
 
 export function paintPicketFence(ctx: CanvasRenderingContext2D, rnd: Rand): void {

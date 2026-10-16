@@ -22,7 +22,6 @@ import { dressFoot, layTree, renderTree, type TreePlan } from './trees';
 import { buildWoodsParts, drawClumpSpr, drawFarTree, loadKits, pickClump, type Kits, type WoodsParts } from './treesWoods';
 import { HEDGE_Y, paintCastShadows, paintLawn, paintLeaves } from './groundLawn';
 import { paintPaths } from './groundPaths';
-import { paintPicketFence } from './groundFence';
 import { paintBorder } from './groundBorder';
 
 export interface WorldLayer {
@@ -168,7 +167,7 @@ export async function buildWorld(cam: Camera, tile: CanvasImageSource, check: ()
   lg('paths');
   await tick();
   if (!check()) return null;
-  paintPicketFence(ctx, rnd);
+  // the picket fence itself is a sprite the scene draws in front of the cottages (groundFence buildFenceSprite)
   paintCastShadows(ctx, rnd, v);
   paintLeaves(ctx, rnd, v, field);
   lg('fence, shadows, leaves');

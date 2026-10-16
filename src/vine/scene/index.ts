@@ -31,7 +31,8 @@ import { VineView, buildLeafSprites, toWorldX, toWorldY, wallXf, type LeafSprite
 import { buildLeafSet, type LeafSet } from './leaves';
 import { PileView } from './pile';
 import { makeBench, makeGardenWall, makeHayBale, makePumpkins, makeWheelbarrow } from './props';
-import { WALL_STUB } from './layout';
+import { FENCE, WALL_STUB } from './layout';
+import { buildFenceSprite } from './groundFence';
 import { wind, type Sprite } from './art';
 import { Clippings, Drifting } from './fall';
 import { createGardener, SEAT_TOP } from './gardener';
@@ -70,6 +71,8 @@ interface Placed {
   spr: Sprite;
   x: number;
   y: number;
+  /** depth for sorting when it differs from the placement y (a sprite placed at the world origin) */
+  depth?: number;
 }
 
 export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
@@ -202,6 +205,8 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
           x: 842,
           y: 640,
         },
+        // the picket fence stands in front of the cottage corners, so it is drawn with the lawn's standing things
+        { spr: buildFenceSprite(pq), x: 0, y: 0, depth: FENCE.y },
         { spr: makeGardenWall('minimum', pq), x: WALL_STUB.minimum.x0, y: WALL_STUB.minimum.yBase },
         { spr: makeGardenWall('fixed', pq), x: WALL_STUB.fixed.x0, y: WALL_STUB.fixed.yBase },
       ];
@@ -603,7 +608,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       }
       // ---- the lawn's standing things, nearest last
       const items: Array<{ y: number; draw: () => void }> = [];
-      for (const p of props) items.push({ y: p.y, draw: () => ctx.drawImage(p.spr.cv, p.x - p.spr.px, p.y - p.spr.py, p.spr.w, p.spr.h) });
+      for (const p of props) items.push({ y: p.depth ?? p.y, draw: () => ctx.drawImage(p.spr.cv, p.x - p.spr.px, p.y - p.spr.py, p.spr.w, p.spr.h) });
       for (const id of PLANS) {
         const gd = gardens[id];
         const pile = gd.pile;
