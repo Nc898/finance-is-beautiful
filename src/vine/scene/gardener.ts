@@ -91,30 +91,48 @@ type ShearsAct = { kind: 'pocket' | 'draw'; t: number; s: number };
 
 const deg = (d: number): number => (d * PI) / 180;
 
+/** the torso seen from above, for sorting the arms and tools against it: half its width and half its depth (units) */
+const TORSO_W = 8;
+const TORSO_D = 6;
+
 /**
  * The rake (true ground units, as the gait's): at the start of a pull the tines' centre is RAKE_REACH ahead of the
  * gardener's feet; a pull draws them toward the pile by about RAKE_PULL_WORLD world units (never more than
  * RAKE_PULL_MAX of ground, which is what the arms can do), then the tines lift and swing back out.
  */
-export const RAKE_REACH = 66;
+export const RAKE_REACH = 92;
 export const RAKE_PULL_WORLD = 28;
 const RAKE_PULL_MIN = 14;
-const RAKE_PULL_MAX = 40;
+const RAKE_PULL_MAX = 30;
 /** the tine row's centre lies this far beyond the head joint (away from the gardener) along the ground */
 const TINE_OFF = 13;
-/** where the pole points to, in the body's frame (forward, to the right): the middle of the hands */
-const GRIP_A = 8;
-const GRIP_B = 8;
-const E_FAR = deg(46);
-const E_NEAR = deg(60);
-const LEAN_FAR = 0.24;
-const LEAN_NEAR = 0.06;
+/**
+ * Raking, the far hand holds the handle here (body frame: forward, to the near hand's side, up from the hip joint):
+ * out in front of its own hip, and the pole runs from the tines up through that hand, so the near hand holds the
+ * shaft further down, RAKE_HANDS nearer the head. (A pole set by a fixed angle passes the body wherever the reach
+ * puts it, and the far hand would follow it round behind the back for the top of the handle.)
+ */
+const REAR_A = 24;
+const REAR_A_PULLED = 4;
+const REAR_B = -9;
+const REAR_H = 0;
+const REAR_H_PULLED = -5;
+const RAKE_HANDS = 25;
+const LEAN_FAR = 0.34;
+const LEAN_NEAR = 0.14;
 const SHIFT_FAR = 4;
 const SHIFT_NEAR = -3;
-/** the rake carried while walking or turning: its head in the body's frame */
-const CARRY_A = 46;
-const CARRY_B = 8;
-const CARRY_E = deg(56);
+/**
+ * The rake held in the near hand alone, at its side (body frame: forward, to the near hand's side, up; the hand's
+ * height is from the hip joint). Standing, the head rests on the ground beside the foot and the pole stands up
+ * through the hand like a staff; walking, the head is carried forward off the ground and the handle trails back past
+ * the hip. (Held out in front in both hands, the handle's top would pass the shoulder and the far hand would have to
+ * reach round behind the back for it.)
+ */
+const HOLD_HEAD: V3 = [14, 18, 0];
+const HOLD_HAND: V3 = [6, 13, 4];
+const CARRY_HEAD: V3 = [48, 13, 16];
+const CARRY_HAND: V3 = [8, 13, -6];
 /** a rake-target move smaller than this (true ground units) is followed with side-steps, the rake still down */
 const FOLLOW_MAX = 60;
 /** the largest turn (rad) a walk begins with: bigger ones are one turn on the spot first */
@@ -1001,7 +1019,7 @@ class GardenerImpl implements Gardener {
       const wk = this.workK.x;
       const lean = lerp(0.08, lerp(LEAN_FAR, LEAN_NEAR, this.sp), wk);
       const shift = lerp(-4, lerp(SHIFT_FAR, SHIFT_NEAR, this.sp), wk);
-      out.crouch = 0.5 * sstep(clamp((this.rakeReach - 44) / 14, 0, 1)) * k;
+      out.crouch = 0.28 * sstep(clamp((this.rakeReach - 48) / 16, 0, 1)) * k;
       out.lean = lerp(0, lean, k);
       out.shiftA = lerp(0, shift, k);
     }
@@ -1256,17 +1274,23 @@ class GardenerImpl implements Gardener {
     const wk = this.workK.x;
     const p = this.sp;
     const rest = this.restRakeU();
-    const gripB: V3 = [fP[0] * GRIP_A + lP[0] * GRIP_B, fP[1] * GRIP_A + lP[1] * GRIP_B, 0];
-    const horiz = (fx: number, fz: number): [number, number] => {
-      const vx = gripB[0] - fx;
-      const vz = gripB[1] - fz;
+    // the far hand draws back toward the hip through the pull
+    const rA = lerp(REAR_A, REAR_A_PULLED, p);
+    const rear: V3 = [ho[0] + fP[0] * rA + lP[0] * REAR_B, ho[1] + fP[1] * rA + lP[1] * REAR_B, H + lerp(REAR_H, REAR_H_PULLED, p)];
+    const horiz = (fx: number, fz: number, g: V3): [number, number] => {
+      const vx = g[0] - fx;
+      const vz = g[1] - fz;
       const l = Math.hypot(vx, vz);
       return l < 1e-3 ? [-fP[0], -fP[1]] : [vx / l, vz / l];
     };
-    // carried: out in front of the body, a little raised while moving
-    const jc: V3 = [fP[0] * CARRY_A + lP[0] * CARRY_B, fP[1] * CARRY_A + lP[1] * CARRY_B, 6 * this.carry.v];
-    const hc = horiz(jc[0], jc[1]);
-    const dirCarry: V3 = [hc[0] * Math.cos(CARRY_E), hc[1] * Math.cos(CARRY_E), Math.sin(CARRY_E)];
+    // held in the near hand: standing like a staff, carried trailing at the side while moving
+    const body = (v: V3, h0: number): V3 => [ho[0] + fP[0] * v[0] + lP[0] * v[1], ho[1] + fP[1] * v[0] + lP[1] * v[1], h0 + v[2]];
+    const cv = this.carry.v;
+    const jc = lerp3(body(HOLD_HEAD, 0), body(CARRY_HEAD, 0), cv);
+    const hand = lerp3(body(HOLD_HAND, H), body(CARRY_HAND, H), cv);
+    const toHand: V3 = [hand[0] - jc[0], hand[1] - jc[1], hand[2] - jc[2]];
+    const tHold = clamp(Math.hypot(toHand[0], toHand[1], toHand[2]), 30, RAKE.POLE - 20);
+    const dirCarry = norm3(toHand);
     // working: the tines' centre on the world target, drawn along the pull; out of reach, they stay on the ground nearer
     let tx = (lerp(this.tF.x, this.tN.x, p) - gp.px) / S;
     let tz = (lerp(this.tF.y, this.tN.y, p) - wy) / (S * KAPPA);
@@ -1280,10 +1304,11 @@ class GardenerImpl implements Gardener {
       tx *= rMin / tr;
       tz *= rMin / tr;
     }
-    const hw = horiz(tx, tz);
+    const hw = horiz(tx, tz, rear);
     const jw: V3 = [tx + hw[0] * TINE_OFF, tz + hw[1] * TINE_OFF, this.sl];
-    const eW = lerp(E_FAR, E_NEAR, p);
-    const dirWork: V3 = [hw[0] * Math.cos(eW), hw[1] * Math.cos(eW), Math.sin(eW)];
+    const toRear: V3 = [rear[0] - jw[0], rear[1] - jw[1], rear[2] - jw[2]];
+    const tRear = clamp(Math.hypot(toRear[0], toRear[1], toRear[2]), RAKE.LOW + RAKE_HANDS - 20, RAKE.POLE - 6);
+    const dirWork = norm3(toRear);
     const JH = lerp3(jc, jw, wk);
     const dirH = wk <= 0 ? dirCarry : wk >= 1 ? dirWork : norm3(lerp3(dirCarry, dirWork, wk));
     const J = lerp3(rest.head, JH, kk);
@@ -1292,7 +1317,9 @@ class GardenerImpl implements Gardener {
     this.rakeDirU = dir;
     const hl = Math.hypot(dir[0], dir[1]) || 1;
     this.rakeTineU = [J[0] - (dir[0] / hl) * TINE_OFF, J[1] - (dir[1] / hl) * TINE_OFF, 0];
-    const gLow: V3 = [J[0] + dir[0] * RAKE.LOW, J[1] + dir[1] * RAKE.LOW, J[2] + dir[2] * RAKE.LOW];
+    // the near hand: at the pole's lower grip while carried, RAKE_HANDS below the far hand while raking
+    const tLow = lerp(RAKE.LOW, lerp(tHold, tRear - RAKE_HANDS, wk), kk);
+    const gLow: V3 = [J[0] + dir[0] * tLow, J[1] + dir[1] * tLow, J[2] + dir[2] * tLow];
     const gHigh: V3 = [J[0] + dir[0] * RAKE.HIGH, J[1] + dir[1] * RAKE.HIGH, J[2] + dir[2] * RAKE.HIGH];
     // how far the lower hand has to reach from a standing shoulder (the crouch is chosen from this)
     this.rakeReach = Math.hypot(gLow[0] - 3 * fT[0], gLow[1] - 3 * fT[1], gLow[2] - 94);
@@ -1304,7 +1331,8 @@ class GardenerImpl implements Gardener {
     gN = swing3(sh0, gN, thigh(0, 19 / DIM.THIGH), wKnee);
     gF = swing3(sh1, gF, freeT, wPrune);
     // the far hand slides along the handle, as a raker's does: it grips where the pole passes a comfortable arm's
-    // length from the shoulder (never at a fixed point that would drag the hand past the shoulder and flip the elbow)
+    // length from the shoulder (never at a fixed point that would drag the hand past the shoulder and flip the elbow);
+    // raking, it slides to the grip in front of its hip
     const gripRaw = (): number => {
       const vx = J[0] - sh1[0];
       const vy = J[1] - sh1[1];
@@ -1312,7 +1340,8 @@ class GardenerImpl implements Gardener {
       const vd = vx * dir[0] + vy * dir[1] + vz * dir[2];
       const disc = vd * vd - (vx * vx + vy * vy + vz * vz - GRIP_R * GRIP_R);
       // a smooth max(disc, 0): the grip must not jump as the pole comes within reach of the shoulder
-      return clamp(-vd + Math.sqrt(0.5 * (disc + Math.sqrt(disc * disc + 900))), RAKE.LOW + 6, RAKE.HIGH + 12);
+      const free = clamp(-vd + Math.sqrt(0.5 * (disc + Math.sqrt(disc * disc + 900))), RAKE.LOW + 6, RAKE.HIGH + 12);
+      return lerp(free, tRear, wk);
     };
     // the hand slides along the pole rather than jumping when the pole swings past the shoulder
     const tRaw = gripRaw();
@@ -1323,8 +1352,8 @@ class GardenerImpl implements Gardener {
       return [J[0] + dir[0] * t, J[1] + dir[1] * t, J[2] + dir[2] * t];
     };
     // picking the rake up (or setting it down), the near hand does the lifting while the pole swings from leaning
-    // to the raking angle; the far hand takes the handle only once it is nearly there
-    const farGrip = wRake * sstep((kk - 0.45) / 0.53);
+    // to the hold; the far hand takes the handle only to rake
+    const farGrip = wRake * sstep((kk - 0.45) / 0.53) * sstep(wk / 0.7);
     gF = swing3(sh1, gF, farGrip > 0.001 ? slideGrip() : gHigh, farGrip);
     gF = swing3(sh1, gF, thigh(1, 22 / DIM.THIGH), wKnee);
     // the elbows go back and down, a little out; each keeps the side it is on as the arm sweeps round, drifting back
@@ -1381,7 +1410,12 @@ class GardenerImpl implements Gardener {
   /** the elbow hint for an arm: where it was, pulled toward the preferred side (back, down and a little out) */
   private armHint(i: number, fT: V3, lT: V3, k: number): V3 {
     const sg = i === 0 ? 1 : -1;
-    const pref: V3 = norm3([-0.45 * fT[0] + 0.2 * sg * lT[0], -0.45 * fT[1] + 0.2 * sg * lT[1], -0.85]);
+    // raking, the far arm's elbow tucks back along the side rather than out (a hand on the handle at the hip with the
+    // elbow out to the side reads as a hand on the hip)
+    const tuck = i === 1 ? this.wRake.v * this.workK.x : 0;
+    const back = 0.45 + 0.35 * tuck;
+    const out = 0.2 * (1 - tuck);
+    const pref: V3 = norm3([-back * fT[0] + out * sg * lT[0], -back * fT[1] + out * sg * lT[1], -0.85]);
     if (k >= 1) return pref;
     return norm3(lerp3(this.elbowDir[i]!, pref, k));
   }
@@ -1475,6 +1509,7 @@ class GardenerImpl implements Gardener {
       elbowDir: [this.elbowDir[0], this.elbowDir[1]],
       pelvis: [gp.px, KAPPA * gp.pd],
       rakeTine: this.rakeHead(),
+      units: { hipC: this.hipC, shoulder: this.shoulder, elbow: this.elbow, glove: this.glove, rakeHead: this.rakeHeadU, rakeDir: this.rakeDirU, yawT: this.yawT },
       state: {
         turns: this.turnCount,
         workK: this.workK.x,
@@ -1560,6 +1595,28 @@ class GardenerImpl implements Gardener {
     const torsoKey = hipC[1] + 20 * this.sUp[1] + 4;
     const torsoZ = hipC[1] + 20 * this.sUp[1];
     const farOf = (z: number): number => clamp((torsoZ - 1.5 - z) / 6, 0, 0.85);
+    // The arms and tools sort against the torso by where they are round it, not by raw depth. Seen from above the
+    // torso is an oval (TORSO_W across, TORSO_D front to back) turned to the torso's yaw; along any line of sight the
+    // middle of the oval lies on one line (the diameter conjugate to the view direction), so a point is in front of
+    // the torso exactly when it is nearer than that line at its own x. A limb beside the torso and about level with
+    // it (an arm hanging at the side) is drawn over the torso's edge; one well in front or behind is not.
+    const cT = Math.cos(this.yawT);
+    const sT = Math.sin(this.yawT);
+    const kMid = ((TORSO_D * TORSO_D - TORSO_W * TORSO_W) * cT * sT) / (TORSO_D * TORSO_D * cT * cT + TORSO_W * TORSO_W * sT * sT);
+    const silW = Math.sqrt(TORSO_W * TORSO_W * sT * sT + TORSO_D * TORSO_D * cT * cT);
+    const torsoX = hipC[0] + 20 * this.sUp[0];
+    const keyAt = (P: V3): number => {
+      const dx = P[0] - torsoX;
+      const rel = P[1] - torsoZ - kMid * dx;
+      const beside = sstep((Math.abs(dx) - silW + 1.5) / 3) * sstep((7 - Math.abs(rel)) / 4);
+      return torsoKey + lerp(rel, Math.max(rel, 2), beside);
+    };
+    /** a limb or a pole from A to B sorts by its part that crosses the torso: its point nearest the torso's middle */
+    const keySeg = (A: V3, B: V3): number => {
+      const ex = B[0] - A[0];
+      const t = Math.abs(ex) < 1e-6 ? 0.5 : clamp((torsoX - A[0]) / ex, 0, 1);
+      return keyAt([A[0] + ex * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
+    };
     // ---- the torso, head and scarf
     const hipS = this.scr(hipC);
     const sp = [this.sUp[0], KAPPA * this.sUp[1] - this.sUp[2]];
@@ -1619,27 +1676,31 @@ class GardenerImpl implements Gardener {
       });
     }
     // ---- the arms, the shears and the rake
-    const armKey = (a: V3, b: V3): number => (a[1] + b[1]) / 2 + 6;
     const foreKeys: number[] = [0, 0];
     for (let i = 0; i < 2; i++) {
       const sh = this.shoulder[i]!;
       const el = this.elbow[i]!;
       const gl = this.glove[i]!;
-      const ku = armKey(sh, el);
-      const kf = armKey(el, gl);
+      const zu = (sh[1] + el[1]) / 2;
+      const zf = (el[1] + gl[1]) / 2;
+      const ku = keySeg(sh, el);
+      const kf = keySeg(el, gl);
       foreKeys[i] = kf;
-      items.push({ k: ku, f: () => bone(set.upper, set.upperFar, sh, el, 24, farOf(ku - 6), null, 0) });
+      items.push({ k: ku, f: () => bone(set.upper, set.upperFar, sh, el, 24, farOf(zu), null, 0) });
       items.push({
         k: kf,
         f: () => {
-          bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(kf - 6), set.elbow, 0.7);
+          bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(zf), set.elbow, 0.7);
         },
       });
       if (i === 0) {
-        // the shears sort with the hand that holds them, or with the apron pocket they are in (hidden behind the body
-        // when the figure faces away)
-        const kp = this.toolPocket;
-        const ks = kp > 0.3 ? this.toolPivot[1] : kf + 0.05;
+        // the shears sort with the hand that holds them (just over it), or with the apron pocket they are in: on the
+        // torso's surface, seen when that part of the apron faces the viewer and hidden behind the body otherwise
+        const kp = sstep((this.toolPocket - 0.2) / 0.6);
+        const na = DIM.POCKET.a / (TORSO_D * TORSO_D);
+        const nb = DIM.POCKET.b / (TORSO_W * TORSO_W);
+        const facing = (na * sT + nb * cT) / Math.hypot(na, nb);
+        const ks = lerp(kf + 0.05, torsoKey + 6 * facing, kp);
         items.push({ k: ks, f: () => this.drawShears(ctx, base, put) });
       }
     }
@@ -1651,7 +1712,10 @@ class GardenerImpl implements Gardener {
       const b = this.scr(tipU);
       const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
       const rr = clamp(Math.hypot(b[0] - a[0], b[1] - a[1]) / (RAKE.POLE * S), 0.5, 1.3);
-      items.push({ k: Math.min(foreKeys[0]!, foreKeys[1]!) - 0.3, f: () => put(set.rake, a[0], a[1], ang, rr, 1) });
+      // the pole sorts where it passes the body (its handle, from the lower grip up), and under the hands that hold it
+      const lo: V3 = [hd[0] + dr[0] * RAKE.LOW * 0.8, hd[1] + dr[1] * RAKE.LOW * 0.8, hd[2] + dr[2] * RAKE.LOW * 0.8];
+      const kr = Math.min(keySeg(lo, tipU), Math.max(foreKeys[0]!, foreKeys[1]!) - 0.3);
+      items.push({ k: kr, f: () => put(set.rake, a[0], a[1], ang, rr, 1) });
     }
     // sorted far to near (insertion sort: a dozen items, almost in order)
     for (let i = 1; i < items.length; i++) {
