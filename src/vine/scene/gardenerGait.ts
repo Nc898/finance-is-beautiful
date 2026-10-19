@@ -379,10 +379,15 @@ export class Gait {
     const lead: 0 | 1 = delta >= 0 ? 0 : 1;
     const steps: TurnStep[] = [];
     const share = dur / n;
+    // measured (turns in place, CMU 69_16/69_18): the body starts round on both feet, the lead foot opens out most of
+    // the way early, the other closes in the second half; each step is in the air for most of its share
+    const mo = walkStyle === 'measured';
     for (let j = 1; j <= n; j++) {
       const ratio = j === n ? 1 : (j / Math.max(1, n - 1)) * 0.92;
       const foot = (((j - 1) % 2 === 0 ? lead : 1 - lead) as 0 | 1);
-      steps.push({ foot, lift: (j - 1) * share + 0.02, land: j * share, yaw: yaw0 + delta * ratio, begun: false });
+      const lift = mo ? dur * (0.05 + ((j - 1) * 0.92) / n) : (j - 1) * share + 0.02;
+      const land = mo ? lift + dur * (0.8 * 0.92) / n : j * share;
+      steps.push({ foot, lift, land, yaw: yaw0 + delta * ratio, begun: false });
     }
     this.turnSteps = steps;
     this.turnClock = 0;

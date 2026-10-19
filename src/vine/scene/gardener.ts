@@ -23,7 +23,7 @@ import { BENCH, GROUND_Y, PATH_Y, PILE, REACH_SIDE, depthScale } from './geom';
 import { DIM, ELBOW_CUT, FOREARM, KAPPA, RAKE, SEAT_HIP, VIEWS } from './gardenerDims';
 import { buildGardenerSet, type Part, type Sprites } from './gardenerArt';
 import { Gait, STANCE, type Foot, type GaitGoal } from './gardenerGait';
-import { LEG, WALK_BOB, WALK_PELVIS_ROLL, WALK_PELVIS_YAW, WALK_SWAY, WALK_THORAX_YAW, cyc, wristSwing } from './gardenerWalk';
+import { LEG, WALK_BOB, WALK_PELVIS_ROLL, WALK_PELVIS_YAW, WALK_SWAY, WALK_THORAX_YAW, cyc, walkStyle, wristSwing } from './gardenerWalk';
 import {
   Mover,
   Spring1,
@@ -103,10 +103,10 @@ const TORSO_D = 6;
  * gardener's feet; a pull draws them toward the pile by about RAKE_PULL_WORLD world units (never more than
  * RAKE_PULL_MAX of ground, which is what the arms can do), then the tines lift and swing back out.
  */
-export const RAKE_REACH = 92;
-export const RAKE_PULL_WORLD = 28;
+export const RAKE_REACH = 100;
+export const RAKE_PULL_WORLD = 24;
 const RAKE_PULL_MIN = 14;
-const RAKE_PULL_MAX = 30;
+const RAKE_PULL_MAX = 24;
 /** the tine row's centre lies this far beyond the head joint (away from the gardener) along the ground */
 const TINE_OFF = 13;
 /**
@@ -120,9 +120,14 @@ const REAR_A_PULLED = 4;
 const REAR_B = -9;
 const REAR_H = 0;
 const REAR_H_PULLED = -5;
-const RAKE_HANDS = 25;
+/** measured: the top hand at the hip, near the end of the handle (a raker reaches far, unlike a sweeper) */
+const REAR_LIFT_M = 0;
+const RAKE_HANDS = 22;
 const LEAN_FAR = 0.34;
 const LEAN_NEAR = 0.14;
+/** measured (sweeping, CMU 13_23/14_16): about 28 degrees from the waist, a little more on the reach */
+const LEAN_FAR_M = 0.52;
+const LEAN_NEAR_M = 0.34;
 const SHIFT_FAR = 4;
 const SHIFT_NEAR = -3;
 /**
@@ -462,7 +467,7 @@ class GardenerImpl implements Gardener {
     // the sway over the standing foot
     const f0 = this.gait.feet[0].state === STANCE ? 1 : 0;
     const f1 = this.gait.feet[1].state === STANCE ? 1 : 0;
-    this.sway.update(h, (this.gait.walking ? 1.7 : 0) * (f0 - f1), 12);
+    this.sway.update(h, (this.gait.walking ? 1.7 : this.gait.turning && walkStyle === 'measured' ? 2.6 : 0) * (f0 - f1), 12);
     this.idleLife(h);
     this.snipping(h);
     this.raking(h);
@@ -491,7 +496,8 @@ class GardenerImpl implements Gardener {
       this.seat.v < 0.004 && !this.seat.moving && !this.action && this.wPrune.v < 0.25 && gp.feet[0].tipRoll < 0.02 && gp.feet[0].state === STANCE && gp.feet[1].state === STANCE && gp.feet[0].tLand > 0.12 && gp.feet[1].tLand > 0.12;
     if (!calm) return;
     if (Math.abs(dv) > 0.35 && this.sPhase !== 'dwell') return;
-    const dur = Math.abs(dv) > 0.35 ? 0.26 + 0.0022 * (Math.abs(dv) * 180) / PI : 0.45;
+    const mo = walkStyle === 'measured';
+    const dur = Math.abs(dv) > 0.35 ? (mo ? 0.5 + 0.42 * Math.abs(dv) : 0.26 + 0.0022 * (Math.abs(dv) * 180) / PI) : mo ? 0.6 : 0.45;
     this.yaw.retarget(this.yaw.v + dv, dur);
     if (Math.abs(dv) > 0.35) {
       this.turnCount++;
@@ -785,7 +791,7 @@ class GardenerImpl implements Gardener {
     const turning = this.yaw.moving || this.gait.turning;
     if (turning) {
       const rem = wrapPi(this.yaw.target - this.yaw.v);
-      tYaw = clamp(0.55 * rem, -0.8, 0.8);
+      tYaw = walkStyle === 'measured' ? clamp(0.5 * rem, -0.45, 0.45) : clamp(0.55 * rem, -0.8, 0.8);
     }
     // pruning: look at the work
     if (this.wPrune.v > 0.02 && this.pruneT) {
@@ -986,19 +992,19 @@ class GardenerImpl implements Gardener {
       if (pace > 0.05 && this.sT >= this.sDur && Math.hypot(this.tF.x - this.rp.fx, this.tF.y - this.rp.fy) < 1.5) {
         this.sPhase = 'pull';
         this.sT = 0;
-        this.sDur = clamp(0.4 / pace, 0.36, 0.8);
+        this.sDur = walkStyle === 'measured' ? clamp(0.5 / pace, 0.42, 1.0) : clamp(0.4 / pace, 0.36, 0.8);
       }
     } else if (this.sPhase === 'pull') {
       if (this.sT >= this.sDur) {
         this.strokes++;
         this.sPhase = 'recover';
         this.sT = 0;
-        this.sDur = clamp(0.36 / pace, 0.32, 0.7);
+        this.sDur = walkStyle === 'measured' ? clamp(0.34 / pace, 0.28, 0.66) : clamp(0.36 / pace, 0.32, 0.7);
       }
     } else if (this.sT >= this.sDur) {
       this.sPhase = 'dwell';
       this.sT = 0;
-      this.sDur = Math.max(0.05, 1 / Math.max(pace, 0.05) - 0.4 / Math.max(pace, 0.05) - 0.36 / Math.max(pace, 0.05));
+      this.sDur = Math.max(0.05, (walkStyle === 'measured' ? 0.16 : 0.24) / Math.max(pace, 0.05));
       if (pace <= 0.05) this.sDur = 0.2;
     }
   }
@@ -1022,9 +1028,10 @@ class GardenerImpl implements Gardener {
       const k = this.rakeK.v;
       this.calcStroke();
       const wk = this.workK.x;
-      const lean = lerp(0.08, lerp(LEAN_FAR, LEAN_NEAR, this.sp), wk);
+      const mo = walkStyle === 'measured';
+      const lean = lerp(0.08, lerp(mo ? LEAN_FAR_M : LEAN_FAR, mo ? LEAN_NEAR_M : LEAN_NEAR, this.sp), wk);
       const shift = lerp(-4, lerp(SHIFT_FAR, SHIFT_NEAR, this.sp), wk);
-      out.crouch = 0.28 * sstep(clamp((this.rakeReach - 48) / 16, 0, 1)) * k;
+      out.crouch = (mo ? 0.1 : 0.28) * sstep(clamp((this.rakeReach - 48) / 16, 0, 1)) * k;
       out.lean = lerp(0, lean, k);
       out.shiftA = lerp(0, shift, k);
     }
@@ -1040,7 +1047,12 @@ class GardenerImpl implements Gardener {
     this.adShiftX.update(h, t.shiftX, 9);
     // the torso twists toward the work (and leads a turn)
     let tw = t.twist * this.wPrune.v;
-    if (this.yaw.moving || this.gait.turning) tw += clamp(0.3 * wrapPi(this.yaw.target - this.yaw.v), -0.45, 0.45);
+    if (this.yaw.moving || this.gait.turning) {
+      const rem = wrapPi(this.yaw.target - this.yaw.v);
+      tw += walkStyle === 'measured' ? clamp(0.12 * rem, -0.12, 0.12) : clamp(0.3 * rem, -0.45, 0.45);
+    }
+    // raking (from sweeping, CMU 13_23/14_16): the trunk turns into each stroke, the near shoulder forward on the reach
+    if (walkStyle === 'measured') tw += 0.12 * (this.sp - 0.5) * this.workK.x * this.wRake.v * this.rakeK.v;
     this.twist.update(h, tw, 9);
     this.carry.go(this.rakeK.v > 0.5 && this.workK.x < 0.5 && (this.yaw.moving || this.gait.turning || this.gait.walking) ? 1 : 0, 0.3);
     this.gait.setTip(this.adTip.x * FAR_ROLL);
@@ -1306,7 +1318,7 @@ class GardenerImpl implements Gardener {
     const rest = this.restRakeU();
     // the far hand draws back toward the hip through the pull
     const rA = lerp(REAR_A, REAR_A_PULLED, p);
-    const rear: V3 = [ho[0] + fP[0] * rA + lP[0] * REAR_B, ho[1] + fP[1] * rA + lP[1] * REAR_B, H + lerp(REAR_H, REAR_H_PULLED, p)];
+    const rear: V3 = [ho[0] + fP[0] * rA + lP[0] * REAR_B, ho[1] + fP[1] * rA + lP[1] * REAR_B, H + lerp(REAR_H, REAR_H_PULLED, p) + (walkStyle === 'measured' ? REAR_LIFT_M : 0)];
     const horiz = (fx: number, fz: number, g: V3): [number, number] => {
       const vx = g[0] - fx;
       const vz = g[1] - fz;
