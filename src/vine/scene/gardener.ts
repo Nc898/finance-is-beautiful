@@ -133,14 +133,14 @@ const SHIFT_NEAR = -3;
 /**
  * The rake held in the near hand alone, at its side (body frame: forward, to the near hand's side, up; the hand's
  * height is from the hip joint). Standing, the head rests on the ground beside the foot and the pole stands up
- * through the hand like a staff; walking, the head is carried forward off the ground and the handle trails back past
+ * through the hand like a staff; walking, it is carried near its balance, the head forward at knee height and the handle trailing back past
  * the hip. (Held out in front in both hands, the handle's top would pass the shoulder and the far hand would have to
  * reach round behind the back for it.)
  */
 const HOLD_HEAD: V3 = [14, 18, 0];
 const HOLD_HAND: V3 = [6, 13, 4];
-const CARRY_HEAD: V3 = [48, 13, 16];
-const CARRY_HAND: V3 = [8, 13, -6];
+const CARRY_HEAD: V3 = [46, 14, 40];
+const CARRY_HAND: V3 = [6, 13, -8];
 /** a rake-target move smaller than this (true ground units) is followed with side-steps, the rake still down */
 const FOLLOW_MAX = 60;
 /** the largest turn (rad) a walk begins with: bigger ones are one turn on the spot first */
@@ -1634,6 +1634,30 @@ class GardenerImpl implements Gardener {
       if (far > 0.01) put(pt, a[0], a[1], ang, r, 1, far);
       if (capP && r < capR && B[1] > A[1] + 1) put(capP, b[0], b[1], 0, 1, 1, clamp((capR - r) / 0.25, 0, 1) * clamp((B[1] - A[1] - 1) / 4, 0, 1));
     };
+    /** draw a limb clipped to the half nearer its start (or its end), split square across its middle on the screen */
+    const halfOf = (A: V3, B: V3, nearA: boolean, draw: () => void) => {
+      const a = this.scr(A);
+      const b = this.scr(B);
+      const mx = (a[0] + b[0]) / 2;
+      const my = (a[1] + b[1]) / 2;
+      let dx = b[0] - a[0];
+      let dy = b[1] - a[1];
+      const l = Math.hypot(dx, dy) || 1;
+      dx /= l;
+      dy /= l;
+      const sg = nearA ? -1 : 1;
+      ctx.save();
+      ctx.setTransform(base);
+      ctx.beginPath();
+      ctx.moveTo(mx - dy * 400, my + dx * 400);
+      ctx.lineTo(mx + dy * 400, my - dx * 400);
+      ctx.lineTo(mx + dy * 400 + sg * dx * 400, my - dx * 400 + sg * dy * 400);
+      ctx.lineTo(mx - dy * 400 + sg * dx * 400, my + dx * 400 + sg * dy * 400);
+      ctx.closePath();
+      ctx.clip();
+      draw();
+      ctx.restore();
+    };
     const torsoKey = hipC[1] + 20 * this.sUp[1] + 4;
     const torsoZ = hipC[1] + 20 * this.sUp[1];
     const farOf = (z: number): number => clamp((torsoZ - 1.5 - z) / 6, 0, 0.85);
@@ -1707,8 +1731,13 @@ class GardenerImpl implements Gardener {
       const f = this.gait.feet[i]!;
       const zk = (hip[1] + an[1]) / 2;
       const far = farOf(zk);
+      // standing and walking, a leg sorts against the torso by its hip (the apron hangs over the thigh from the front
+      // and the back; seen side on the near leg is in front), the one stepping toward the viewer over the other.
+      // Seated, the thighs come forward out of the lap and sort by depth.
+      const kStand = keyAt(hip) - 1 + clamp(0.08 * (an[1] - hip[1]), -0.6, 0.6);
+      const kLeg = lerp(kStand, zk, sstep(this.seat.v / 0.6));
       items.push({
-        k: zk,
+        k: kLeg,
         f: () => {
           const a = this.scr(an);
           // the boot hinges at the ankle: its foot pitches with the foot, its shaft stands along the shin (one rigid
@@ -1752,15 +1781,18 @@ class GardenerImpl implements Gardener {
       const zu = (sh[1] + el[1]) / 2;
       const zf = (el[1] + gl[1]) / 2;
       const ku = keySeg(sh, el);
-      const kf = keySeg(el, gl);
+      // the forearm sorts by its two halves: one reaching round the body (the elbow out behind, the hand in front, or
+      // the other way) is drawn in two pieces, each where it is; one wholly on one side is drawn whole, by its hand
+      const kElb = keyAt(lerp3(el, gl, 0.22));
+      const kHand = keyAt(lerp3(el, gl, 0.8));
+      const kf = kHand;
       foreKeys[i] = kf;
       items.push({ k: ku, f: () => bone(set.upper, set.upperFar, sh, el, 24, farOf(zu), null, 0) });
-      items.push({
-        k: kf,
-        f: () => {
-          bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(zf), set.elbow, 0.7);
-        },
-      });
+      const drawFore = () => bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(zf), set.elbow, 0.7);
+      if (kElb > torsoKey !== kHand > torsoKey) {
+        items.push({ k: kElb, f: () => halfOf(el, gl, true, drawFore) });
+        items.push({ k: kHand, f: () => halfOf(el, gl, false, drawFore) });
+      } else items.push({ k: kf, f: drawFore });
       if (i === 0) {
         // the shears sort with the hand that holds them (just over it), or with the apron pocket they are in: on the
         // torso's surface, seen when that part of the apron faces the viewer and hidden behind the body otherwise
@@ -1783,7 +1815,30 @@ class GardenerImpl implements Gardener {
       // the pole sorts where it passes the body (its handle, from the lower grip up), and under the hands that hold it
       const lo: V3 = [hd[0] + dr[0] * RAKE.LOW * 0.8, hd[1] + dr[1] * RAKE.LOW * 0.8, hd[2] + dr[2] * RAKE.LOW * 0.8];
       const kr = Math.min(keySeg(lo, tipU), Math.max(foreKeys[0]!, foreKeys[1]!) - 0.3);
-      items.push({ k: kr, f: () => put(set.rake, a[0], a[1], ang, rr, 1) });
+      // the fan of tines bends down from the pole toward the ground: mirrored across the pole when it points left, and
+      // edge-on as it passes upright (so it never flips over in a frame)
+      const cf = Math.cos(ang);
+      const sw = Math.sign(cf || 1) * Math.max(0.18, Math.min(1, 3 * Math.abs(cf)));
+      items.push({
+        k: kr,
+        f: () => {
+          // the pole whole, then the head (from the ferrule down) mirrored or edge-on as above
+          const p = set.rake;
+          for (const head of [false, true]) {
+            ctx.save();
+            ctx.setTransform(base);
+            ctx.translate(a[0], a[1]);
+            ctx.rotate(ang);
+            ctx.scale(S * rr, S * (head ? sw : 1));
+            ctx.beginPath();
+            if (head) ctx.rect(-60, -60, 65, 120);
+            else ctx.rect(5, -60, 200, 120);
+            ctx.clip();
+            ctx.drawImage(p.cv, -p.px, -p.py, p.w, p.h);
+            ctx.restore();
+          }
+        },
+      });
     }
     // sorted far to near (insertion sort: a dozen items, almost in order)
     for (let i = 1; i < items.length; i++) {
