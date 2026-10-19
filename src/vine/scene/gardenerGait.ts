@@ -19,6 +19,7 @@
  */
 import { DIM, FOOT_W } from './gardenerDims';
 import { clamp, lerp, lerpAngle, sstep } from './gardenerMath';
+import { LEG, ROLL_AT_STRIKE, ROLL_AT_TOE_OFF, TOE_OFF, footRoll, swingAt, walkStyle } from './gardenerWalk';
 
 export const ROLL_TOE = 0.55;
 export const ROLL_HEEL = -0.3;
@@ -40,6 +41,10 @@ export function rollAnkle(alpha: number, out: { dx: number; h: number }): void {
 }
 
 const tmp = { dx: 0, h: 0 };
+const sw = { p: 0, h: 0 };
+/** the measured walk's heel strike and push-off rolls (the measured foot lands nearly flat) */
+const ROLL_HEEL_M = ROLL_AT_STRIKE;
+const ROLL_TOE_M = Math.min(0.9, ROLL_AT_TOE_OFF);
 
 export const STANCE = 0;
 export const TOE = 1;
@@ -60,6 +65,12 @@ export class Foot {
   rollK = 1;
   /** world scale of the figure, for the ankle's roll displacement */
   S = 1;
+  /** this step follows the measured walk (a turn or a side-step does not) */
+  mo = false;
+  /** the heel already rising off a planted foot as the other foot swings through (measured walk, set by the gait) */
+  push = 0;
+  /** the length of the step in progress, in rig units */
+  stepLen = 0;
   // the step in progress
   t = 0;
   tToe = 0.1;
@@ -100,7 +111,9 @@ export class Foot {
     return this.state !== SWING;
   }
 
-  begin(tx: number, td: number, yawT: number, toe: number, swing: number, rollK = 1): void {
+  begin(tx: number, td: number, yawT: number, toe: number, swing: number, rollK = 1, measured = false): void {
+    this.mo = measured;
+    this.stepLen = Math.hypot(tx - this.ax, td - this.ad) / Math.max(1e-6, this.S);
     this.state = TOE;
     this.t = 0;
     this.tToe = toe;
@@ -114,18 +127,23 @@ export class Foot {
     this.syaw = this.yaw;
   }
 
+  private get heelRoll(): number {
+    return (this.mo ? ROLL_HEEL_M : ROLL_HEEL) * this.rollK;
+  }
+
   private land(): void {
-    rollAnkle(ROLL_HEEL * this.rollK, tmp);
+    this.push = 0;
+    rollAnkle(this.heelRoll, tmp);
     this.ax = this.tx;
     this.ad = this.td;
     this.yaw = this.tyaw;
     this.state = STANCE;
     this.tLand = 0;
-    this.roll = ROLL_HEEL * this.rollK + this.tipRoll;
+    this.roll = this.heelRoll + this.tipRoll;
     this.x = this.tx + Math.cos(this.yaw) * tmp.dx * this.S;
     this.d = this.td + Math.sin(this.yaw) * tmp.dx * this.S;
     this.h = tmp.h;
-    this.a = ROLL_HEEL * this.rollK;
+    this.a = this.heelRoll;
   }
 
   /** end a swing that is within rounding of its end */
@@ -138,8 +156,8 @@ export class Foot {
     const sy = Math.sin(this.yaw);
     if (this.state === STANCE) {
       this.tLand += dt;
-      const heel = ROLL_HEEL * this.rollK * (1 - sstep(this.tLand / 0.09));
-      this.roll = heel + this.tipRoll;
+      const heel = this.heelRoll * (1 - sstep(this.tLand / 0.09));
+      this.roll = heel + this.tipRoll + this.push;
       rollAnkle(this.roll, tmp);
       this.x = this.ax + cy * tmp.dx * this.S;
       this.d = this.ad + sy * tmp.dx * this.S;
@@ -150,7 +168,7 @@ export class Foot {
     if (this.state === TOE) {
       this.t += dt;
       const u = sstep(this.t / this.tToe);
-      this.roll = lerp(this.r0, ROLL_TOE * this.rollK, u);
+      this.roll = lerp(this.r0, (this.mo ? ROLL_TOE_M : ROLL_TOE) * this.rollK, u);
       rollAnkle(this.roll, tmp);
       this.x = this.ax + cy * tmp.dx * this.S;
       this.d = this.ad + sy * tmp.dx * this.S;
@@ -170,10 +188,24 @@ export class Foot {
       this.land();
       return;
     }
-    rollAnkle(ROLL_HEEL * this.rollK, tmp);
+    rollAnkle(this.heelRoll, tmp);
     const ex = this.tx + Math.cos(this.tyaw) * tmp.dx * this.S;
     const ed = this.td + Math.sin(this.tyaw) * tmp.dx * this.S;
     const ez = tmp.h;
+    if (this.mo) {
+      // the measured swing: the heel kicks up behind early, the foot travels low and lands nearly flat; a short step
+      // lifts less. The roll follows the measured foot, eased from the push-off and into the heel strike.
+      swingAt(s, sw);
+      const liftK = clamp(this.stepLen / STEP_M, 0.35, 1);
+      this.x = lerp(this.sx, ex, sw.p);
+      this.d = lerp(this.sd, ed, sw.p);
+      this.h = lerp(this.sz, ez, s) + sw.h * LEG * liftK;
+      const psi = TOE_OFF + s * (1 - TOE_OFF);
+      const am = footRoll(psi) * liftK;
+      this.a = am + (this.sa - ROLL_AT_TOE_OFF * liftK) * (1 - sstep(s / 0.35)) + (this.heelRoll - ROLL_AT_STRIKE * liftK) * sstep((s - 0.65) / 0.35);
+      this.yaw = lerpAngle(this.syaw, this.tyaw, sstep(s));
+      return;
+    }
     // horizontal: starts and ends at rest relative to the ground, fastest mid-swing
     const eh = s - Math.sin(2 * Math.PI * s) / (2 * Math.PI);
     this.x = lerp(this.sx, ex, eh);
@@ -214,6 +246,9 @@ interface TurnStep {
 /** a relaxed garden stroll: about 0.55 m per step for a 1.75 m figure 122 units tall */
 const STEP_NOM = 39;
 const TS = 0.44;
+/** the measured walk: a longer, slower stride (about 0.8 of a leg per step, 100 steps a minute, as the subject's stroll) */
+const STEP_M = 46;
+const TS_M = 0.6;
 const SIDE_STEP = 15;
 
 export class Gait {
@@ -232,6 +267,9 @@ export class Gait {
   still = 10;
   /** true on the frame a foot lands */
   landedNow = false;
+  /** the measured walk: the cycle phase (0 at foot 0's heel strike) and how much of the walk shows (0 standing .. 1 striding) */
+  phase = 0;
+  amp = 0;
 
   private ox = 0;
   private od = 0;
@@ -402,7 +440,9 @@ export class Gait {
       const frontS = Math.max(s0, s1);
       const Ltot = this.goalS - e / 2 - frontS;
       const hurry = dist > 160 ? 1.12 : 1;
-      const Lnom = STEP_NOM * hurry;
+      const mo = walkStyle === 'measured';
+      const Lnom = (mo ? STEP_M : STEP_NOM) * hurry;
+      const ts = mo ? TS_M : TS;
       const ramp0 = moving ? clamp(0.55 + (0.45 * Math.abs(v0)) / 45, 0.55, 1) : 0.62;
       let k = Ltot < 2 ? 1 : Math.max(1, Math.round(Ltot / (Lnom * 0.84)));
       k = Math.min(k, 60);
@@ -417,13 +457,13 @@ export class Gait {
       let X = frontS;
       let foot: 0 | 1 = rearFoot.i;
       for (let j = 1; j <= k; j++) {
-        X += clamp((total * r[j - 1]!) / rs, 2.2, 48);
-        const T = j === 1 ? (moving ? TS : 0.5) : j === k ? 0.47 : TS;
+        X += clamp((total * r[j - 1]!) / rs, 2.2, mo ? 56 : 48);
+        const T = mo ? (j === 1 ? (moving ? ts : ts + 0.06) : j === k ? ts + 0.03 : ts) : j === 1 ? (moving ? TS : 0.5) : j === k ? 0.47 : TS;
         steps.push({ foot, s: X, T });
         foot = foot === 0 ? 1 : 0;
       }
       // the closing step: the trailing foot comes up beside the other
-      steps.push({ foot, s: X + e, T: 0.58 });
+      steps.push({ foot, s: X + e, T: mo ? ts + 0.08 : 0.58 });
       // pelvis knots: where the body is now, then the midpoint of the two feet after each landing
       let prev = frontS;
       for (const st of steps) {
@@ -455,10 +495,12 @@ export class Gait {
     this.p1 = this.knots[j + 1]!;
     // end velocity: Catmull-Rom through the next knot, zero at the end of the plan
     this.v1 = j + 2 < this.knots.length ? (this.knots[j + 2]! - this.knots[j]!) / (st.T + this.times[j + 2]!) : 0;
-    const S = clamp(st.T - 0.02, 0.3, 0.52);
+    // the measured walk lifts the foot as the other lands (its heel is already up) and swings almost the whole step
+    const mo = walkStyle === 'measured' && !this.side;
+    const S = mo ? clamp(st.T - 0.01, 0.3, 0.8) : clamp(st.T - 0.02, 0.3, 0.52);
     this.liftAt = st.T - S;
     this.lifted = false;
-    this.toeDur = 0.24 * S;
+    this.toeDur = (mo ? 0.1 : 0.24) * S;
     this.swingDur = S - this.toeDur;
     this.walking = true;
   }
@@ -486,7 +528,7 @@ export class Gait {
           this.lifted = true;
           const f = this.feet[cur.foot];
           const o = this.latOff(cur.foot);
-          f.begin(this.ox + this.dx * cur.s + o[0], this.od + this.dd * cur.s + o[1], this.yawNow, this.toeDur, this.swingDur, this.side ? 0.35 : 1);
+          f.begin(this.ox + this.dx * cur.s + o[0], this.od + this.dd * cur.s + o[1], this.yawNow, this.toeDur, this.swingDur, this.side ? 0.35 : 1, walkStyle === 'measured' && !this.side);
           this.stepping = f;
         }
         let h = Math.min(rem, this.segDur - this.segT);
@@ -495,9 +537,12 @@ export class Gait {
         this.segT += h;
         rem -= h;
         this.evalPelvis();
+        this.walkPhase(cur.foot);
         for (const f of this.feet) f.update(h);
         if (this.segT >= this.segDur - 1e-9) this.landing(goal);
       } else {
+        this.feet[0].push = 0;
+        this.feet[1].push = 0;
         this.runTurn(rem);
         for (const f of this.feet) f.update(rem);
         rem = 0;
@@ -508,6 +553,20 @@ export class Gait {
       this.vd = (this.pd - od) / dt;
     }
     this.still = Math.abs(this.px - ox) + Math.abs(this.pd - od) > 1e-5 || this.walking ? 0 : this.still + dt;
+    // how much of the measured walk shows: the stride's share of a full stroll, eased
+    const ampT = walkStyle === 'measured' && this.walking && !this.side ? clamp(this.speed / (STEP_M / TS_M), 0, 1) : 0;
+    if (dt > 0) this.amp += (ampT - this.amp) * (1 - Math.exp(-dt / 0.18));
+  }
+
+  /**
+   * The cycle phase from the step in progress (the stepping foot is half way through its cycle when it lifts, the
+   * other has just landed), and the planted foot's heel rising toward its own push-off.
+   */
+  private walkPhase(stepping: 0 | 1): void {
+    const u = clamp(this.segT / this.segDur, 0, 1);
+    this.phase = stepping === 0 ? 0.5 + 0.5 * u : 0.5 * u;
+    const other = this.feet[stepping === 0 ? 1 : 0];
+    other.push = walkStyle === 'measured' && !this.side && other.mo ? this.amp * Math.max(0, footRoll(0.5 * u)) * sstep((0.5 * u - 0.25) / 0.1) : 0;
   }
 
   /** the pivot steps of a turn on the spot: lift each foot at its time, set it down turned in its slot */

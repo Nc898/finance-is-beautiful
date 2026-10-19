@@ -23,6 +23,7 @@ import { BENCH, GROUND_Y, PATH_Y, PILE, REACH_SIDE, depthScale } from './geom';
 import { DIM, ELBOW_CUT, FOREARM, KAPPA, RAKE, SEAT_HIP, VIEWS } from './gardenerDims';
 import { buildGardenerSet, type Part, type Sprites } from './gardenerArt';
 import { Gait, STANCE, type Foot, type GaitGoal } from './gardenerGait';
+import { LEG, WALK_BOB, WALK_PELVIS_ROLL, WALK_PELVIS_YAW, WALK_SWAY, WALK_THORAX_YAW, cyc, wristSwing } from './gardenerWalk';
 import {
   Mover,
   Spring1,
@@ -71,6 +72,8 @@ export const SEAT_TOP = SEAT_HIP - 3;
 const PI = Math.PI;
 const FAR_ROLL = 0.72;
 const CROUCH_DROP = 22;
+/** walking, the hips ride this much below a straight leg's reach (the knees stay soft) */
+const WALK_DROP = 3.5;
 const SNIP_OPEN = 0.52;
 /** the wall's surface is held this far ahead of the feet (true units) when reaching for the vine */
 const PRUNE_Z = 22;
@@ -269,6 +272,8 @@ class GardenerImpl implements Gardener {
   private yawH = 0;
   private ikA = mk();
   private ikB = mk();
+  /** scratch: the measured arm swing for one arm */
+  private wsw: [number, number, number] = [0, 0, 0];
   /** each elbow's direction off the shoulder-to-hand line: it turns with the arm and only slowly returns to the preferred side */
   private elbowDir: [V3, V3] = [[0, 0, -1], [0, 0, -1]];
   private frameDt = 1 / 60;
@@ -1155,7 +1160,13 @@ class GardenerImpl implements Gardener {
     const sy = Math.sin(yaw);
     const fP: V3 = [cy, sy, 0];
     const lP: V3 = [-sy, cy, 0];
-    const yT = yaw + this.twist.x;
+    // the measured walk (0 when standing or in the hand-made walk): the pelvis bobs, sways and turns with the stride,
+    // and the chest turns back against it, so the shoulders stay nearly square while the hips swing
+    const wa = gp.amp;
+    const phi = gp.phase;
+    const pelYaw = wa * cyc(WALK_PELVIS_YAW, phi);
+    const pelRoll = wa * cyc(WALK_PELVIS_ROLL, phi);
+    const yT = yaw + this.twist.x + pelYaw + wa * cyc(WALK_THORAX_YAW, phi);
     this.yawT = yT;
     this.yawH = yT + this.headYaw.x;
     const fT: V3 = [Math.cos(yT), Math.sin(yT), 0];
@@ -1167,7 +1178,7 @@ class GardenerImpl implements Gardener {
     const idleShift = (0.7 * Math.sin(this.clock * 0.55 + this.seed) + 0.3 * Math.sin(this.clock * 1.31 + 2)) * calm * (1 - this.wPrune.v) * (1 - sigma) * (1 - rk);
     const sitBack = SIT_BACK * sstep(sigma / 0.8);
     const shiftA = this.adShiftA.x + 0.35 * idleShift - sitBack;
-    const shiftB = this.sway.x + 1.0 * idleShift;
+    const shiftB = this.sway.x + 1.0 * idleShift + wa * cyc(WALK_SWAY, phi) * LEG;
     const ho: V3 = [fP[0] * shiftA + lP[0] * shiftB + this.adShiftX.x, fP[1] * shiftA + lP[1] * shiftB, 0];
     // the feet, in units
     const A: [V3, V3] = [[0, 0, 0], [0, 0, 0]];
@@ -1187,14 +1198,19 @@ class GardenerImpl implements Gardener {
     }
     const crouch = this.adCrouch.x * CROUCH_DROP;
     const fy = sstep5(clamp((sigma - 0.1) / 0.9, 0, 1));
-    const H = lerp(H0 - crouch, SEAT_HIP, fy);
+    // walking, the hips ride a little lower than the legs' reach and bob as measured (soft knees, not a vault)
+    const Hw = wa > 0.001 ? softMin(H0, DIM.FH + DIM.LMAX - WALK_DROP * wa + wa * cyc(WALK_BOB, phi) * LEG, 1.2) : H0;
+    const H = lerp(Hw - crouch, SEAT_HIP, fy);
     const hipC: V3 = [ho[0], ho[1], H];
     this.hipC = hipC;
     // the legs: knees lead the way the foot points
     for (let i = 0; i < 2; i++) {
       const sg = i === 0 ? 1 : -1;
       const f = gp.feet[i]!;
-      const hip: V3 = [hipC[0] + lP[0] * sg * DIM.HIPW, hipC[1] + lP[1] * sg * DIM.HIPW, H];
+      // the pelvis turned and tilted with the stride
+      const cP = Math.cos(pelYaw) * DIM.HIPW * sg;
+      const sP = Math.sin(pelYaw) * DIM.HIPW * sg;
+      const hip: V3 = [hipC[0] + lP[0] * cP + fP[0] * sP, hipC[1] + lP[1] * cP + fP[1] * sP, H + sg * DIM.HIPW * Math.sin(pelRoll)];
       this.hips[i] = hip;
       const dy = wrapPi(f.yaw - yaw);
       const py = yaw + dy * 0.5 * (1 - sstep((Math.abs(dy) - 1.0) / 0.9));
@@ -1229,8 +1245,9 @@ class GardenerImpl implements Gardener {
     const swingK = this.wWalk.v;
     const rel = (i: number): number => (A[i]![0] - ho[0]) * fP[0] + (A[i]![1] - ho[1]) * fP[1];
     const carryK = 1 - this.kPocket.v;
-    const tN = clamp(rel(1) / 17, -1, 1) * 0.62 * swingK * lerp(1, 0.38, carryK);
-    const tF = clamp(rel(0) / 17, -1, 1) * 0.62 * swingK;
+    const armK = lerp(1, 0.38, carryK);
+    const tN = clamp(rel(1) / 17, -1, 1) * 0.62 * swingK * armK * (1 - wa);
+    const tF = clamp(rel(0) / 17, -1, 1) * 0.62 * swingK * (1 - wa);
     // the swing follows the legs but not the quick flick of a foot in flight
     if (this.snapElbows) {
       this.swingN.snap(tN);
@@ -1249,6 +1266,19 @@ class GardenerImpl implements Gardener {
     };
     let gN = hang(0, betaN, 3.2 + 3 * carryK);
     let gF = hang(1, betaF, 2.2);
+    // the measured arm swing, about the rig's own hanging pose (the far arm is half a cycle on, mirrored)
+    if (wa > 0.001) {
+      for (let i = 0; i < 2; i++) {
+        const sg = i === 0 ? 1 : -1;
+        wristSwing(phi + 0.5 * i, this.wsw);
+        const k = wa * (i === 0 ? armK : 1);
+        const g = i === 0 ? gN : gF;
+        const o: V3 = [fT[0] * this.wsw[0] + lT[0] * sg * this.wsw[1], fT[1] * this.wsw[0] + lT[1] * sg * this.wsw[1], this.wsw[2]];
+        const gg: V3 = [g[0] + o[0] * k, g[1] + o[1] * k, g[2] + o[2] * k];
+        if (i === 0) gN = gg;
+        else gF = gg;
+      }
+    }
     // seated: hands rest on the thighs just above the knees
     const thigh = (i: number, k: number): V3 => {
       const hip = this.hips[i]!;
@@ -1669,7 +1699,33 @@ class GardenerImpl implements Gardener {
         k: zk,
         f: () => {
           const a = this.scr(an);
-          view(set.boot, f.yaw, a[0], a[1], f.a * Math.cos(f.yaw));
+          // the boot hinges at the ankle: its foot pitches with the foot, its shaft stands along the shin (one rigid
+          // painting would leave the shaft standing out of the trouser cuff whenever the knee bends or the heel lifts)
+          const k = this.scr(kn);
+          const rotShaft = Math.atan2(k[0] - a[0], a[1] - k[1]);
+          const rotFoot = f.a * Math.cos(f.yaw);
+          const mid = (rotShaft + rotFoot) / 2;
+          const dx = Math.cos(mid);
+          const dy = Math.sin(mid);
+          // the hinge line through the ankle, a touch above it (the foot keeps its collar)
+          const hx = a[0] + dy * 1.2 * S;
+          const hy = a[1] - dx * 1.2 * S;
+          const half = (below: boolean, rot: number) => {
+            const sg = below ? 1 : -1;
+            ctx.save();
+            ctx.setTransform(base);
+            ctx.beginPath();
+            ctx.moveTo(hx - dx * 400, hy - dy * 400);
+            ctx.lineTo(hx + dx * 400, hy + dy * 400);
+            ctx.lineTo(hx + dx * 400 - sg * dy * 400, hy + dy * 400 + sg * dx * 400);
+            ctx.lineTo(hx - dx * 400 - sg * dy * 400, hy - dy * 400 + sg * dx * 400);
+            ctx.closePath();
+            ctx.clip();
+            view(set.boot, f.yaw, a[0], a[1], rot);
+            ctx.restore();
+          };
+          half(true, rotFoot);
+          half(false, rotShaft);
           bone(set.shin, set.shinFar, kn, an, DIM.SHIN, far, null, 0);
           bone(set.thigh, set.thighFar, hip, kn, DIM.THIGH, far, set.knee, 0.72);
         },
