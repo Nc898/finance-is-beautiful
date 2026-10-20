@@ -55,7 +55,7 @@ interface HLeaf {
   sy: number;
 }
 
-/** the heap's radial profile, 0…1 */
+/** the heap's radial profile, 0â€¦1 */
 const prof = (r: number): number => Math.pow(Math.max(0, 1 - Math.pow(r, 2.3)), 0.6);
 /** inverse of the surface-area distribution over the footprint radius, so leaves lie evenly over the SURFACE of the dome */
 const AREA_CDF: number[] = (() => {
