@@ -249,7 +249,7 @@ const TS = 0.44;
 /** the measured walk: a longer, slower stride (about 0.8 of a leg per step, 100 steps a minute, as the subject's stroll) */
 const STEP_M = 46;
 const TS_M = 0.6;
-const SIDE_STEP = 15;
+const SIDE_STEP = 24;
 
 export class Gait {
   /** the pelvis, on the ground (true units) */
@@ -427,8 +427,8 @@ export class Gait {
       let prev = X;
       for (let j = 1; j <= cyc; j++) {
         X += (total * r[j - 1]!) / rs;
-        const Tl = j === 1 ? (moving ? 0.38 : 0.5) : 0.36;
-        const Tt = j === cyc ? 0.5 : 0.36;
+        const Tl = j === 1 ? (moving ? 0.32 : 0.42) : 0.3;
+        const Tt = j === cyc ? 0.4 : 0.3;
         steps.push({ foot: lead, s: X, T: Tl });
         knots.push((X + prev) / 2);
         times.push(Tl);

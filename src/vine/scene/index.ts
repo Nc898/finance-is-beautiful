@@ -63,6 +63,8 @@ interface Garden {
   /** where the rake's tines land for the next pull, and the tines last frame */
   rakeAt: { x: number; y: number } | null;
   lastHead: { x: number; y: number } | null;
+  /** pieces the tines have carried in the pull under way (a heap to follow up with the next pull) */
+  carried: number;
   /** the month raking began: the clippings stop rotting while they are being raked */
   rakeMonth: number;
 }
@@ -156,6 +158,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       scrub: 0,
       rakeAt: null,
       lastHead: null,
+      carried: 0,
       rakeMonth: 0,
     };
   }
@@ -342,7 +345,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     let leaves = 0;
     for (const i of nodes) leaves += model.nodes[i]!.leaves.length;
     // a big cut drops a representative handful, not every leaf (the rest is hidden in the tumble)
-    const every = Math.max(1, Math.ceil(leaves / 10));
+    const every = Math.max(1, Math.ceil(leaves / 5));
     let k = 0;
     let twigs = 0;
     for (const i of nodes) {
@@ -377,7 +380,21 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
   const nextRake = (gd: Garden): { x: number; y: number } | null => {
     const pile = PILE[gd.id];
     // what is left lies right by the pile: one last sweep and it all joins the heap
-    gd.clip.gatherNear(pile, 42);
+    gd.clip.gatherNear(pile, 60);
+    // a pull that gathered a heap short of the pile is followed up: the next pull starts just behind that heap (a
+    // step back, not a walk to the far end), so each heap travels to the pile stroke after stroke
+    const end = gd.lastHead;
+    const carried = gd.carried;
+    gd.carried = 0;
+    if (end && carried > 0) {
+      const heap = gd.clip.heapNear(end, 26);
+      if (heap.n > 0 && Math.hypot(heap.x - pile.x, heap.y - pile.y) > 30) {
+        const hx = heap.x - pile.x;
+        const hy = heap.y - pile.y;
+        const hd = Math.hypot(hx, hy) || 1;
+        return { x: heap.x + (hx / hd) * 7, y: heap.y + (hy / hd) * 7 };
+      }
+    }
     const far = gd.clip.farthestFrom(pile);
     if (!far) return null;
     const dx = far.x - pile.x;
@@ -410,7 +427,9 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       return;
     }
     // scrubbing: any change of the moment while paused, or a big jump while playing (replay, a new input)
-    if ((mps === 0 && moved > 1e-6) || moved > 0.06) gd.scrub = 0.3;
+    // (a few dollars' change in a frame where the clock reads stopped, such as the last payment as the story comes to
+    // rest, is not a scrub: the gardener carries on and walks; only a real jump is shown at once)
+    if ((mps === 0 && moved > 0.01) || moved > 0.06) gd.scrub = 0.3;
     else gd.scrub = Math.max(0, gd.scrub - dt);
     if (gd.scrub > 0) {
       setDirect(gd, target, dt, true);
@@ -457,12 +476,13 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     }
     // raking: only the clippings the tines pass over move, along with the tines; at the pile they join it
     const head = g.rakeHead();
-    if (head && head.contact && gd.lastHead) gd.clip.drag(gd.lastHead, head, PILE[gd.id]);
-    gd.lastHead = head && head.contact ? { x: head.x, y: head.y } : null;
+    if (head && head.contact && gd.lastHead) gd.carried += gd.clip.drag(gd.lastHead, head, PILE[gd.id]);
     if (gd.lastStrokes < g.strokes) {
       gd.lastStrokes = g.strokes;
       gd.rakeAt = nextRake(gd);
     }
+    // (after the stroke is counted, so the follow-up can start from where this pull ended)
+    gd.lastHead = head && head.contact ? { x: head.x, y: head.y } : null;
     // what next
     const needCut = (excess > 0.004 || (clear && mass >= 0.03)) && (mps > 0 || clear);
     const lying = gd.clip.lying;

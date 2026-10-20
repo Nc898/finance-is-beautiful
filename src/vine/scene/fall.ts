@@ -126,25 +126,27 @@ export class Clippings {
    * with them (a little behind the tines, spread across their width). Pieces brought within reach of the pile
    * join it (they slide in and fade into the heap).
    */
-  drag(a: { x: number; y: number }, b: { x: number; y: number }, pile: { x: number; y: number }): void {
+  drag(a: { x: number; y: number }, b: { x: number; y: number }, pile: { x: number; y: number }): number {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
-    if (len < 1e-4) return;
+    if (len < 1e-4) return 0;
+    let carried = 0;
     const ux = dx / len;
     const uy = dy / len;
-    // the tine row is about 16 units wide (across the pull) and catches what lies just in front of it
+    // the tine row catches what lies just in front of it, across its width, and gathers it into a tighter bunch
     for (const q of this.pieces) {
       if (q.state !== 1) continue;
       const rx = q.x - a.x;
       const ry = q.y - a.y;
       const along = rx * ux + ry * uy;
       const across = Math.abs(-rx * uy + ry * ux);
-      if (across > 12 || along < -3 || along > len + 3) continue;
+      if (across > 26 || along < -3 || along > len + 3) continue;
+      carried++;
       // carried: it ends up just ahead of the tines, keeping its place across the row
       const off = -rx * uy + ry * ux;
-      q.x = b.x + ux * 2 + -uy * off * 0.9;
-      q.y = b.y + uy * 2 + ux * off * 0.9;
+      q.x = b.x + ux * 2 + -uy * off * 0.7;
+      q.y = b.y + uy * 2 + ux * off * 0.7;
       q.rot += (this.rnd.next() - 0.5) * 0.4;
       if (Math.hypot(q.x - pile.x, q.y - pile.y) < 26) {
         q.state = 2;
@@ -155,6 +157,21 @@ export class Clippings {
         q.ry1 = pile.y + this.rnd.range(-6, 2);
       }
     }
+    return carried;
+  }
+
+  /** where the lying pieces near a point have gathered (their middle), and how many there are */
+  heapNear(p: { x: number; y: number }, r: number): { x: number; y: number; n: number } {
+    let n = 0;
+    let sx = 0;
+    let sy = 0;
+    for (const q of this.pieces) {
+      if (q.state !== 1 || Math.hypot(q.x - p.x, q.y - p.y) > r) continue;
+      n++;
+      sx += q.x;
+      sy += q.y;
+    }
+    return n ? { x: sx / n, y: sy / n, n } : { x: p.x, y: p.y, n: 0 };
   }
 
   /** lying pieces within `r` of the pile slide in and join it */

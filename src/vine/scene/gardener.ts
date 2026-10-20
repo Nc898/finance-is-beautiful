@@ -103,10 +103,10 @@ const TORSO_D = 6;
  * gardener's feet; a pull draws them toward the pile by about RAKE_PULL_WORLD world units (never more than
  * RAKE_PULL_MAX of ground, which is what the arms can do), then the tines lift and swing back out.
  */
-export const RAKE_REACH = 100;
-export const RAKE_PULL_WORLD = 24;
+export const RAKE_REACH = 106;
+export const RAKE_PULL_WORLD = 42;
 const RAKE_PULL_MIN = 14;
-const RAKE_PULL_MAX = 24;
+const RAKE_PULL_MAX = 42;
 /** the tine row's centre lies this far beyond the head joint (away from the gardener) along the ground */
 const TINE_OFF = 13;
 /**
@@ -142,7 +142,7 @@ const HOLD_HAND: V3 = [6, 13, 4];
 const CARRY_HEAD: V3 = [46, 14, 40];
 const CARRY_HAND: V3 = [6, 13, -8];
 /** a rake-target move smaller than this (true ground units) is followed with side-steps, the rake still down */
-const FOLLOW_MAX = 60;
+const FOLLOW_MAX = 90;
 /** the largest turn (rad) a walk begins with: bigger ones are one turn on the spot first */
 const WALK_TURN = 2.0;
 
@@ -525,6 +525,24 @@ class GardenerImpl implements Gardener {
       }
       const w = Math.hypot(ux, ud * KAPPA);
       const Lt = clamp(RAKE_PULL_WORLD / w, RAKE_PULL_MIN, RAKE_PULL_MAX);
+      // already standing at work and the new start is ahead within reach (the heap just pulled in): stay put and
+      // pull it in toward the feet (a raker steps back only when the heap has come too close)
+      const gp = this.gait;
+      const mx = tx - gp.px;
+      const md = td - gp.pd;
+      const m = Math.hypot(mx, md);
+      const ahead = m > 1e-3 ? Math.cos(Math.atan2(md, mx) - this.yaw.v) : -1;
+      const settled = !gp.walking && !gp.turning && this.workK.x > 0.8 && this.wRake.v > 0.99 && this.rakeK.v > 0.99;
+      if (settled && ahead > 0.9 && m <= RAKE_REACH + 6 && m - Lt >= 26) {
+        rp.gx = gp.px;
+        rp.gy = gp.pd * KAPPA;
+        rp.yaw = Math.atan2(md, mx);
+        rp.fx = tx;
+        rp.fy = it.target.y;
+        rp.nx = tx - (mx / m) * Lt;
+        rp.ny = (td - (md / m) * Lt) * KAPPA;
+        return this.planRakeInit();
+      }
       rp.gx = tx + ux * RAKE_REACH;
       rp.gy = (td + ud * RAKE_REACH) * KAPPA;
       rp.yaw = Math.atan2(-ud, -ux);
@@ -546,10 +564,14 @@ class GardenerImpl implements Gardener {
       rp.nx = st.x + fx * (RAKE_REACH - 30);
       rp.ny = (sd + fd * (RAKE_REACH - 30)) * KAPPA;
     }
+    this.planRakeInit();
+  }
+
+  private planRakeInit(): void {
     if (!this.rpInit) {
       this.rpInit = true;
-      this.tF.snap(rp.fx, rp.fy);
-      this.tN.snap(rp.nx, rp.ny);
+      this.tF.snap(this.rp.fx, this.rp.fy);
+      this.tN.snap(this.rp.nx, this.rp.ny);
     }
   }
 
