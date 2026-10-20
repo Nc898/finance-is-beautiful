@@ -775,14 +775,26 @@ export function makeGardenWall(id: PlanId, q: number): Sprite {
     ww = Math.min(ww, run + 2.5);
     if (run < 5) ww = Math.max(4, run + 1);
     const x0 = xi;
-    const x1 = Math.min(M, x0 + ww);
+    let x1 = Math.min(M, x0 + ww);
     // the stone rests on the highest point below it
     let base = 1e9;
     let maxTgt = -1e9;
-    for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
-      base = Math.min(base, sky[x]!);
-      maxTgt = Math.max(maxTgt, tgt(x));
+    const span = () => {
+      base = 1e9;
+      maxTgt = -1e9;
+      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
+        base = Math.min(base, sky[x]!);
+        maxTgt = Math.max(maxTgt, tgt(x));
+      }
+    };
+    span();
+    // where the wall steps down at its end, a long stone would reach under the lower top and have no room: shorten it
+    // to the stretch that has room for a stone (a long one would leave the course unbuilt there, a dark hole)
+    while (x1 - x0 > 4 && base - maxTgt < 3.8) {
+      x1 -= 1;
+      span();
     }
+    ww = x1 - x0;
     let hh = Math.min(12.5, Math.max(3.8, ww * rnd.range(0.2, 0.55) + rnd.range(-0.8, 1.6)));
     let top = base - hh;
     if (top < maxTgt) {
@@ -790,7 +802,9 @@ export function makeGardenWall(id: PlanId, q: number): Sprite {
       hh = base - top;
     }
     if (hh < 2.2) {
-      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) sky[x] = Math.min(sky[x]!, tgt(x) - 1);
+      // too little room for a stone here: this stretch is as high as it goes
+      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) if (sky[x]! - tgt(x) < 3.3) sky[x] = Math.min(sky[x]!, tgt(x) - 1);
+      if (!(sky[Math.floor(x0)]! - tgt(Math.floor(x0)) <= 1.1)) sky[Math.floor(x0)] = tgt(Math.floor(x0)) - 1;
       continue;
     }
     // small pinning stones wedged into any gap under this one
