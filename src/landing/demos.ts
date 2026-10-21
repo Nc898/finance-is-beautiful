@@ -9,8 +9,9 @@ export interface Demo {
   /** One sentence. */
   summary: string;
   href: string;
-  /** The entry's accent and ornament on the landing page: the grove's emerald, or the river's teal and waves. */
-  theme: 'grove' | 'river';
+  /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, or the
+   *  vine's autumn rust, tendrils and falling leaves. */
+  theme: 'grove' | 'river' | 'vine';
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -71,6 +72,22 @@ async function paintAgainstTheCurrent(canvas: HTMLCanvasElement): Promise<void> 
   }
 }
 
+/**
+ * Nip It in the Bud mid-story: both gardeners at work on half-cut vines. Baked from the real scene
+ * (scripts/bake-vine-preview.mjs): the scene is far too heavy to build on the landing page, so with no image the
+ * entry simply shows the paper.
+ */
+async function paintNipItInTheBud(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-vine.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 export const DEMOS: Demo[] = [
   {
     slug: 'time-to-grow',
@@ -87,5 +104,13 @@ export const DEMOS: Demo[] = [
     href: './against-the-current.html',
     theme: 'river',
     paintPreview: paintAgainstTheCurrent,
+  },
+  {
+    slug: 'nip-it-in-the-bud',
+    title: 'Nip It in the Bud',
+    summary: 'Two cottages, one card balance, and a vine that grows on interest.',
+    href: './nip-it-in-the-bud.html',
+    theme: 'vine',
+    paintPreview: paintNipItInTheBud,
   },
 ];

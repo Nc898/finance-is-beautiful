@@ -11,6 +11,8 @@
   --coral: #ec7357;
   --sky: #4a9ad4;
   --river: #1f6474;
+  --rust: #a3452b;
+  --rust-deep: #7a3120;
   --rule: rgba(47, 42, 34, 0.14);
   --serif-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, serif;
   --serif: 'Libre Caslon Text', Georgia, 'Times New Roman', serif;
@@ -318,6 +320,84 @@ html[data-ready] .hero-sub {
   to {
     background-position-x: 12px;
   }
+}
+
+/* ---------- The vine's entry: autumn rust, a tendril for a rule, leaves falling round it ---------- */
+
+/* a hand-drawn tendril with small leaves for the rule, and a warm autumn wash bleeding out behind the painting */
+.demo-item[data-theme='vine'] {
+  position: relative;
+  isolation: isolate;
+  border-top: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='14' viewBox='0 0 96 14'%3E%3Cpath d='M0 8c10-4 20-4 30-.6S50 11 62 7.4c9-2.8 18-3.4 34-.6' fill='none' stroke='%23a3452b' stroke-opacity='.34' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M24 7.2c-.6-2.6.8-4.6 3.4-5-.2 2.6-1.4 4.4-3.4 5zM56 8.4c1.8 2 4.2 2.4 6.4 1.2-1.8-2-4.2-2.2-6.4-1.2zM80 6.6c-1.2-2.2-.6-4.4 1.6-5.6.8 2.2.2 4.2-1.6 5.6z' fill='%23c4502e' fill-opacity='.4'/%3E%3Cpath d='M41 9.4c1 1.4 2.6 1.6 3.4.6' fill='none' stroke='%23a3452b' stroke-opacity='.3' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E")
+    0 0 / 96px 14px repeat-x;
+}
+.demo-item[data-theme='vine']::before {
+  content: '';
+  position: absolute;
+  inset: 4% 34% 0 -6%;
+  z-index: -1;
+  background:
+    radial-gradient(48% 52% at 42% 55%, rgba(224, 150, 72, 0.16), transparent 72%),
+    radial-gradient(32% 40% at 70% 34%, rgba(196, 80, 46, 0.1), transparent 70%),
+    radial-gradient(30% 34% at 18% 78%, rgba(214, 170, 76, 0.12), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+.demo[data-theme='vine'] {
+  --accent: var(--rust);
+  --accent-deep: var(--rust-deep);
+  padding-top: 30px;
+}
+
+/* leaves drifting down past the entry, a few at the painting's edges */
+.vine-leaves {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vine-leaf {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  opacity: 0.9;
+}
+.vine-leaf.l1 { left: -3.5%; top: 18%; width: 39px; height: 39px; transform: rotate(-24deg); }
+.vine-leaf.l2 { left: 53%; top: 7%; width: 31px; height: 31px; transform: rotate(32deg); }
+.vine-leaf.l3 { left: 57%; top: 70%; width: 44px; height: 44px; transform: rotate(-58deg); }
+.vine-leaf.l4 { left: 95%; top: 28%; width: 34px; height: 34px; transform: rotate(14deg); }
+.vine-leaf.l5 { left: 2%; top: 84%; width: 29px; height: 29px; transform: rotate(70deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .vine-leaf { animation: leaf-sway 7s ease-in-out infinite; }
+  .vine-leaf.l2 { animation-duration: 8.4s; animation-delay: -2s; }
+  .vine-leaf.l3 { animation-duration: 6.2s; animation-delay: -4s; }
+  .vine-leaf.l4 { animation-duration: 9s; animation-delay: -1s; }
+  .vine-leaf.l5 { animation-duration: 7.6s; animation-delay: -3s; }
+}
+@keyframes leaf-sway {
+  0%, 100% { translate: 0 0; rotate: 0deg; }
+  50% { translate: 3px 5px; rotate: 16deg; }
+}
+
+/* a vine for an underline: it grows along under the words while hovered, leaves opening as it goes */
+.demo[data-theme='vine'] .demo-cta > span {
+  position: relative;
+  background: none;
+}
+.demo[data-theme='vine'] .demo-cta > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 0;
+  height: 7px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='7' viewBox='0 0 24 7'%3E%3Cpath d='M0 4.4c4-1.4 8-1.4 12 0s8 1.2 12 0' fill='none' stroke='%237a3120' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M8 4c-.6-1.8.4-3.2 2.2-3.4-.1 1.8-.9 3-2.2 3.4zM18 4.6c1.2 1.4 2.8 1.6 4.2.7-1.2-1.3-2.7-1.5-4.2-.7z' fill='%23c4502e'/%3E%3C/svg%3E")
+    0 0 / 24px 7px repeat-x;
+  transition: width 0.6s cubic-bezier(0.3, 0.6, 0.2, 1);
+}
+.demo[data-theme='vine']:hover .demo-cta > span::after,
+.demo[data-theme='vine']:focus-visible .demo-cta > span::after {
+  width: 100%;
 }
 
 /* ---------- Closing and footer ---------- */
