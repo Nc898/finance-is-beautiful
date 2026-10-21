@@ -12,6 +12,7 @@ import { brokenLine, edgeInk, fillPoly, lerp, lump, paperLift, rrPoly, softWash,
 import { leftEdge, rightEdge, roofCorners, roofPoly } from './cottageRoof';
 import type { EaveFn } from './cottageWall';
 import { GROUND_Y } from './geom';
+import { backrun, detailAt, dryBrush } from './cottageWash';
 
 const EAVE = 332;
 const RIDGE = 206;
@@ -30,102 +31,82 @@ export function paintSlateRoof(P: Paint): void {
   tracePoly(ctx, poly);
   ctx.clip();
 
-  // ---- 1. the watercolor underpainting
-  ctx.fillStyle = '#58687F';
+  const vis = detailAt(P, true);
+  // ---- 1. the watercolor underpainting: one big graded wash (pale warm grey where the sun is, deep indigo lower
+  // right), then colours dropped in while it is wet (blue, violet, a warm grey, a little green of lichen), a few
+  // backruns where it dried unevenly
+  ctx.fillStyle = '#6E7C94';
   ctx.fillRect(r.ax - 4, RIDGE - 6, W + 8, 140);
   const g1 = ctx.createLinearGradient(r.ax, RIDGE, r.dx, EAVE + 6);
-  g1.addColorStop(0, 'rgba(150,152,164,0.62)');
-  g1.addColorStop(0.45, 'rgba(98,114,142,0.2)');
-  g1.addColorStop(1, 'rgba(34,42,72,0.5)');
+  g1.addColorStop(0, 'rgba(196,192,196,0.7)');
+  g1.addColorStop(0.4, 'rgba(120,132,160,0.18)');
+  g1.addColorStop(1, 'rgba(34,40,74,0.6)');
   ctx.fillStyle = g1;
   ctx.fillRect(r.ax - 4, RIDGE - 6, W + 8, 140);
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 40; i++) {
     const cx = rnd.range(r.ax, r.dx);
     const cy = rnd.range(RIDGE - 2, EAVE + 4);
     const t = clamp(((cx - r.ax) / W) * 0.55 + ((cy - RIDGE) / 126) * 0.45, 0, 1);
-    const warm = rnd.chance(1 - t * 1.1);
-    const col = warm ? rnd.pick(['#9A9AA6', '#8A93A8', '#A39FA4', '#7C8CA6']) : rnd.pick(['#46567A', '#3A4868', '#52628A', '#2E3A5A']);
-    softWash(ctx, lump(cx, cy, rnd.range(40, 120), rnd.range(14, 36), rnd, 14, 0.3, rnd.range(-0.1, 0.1)), col, 0.3, rnd, 4, 0.6);
+    const col = rnd.chance(1 - t * 1.1)
+      ? rnd.pick(['#A8A4B0', '#9AA2B8', '#B4A8AC', '#8E9CB4'])
+      : rnd.pick(['#46567E', '#3E4A72', '#5A5A86', '#2E3A60', '#4C6070']);
+    softWash(ctx, lump(cx, cy, rnd.range(40, 110), rnd.range(14, 34), rnd, 14, 0.3, rnd.range(-0.1, 0.1)), col, 0.32, rnd, 4, 0.55);
   }
-  // a darker pool under the ridge, and a long cool shadow where the roof bows
+  for (let i = 0; i < 6; i++) softWash(ctx, lump(rnd.range(r.ax + 20, r.dx - 20), rnd.range(250, 330), rnd.range(10, 26), rnd.range(4, 9), rnd, 12, 0.3), rnd.pick(['#6E7E68', '#76846C', '#62705E']), 0.14, rnd, 3, 0.6);
+  for (let i = 0; i < 4; i++) backrun(ctx, rnd.range(r.ax + 40, r.dx - 40), rnd.range(RIDGE + 20, EAVE - 16), rnd.range(20, 46), rnd.range(7, 14), rnd.pick(['#8A94AC', '#5A6688']), 0.32, rnd);
+  // a darker pool under the ridge
   const rs = ctx.createLinearGradient(0, RIDGE, 0, RIDGE + 22);
-  rs.addColorStop(0, 'rgba(28,34,62,0.34)');
+  rs.addColorStop(0, 'rgba(28,34,62,0.3)');
   rs.addColorStop(1, 'rgba(28,34,62,0)');
   ctx.fillStyle = rs;
   ctx.fillRect(r.ax, RIDGE, W, 22);
 
-  // ---- 2. the slates: wide and thin, course by course from the eave, depth shrinking toward the ridge
+  // ---- 2. the slates, suggested: each course a dry-brush line under its lip that breaks up and fades into the
+  // light; slates picked out one by one only here and there, where the roof is stated
   let yb = 339;
-  let row = 0;
   while (yb > RIDGE - 4) {
     const t = clamp((EAVE - yb) / (EAVE - RIDGE), 0, 1);
     const rh = lerp(10.2, 6.9, t) * rnd.range(0.94, 1.06);
     const left = leftEdge(P, yb - rh) - 18;
     const right = rightEdge(P, yb - rh) + 18;
-    const rowW = rnd.range(0.9, 1.15);
     const sagA = rnd.range(0.3, 0.9);
     const sagP = rnd.range(0, 6);
     const sag = (x: number) => Math.sin(x * 0.03 + sagP) * sagA;
-    let x = left - rnd.range(0, 18);
-    const joints: number[] = [];
+    // the course line, in runs whose strength follows the detail
+    let x = left;
     while (x < right) {
-      let w = rnd.range(15, 29) * rowW;
-      if (rnd.chance(0.07)) w = rnd.range(9, 12);
-      const y1 = yb + sag(x);
-      const n = nz((x + w / 2) * 0.018, yb * 0.035);
-      let col = mix('#5F6F88', n > 0.5 ? '#B4C0D2' : '#2E3A58', Math.abs(n - 0.5) * 1.5);
-      let a = rnd.range(0.38, 0.58);
-      if (rnd.chance(0.07)) {
-        col = rnd.pick(['#7A7C84', '#6C7A78', '#4E5A74', '#8A8486', '#3C4660']);
-        a = rnd.range(0.4, 0.62);
+      const run = rnd.range(40, 110);
+      const v = vis(x + run / 2, yb);
+      if (rnd.chance(0.5 + 0.5 * v)) {
+        const pts: number[] = [];
+        for (let xx = x; xx <= Math.min(right, x + run); xx += 4) pts.push(xx, yb + sag(xx) + 0.6);
+        dryBrush(ctx, pts, 0.6 + 0.8 * v, INKB, 0.16 + 0.3 * v, rnd, 0.22 - 0.15 * v);
+        // and a soft shadow band under it, the next course's face darkening into the lap
+        dryBrush(ctx, pts.map((q, i) => (i % 2 === 1 ? q + 1.6 : q)), 2.6, INKB, 0.05 + 0.08 * v, rnd, 0.3);
+        // the lit lip just above, only where stated
+        if (v > 0.5 && rnd.chance(0.6)) dryBrush(ctx, pts.map((q, i) => (i % 2 === 1 ? q - 1.3 : q)), 0.45, '#E4ECF8', 0.16 + 0.12 * v, rnd, 0.6);
       }
-      const patch = deform([x, y1 - rh, x + w, y1 - rh, x + w, y1, x, y1], rnd, 1, 0.025);
-      fillPoly(ctx, patch, col, a);
-      // the face is a little lighter toward its top-left and settles darker toward the lip
-      const gg = ctx.createLinearGradient(0, y1 - rh, 0, y1);
-      gg.addColorStop(0, 'rgba(210,222,240,0.1)');
-      gg.addColorStop(1, 'rgba(24,30,58,0.14)');
-      ctx.fillStyle = gg;
-      tracePoly(ctx, patch);
-      ctx.fill();
-      if (rnd.chance(0.35)) {
-        ctx.fillStyle = rgba(rnd.chance(0.5) ? '#DCE6F6' : INKB, rnd.range(0.07, 0.14));
-        ribbon(ctx, [x + w * 0.1, y1 - rh * rnd.range(0.3, 0.8), x + w * 0.5, y1 - rh * rnd.range(0.3, 0.8), x + w * 0.92, y1 - rh * rnd.range(0.3, 0.8)], rnd.range(0.7, 1.5), 0.95);
-      }
-      if (rnd.chance(0.06)) {
-        ctx.fillStyle = rgba(rnd.pick(['#B6BA6C', '#D2D2A0', '#8E9E5C']), 0.34);
-        for (let i = 0; i < 4; i++) {
-          ctx.beginPath();
-          ctx.ellipse(x + w * rnd.range(0.25, 0.75), y1 - rh * rnd.range(0.25, 0.8), rnd.range(0.8, 2.2), rnd.range(0.5, 1.2), rnd.range(0, 3), 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      joints.push(x + w);
-      x += w;
+      x += run;
     }
-    // the staggered vertical joints: faint, tapering, some missing
-    for (const jx of joints) {
-      if (rnd.chance(0.22)) continue;
-      const jy = yb + sag(jx);
-      ctx.fillStyle = rgba(INKB, rnd.range(0.16, 0.34));
-      ribbon(ctx, [jx + rnd.range(-0.2, 0.2), jy - rh + 0.3, jx + rnd.range(-0.3, 0.3), jy - rh * 0.5, jx + rnd.range(-0.2, 0.2), jy - 0.2], 0.34, 0.95);
-      if (rnd.chance(0.5)) {
-        ctx.fillStyle = rgba('#DCE6F6', 0.1);
-        ribbon(ctx, [jx + 0.5, jy - rh + 0.5, jx + 0.6, jy - rh * 0.5, jx + 0.5, jy - 0.4], 0.3, 0.95);
+    // single slates: a glaze lighter or darker than its neighbours, with its joint, in small clusters
+    let sx = left - rnd.range(0, 18);
+    while (sx < right) {
+      const w = rnd.range(15, 28);
+      const v = vis(sx + w / 2, yb - rh / 2);
+      if (rnd.chance(v * v * 0.6)) {
+        const y1 = yb + sag(sx);
+        const patch = deform([sx, y1 - rh + 0.4, sx + w, y1 - rh + 0.4, sx + w, y1, sx, y1], rnd, 2, 0.03);
+        const n = nz((sx + w / 2) * 0.018, yb * 0.035);
+        const col = rnd.chance(0.3) ? mix('#7C8AA4', '#A8B2C6', n) : mix('#3A4668', '#28304E', n);
+        ctx.fillStyle = rgba(col, rnd.range(0.1, 0.22) * (0.5 + v));
+        tracePoly(ctx, patch);
+        ctx.fill();
+        ctx.fillStyle = rgba(INKB, rnd.range(0.14, 0.3) * v);
+        ribbon(ctx, [sx + w + rnd.range(-0.2, 0.2), y1 - rh + 0.6, sx + w + rnd.range(-0.3, 0.3), y1 - rh * 0.5, sx + w, y1 - 0.3], 0.38, 0.95);
       }
+      sx += w;
     }
-    // the thin shadow line under the course (with a soft wider one) and the lit lip, in broken runs
-    const lipPts: number[] = [];
-    const lowPts: number[] = [];
-    for (let xx = left; xx <= right; xx += 6) {
-      lipPts.push(xx, yb + sag(xx) - 0.5);
-      lowPts.push(xx, yb + sag(xx) + 0.8);
-    }
-    brokenLine(P, lowPts, 2.4, INKB, 0.1, { seg: [14, 40], gap: [0.5, 3], wob: 0.2 });
-    brokenLine(P, lowPts, 0.75, INKB, 0.34, { seg: [10, 34], gap: [0.6, 3.5], wob: 0.22 });
-    brokenLine(P, lipPts, 0.5, '#DCE6F6', 0.24, { seg: [6, 22], gap: [1, 6], wob: 0.2, skip: 0.2 });
     yb -= rh;
-    row++;
   }
 
   // ---- 3. light over the whole roof: warm and pale upper left, deeper cool lower right

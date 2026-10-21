@@ -4,10 +4,11 @@
  * layered straw with a thick rolled ridge and hips carrying a scalloped pattern, and a deep shaggy eave that
  * sweeps down over the windows. Both overhang the wall and cast their shadow on it (see cottageWall).
  */
-import { clamp, makeNoise2D } from '../../scene/prng';
+import { clamp } from '../../scene/prng';
 import { deform, rgba, tracePoly } from '../../scene/watercolor';
-import { mix, ribbon } from '../../river/scene/boatInk';
+import { ribbon } from '../../river/scene/boatInk';
 import { brokenLine, edgeInk, fillPoly, lerp, lump, paperLift, rrPoly, shift, softWash, wander, type Paint } from './cottagePaint';
+import { backrun, detailAt, dryBrush } from './cottageWash';
 import type { EaveFn } from './cottageWall';
 
 const EAVE = 332;
@@ -58,7 +59,6 @@ const STRAW_DK = ['#8C6430', '#A07038', '#7A5628', '#94683A'];
 export function paintThatchRoof(P: Paint, eave: EaveFn): void {
   const { ctx, rnd } = P;
   const r = roofCorners(P);
-  const nz = makeNoise2D(5113);
   const poly = roofPoly(P, eave);
   ctx.save();
   tracePoly(ctx, poly);
@@ -67,90 +67,88 @@ export function paintThatchRoof(P: Paint, eave: EaveFn): void {
   const width = r.dx - r.ax + 8;
   ctx.fillStyle = '#B98A46';
   ctx.fillRect(r.ax - 4, y0, width, 150);
-  // soft pools of colour: new pale straw high up, weathered brown and moss low down
-  for (let i = 0; i < 46; i++) {
-    const cy = rnd.range(RIDGE, 340);
-    const t = (cy - RIDGE) / 134;
-    const col = t < 0.4 ? rnd.pick(['#E3C47C', '#D9B466', '#EAD08C']) : rnd.pick(['#A8783A', '#C09048', '#8E6A36', '#8A8644']);
-    softWash(ctx, lump(rnd.range(r.ax, r.dx), cy, rnd.range(24, 70), rnd.range(8, 22), rnd, 12, 0.3), col, 0.3, rnd, 3, 0.6);
+  const vis = detailAt(P, true);
+  // ---- one wet wash: pale new straw high up and in the sun, weathered sienna and umber low down and to the right,
+  // colours dropped in wet (raw sienna, burnt sienna, a little olive moss on the lower slope), a few backruns
+  const ug = ctx.createLinearGradient(r.ax, RIDGE, r.dx, 350);
+  ug.addColorStop(0, 'rgba(240,214,150,0.75)');
+  ug.addColorStop(0.45, 'rgba(206,164,92,0.2)');
+  ug.addColorStop(1, 'rgba(110,70,34,0.55)');
+  ctx.fillStyle = ug;
+  ctx.fillRect(r.ax - 4, y0, width, 150);
+  for (let i = 0; i < 40; i++) {
+    const cy = rnd.range(RIDGE, 344);
+    const t = (cy - RIDGE) / 138;
+    const col = t < 0.4 ? rnd.pick(['#E8CC86', '#DDB868', '#EED796', '#D4AC62']) : rnd.pick(['#B07C3E', '#C49450', '#9A6A34', '#A87038', '#C88A48']);
+    softWash(ctx, lump(rnd.range(r.ax, r.dx), cy, rnd.range(30, 80), rnd.range(10, 24), rnd, 12, 0.3), col, 0.3, rnd, 4, 0.55);
   }
-  // straw: courses of bundles with rounded butt ends laid from the eave up, each course overlapping the one below
-  // (like the slates, but soft): every bundle a wash of its own, lit on the left, with straw strokes running down it
+  for (let i = 0; i < 10; i++) softWash(ctx, lump(rnd.range(r.ax + 20, r.dx - 20), rnd.range(286, 340), rnd.range(12, 34), rnd.range(4, 9), rnd, 12, 0.3), rnd.pick(['#8A8644', '#7C8A40', '#9A9A4A']), 0.2, rnd, 3, 0.6);
+  for (let i = 0; i < 4; i++) backrun(ctx, rnd.range(r.ax + 40, r.dx - 40), rnd.range(RIDGE + 20, 330), rnd.range(22, 48), rnd.range(7, 14), rnd.pick(['#C79A52', '#A8783A']), 0.32, rnd);
+
+  // the way the straw runs at a point: straight down the slope, turning to follow a hip near it
+  const hipL = Math.atan2(EAVE - RIDGE, r.ax - r.bx);
+  const hipR = Math.atan2(EAVE - RIDGE, r.dx - r.cx);
+  const down = Math.PI / 2 + 0.04;
+  const angAt = (x: number, y: number): number => {
+    const dl = x - leftEdge(P, y);
+    const dr = rightEdge(P, y) - x;
+    const wl = clamp(1 - dl / 70, 0, 1);
+    const wr = clamp(1 - dr / 70, 0, 1);
+    return down + (hipL - down) * wl * wl + (hipR - down) * wr * wr;
+  };
+
+  // ---- the courses: each a soft shadow under its butt ends, the butts catching the light above it, and the straw
+  // drawn down to them in dry-brush strokes, thick where the roof is stated and thin in the sun
   const bands: number[] = [];
-  let yy = 348;
-  while (yy > RIDGE - 16) {
+  let yy = 346;
+  while (yy > RIDGE - 10) {
     bands.push(yy);
-    yy -= rnd.range(12, 21);
+    yy -= rnd.range(13, 19);
   }
-  for (let b = 0; b < bands.length; b++) {
+  for (let b = bands.length - 1; b >= 0; b--) {
     const yb = bands[b]!;
-    const t = clamp((EAVE - yb) / (EAVE - RIDGE), 0, 1);
-    const ch = rnd.range(15, 20);
-    const left = leftEdge(P, yb - ch) - 16;
-    const right = rightEdge(P, yb - ch) + 16;
-    let x = left - rnd.range(0, 8);
-    while (x < right) {
-      const bw = rnd.range(15, 28);
-      const ov = bw * 0.35;
-      const xa = x - ov;
-      const wd = bw + ov * 2;
-      const xm = x + bw / 2;
-      const sagB = rnd.chance(0.14) ? rnd.range(1.5, 3.6) : 0;
-      const bot = b === 0 ? eave(xm) + 0.5 : yb + Math.sin(xm * 0.05 + b * 1.7) * 1.8 + Math.sin(xm * 0.13 + b) * 0.9 + rnd.range(-1.6, 1.6) + sagB;
-      const top = bot - ch - 4;
-      const n = nz(xm * 0.012, bot * 0.03);
-      let col = mix(mix(rnd.pick(STRAW), '#C9A055', 0.6), n > 0.5 ? '#F2DC9C' : '#9A7438', Math.abs(n - 0.5) * 0.8);
-      col = mix(col, t > 0.55 ? '#F2DC9C' : '#8E7A3E', clamp(Math.abs(t - 0.55) * 0.4, 0, 0.25));
-      const poly = [xa, top + 5, xa + wd * 0.2, top + 1.5, xa + wd * 0.5, top, xa + wd * 0.8, top + 1.5, xa + wd, top + 5, xa + wd, bot - 1.2, xa + wd * 0.8, bot + rnd.range(-0.8, 0.8), xa + wd * 0.55, bot + rnd.range(-0.4, 1), xa + wd * 0.3, bot + rnd.range(-0.8, 0.6), xa, bot - 1.2];
-      // the shadow its thick butt casts on the course below
-      fillPoly(ctx, [xa + 3, bot - 1, xa + wd + 1, bot - 1, xa + wd + 1, bot + 3.2, xm + 1.4, bot + 3.6, xa + 3, bot + 3], '#4A2C14', 0.12);
-      // soft-sided: opaque in the middle, fading out sideways so neighbouring bundles melt into each other
-      const sg = ctx.createLinearGradient(xa, 0, xa + wd, 0);
-      sg.addColorStop(0, rgba(col, 0));
-      sg.addColorStop(0.28, rgba(col, 0.9));
-      sg.addColorStop(0.72, rgba(col, 0.9));
-      sg.addColorStop(1, rgba(col, 0));
-      ctx.fillStyle = sg;
-      tracePoly(ctx, poly);
-      ctx.fill();
-      const g = ctx.createLinearGradient(xa, 0, xa + wd, 0);
-      g.addColorStop(0, 'rgba(255,240,180,0.2)');
-      g.addColorStop(0.4, 'rgba(255,240,180,0)');
-      g.addColorStop(1, 'rgba(70,40,18,0.26)');
-      ctx.fillStyle = g;
-      tracePoly(ctx, poly);
-      ctx.fill();
-      const g2 = ctx.createLinearGradient(0, bot - 7, 0, bot + 0.6);
-      g2.addColorStop(0, 'rgba(255,238,170,0)');
-      g2.addColorStop(1, 'rgba(255,238,170,0.18)');
-      ctx.fillStyle = g2;
-      tracePoly(ctx, poly);
-      ctx.fill();
-      // straw: long strokes down the bundle, dark and pale
-      const ns = Math.round(bw * 2.6);
-      for (let i = 0; i < ns; i++) {
-        const sx = x + rnd.range(-ov * 0.5, bw + ov * 0.5);
-        const sy = rnd.range(top + 2, bot - 8);
-        const len = rnd.range(6, 15);
-        const dark = rnd.chance(0.45);
-        ctx.fillStyle = dark ? rgba(rnd.pick(STRAW_DK), rnd.range(0.22, 0.5)) : rgba(rnd.pick(['#F6E6B0', '#F0D890', '#E6C878']), rnd.range(0.32, 0.64));
-        const lean = rnd.range(-0.16, 0.16);
-        ribbon(ctx, [sx, sy, sx + lean * len * 0.5 + rnd.range(-0.4, 0.4), sy + len * 0.5, sx + lean * len, Math.min(bot - 0.6, sy + len)], rnd.range(0.35, 0.8), 0.92);
+    const prev = bands[b + 1] ?? yb - 16;
+    const left = leftEdge(P, yb) - 10;
+    const right = rightEdge(P, yb) + 10;
+    const ph = rnd.range(0, 6);
+    const line = (x: number): number => (b === 0 ? eave(x) - 1 : yb + Math.sin(x * 0.045 + ph) * 2.2 + Math.sin(x * 0.13 + b) * 0.9);
+    // the shadow under the butts (the next course is tucked under this one)
+    const sh: number[] = [];
+    for (let x = left; x <= right; x += 5) sh.push(x, line(x) + 0.5);
+    for (let x = right; x >= left; x -= 5) sh.push(x, line(x) + 3.4 + rnd.range(0, 1.2));
+    // in pieces along the course, strongest where the roof is stated (a painter states a course, then lets it go)
+    for (let x = left; x < right; ) {
+      const run = rnd.range(30, 90);
+      const v = vis(x + run / 2, yb);
+      if (rnd.chance(0.2 + 0.7 * v)) {
+        const seg: number[] = [];
+        for (let xx = x; xx <= Math.min(right, x + run); xx += 5) seg.push(xx, line(xx) + 0.5);
+        for (let xx = Math.min(right, x + run); xx >= x; xx -= 5) seg.push(xx, line(xx) + 2.6 + rnd.range(0, 1.4));
+        softWash(ctx, seg, '#6A4220', 0.05 + 0.13 * v, rnd, 3, 0.9, 0.04);
       }
-      // the lip: a pale rim along the butt, then a thin dark seam under it
-      ctx.fillStyle = rgba('#F6E6B0', 0.3);
-      ribbon(ctx, [x - 2, bot - 1.8, xm, bot - 0.4, x + bw + 2, bot - 1.8], 0.7, 0.9);
-      x += bw * (rnd.chance(0.12) ? 0.62 : 1);
+      x += run;
     }
-  }
-  // the relief: broad soft crests and hollows over the slope (light from the upper left)
-  for (let i = 0; i < 110; i++) {
-    const cx = rnd.range(r.ax, r.dx);
-    const cy = rnd.range(RIDGE - 4, 346);
-    const rx = rnd.range(16, 44);
-    const ry = rnd.range(5, 10);
-    softWash(ctx, lump(cx - 2, cy - 2, rx, ry, rnd, 12, 0.22), '#F6E4A6', 0.2, rnd, 3, 0.55);
-    softWash(ctx, lump(cx + 4, cy + ry * 0.8, rx * 0.9, ry * 0.7, rnd, 12, 0.22), '#5A3A1C', 0.14, rnd, 3, 0.55);
+    // the straw of this course
+    const n = Math.round((right - left) * 1.9);
+    for (let i = 0; i < n; i++) {
+      const x = rnd.range(left, right);
+      const v = vis(x, yb);
+      if (!rnd.chance(0.3 + 0.7 * v)) continue;
+      const end = line(x) - rnd.range(0, 1.6);
+      const len = (yb - prev) * rnd.range(0.55, 1.15) + 2;
+      const a = angAt(x, end) + rnd.range(-0.08, 0.08);
+      const sx = x - Math.cos(a) * len;
+      const sy = end - Math.sin(a) * len;
+      const k = rnd.next();
+      const col = k < 0.45 ? rnd.pick(['#B88A48', '#A87A3C', '#C49452']) : k < 0.75 ? rnd.pick(STRAW_DK) : rnd.pick(['#EED696', '#E4C47A', '#F2DEA2']);
+      ctx.fillStyle = rgba(col, (0.12 + 0.24 * v) * rnd.range(0.6, 1.1));
+      ribbon(ctx, [sx, sy, (sx + x) / 2 + rnd.range(-0.4, 0.4), (sy + end) / 2, x, end], rnd.range(0.45, 0.95), 0.8);
+    }
+    // the butt ends along the course edge, lit from above: a broken pale stroke and a dark seam under it
+    const lip: number[] = [];
+    for (let x = left; x <= right; x += 4) lip.push(x, line(x) - 1.2);
+    dryBrush(ctx, lip, 0.9, '#F6E4AE', 0.2, rnd, 0.55);
+    dryBrush(ctx, lip.map((q, i) => (i % 2 === 1 ? q + 1.6 : q)), 0.6, '#4A2C14', 0.12, rnd, 0.6);
   }
   // liggers: hazel rods pegged across the thatch, with their stub ends
   for (let y = 250; y < 330; y += rnd.range(44, 60)) {
@@ -168,9 +166,9 @@ export function paintThatchRoof(P: Paint, eave: EaveFn): void {
     }
   }
   // weathering: moss on the shaded lower slope, dark runs of stain, a patch of fresh straw
-  for (let i = 0; i < 22; i++) {
-    const cy = rnd.range(262, 334);
-    softWash(ctx, lump(rnd.range(r.ax + 10, r.dx - 10), cy, rnd.range(5, 16), rnd.range(2, 4.4), rnd, 10, 0.3), rnd.pick(['#7C8A40', '#8A8644', '#6C7C3C', '#9A9A4A']), 0.26, rnd, 3, 0.6);
+  for (let i = 0; i < 9; i++) {
+    const cy = rnd.range(286, 336);
+    softWash(ctx, lump(rnd.range(r.ax + 10, r.dx - 10), cy, rnd.range(8, 20), rnd.range(2.5, 5), rnd, 10, 0.3), rnd.pick(['#7C8A40', '#8A8644', '#6C7C3C', '#9A9A4A']), 0.15, rnd, 3, 0.6);
   }
   const fx = rnd.range(r.ax + 120, r.cx - 100);
   softWash(ctx, lump(fx, 262, 38, 14, rnd, 12, 0.2), '#EBD18A', 0.3, rnd, 3, 0.7);

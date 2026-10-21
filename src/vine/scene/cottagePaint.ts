@@ -6,7 +6,8 @@
  */
 import { Rand } from '../../scene/prng';
 import { deform, rgba, tracePoly } from '../../scene/watercolor';
-import { inkDashes, mix, ribbon } from '../../river/scene/boatInk';
+import { inkDashes, ribbon } from '../../river/scene/boatInk';
+import { wcStone } from './cottageWash';
 import type { CottageGeom } from './geom';
 import type { PlanId } from '../types';
 
@@ -136,72 +137,13 @@ export interface StoneOpts {
 }
 
 /**
- * One stone as a painted wash: a drop shadow on the mortar to its lower right, two glazes, a bloom toward the
- * upper left, deeper pigment pooled on the lower right edge, granulation, a hint of lichen and a few broken ink
- * dashes along the bottom and right (the sun is upper left) — never a closed outline.
+ * One stone, painted in the watercolor manner of the walls (see cottageWash.wcStone): a transparent glaze with its
+ * pigment pooled along the lower and shaded edges, the light lifted off its top and the dark joint under it.
+ * `ink` (0..1) says how firmly it is stated; dressed stones (lintels, sills, jambs, quoins) are squarer.
  */
 export function paintStone(P: Paint, x: number, y: number, w: number, h: number, base: string, o: StoneOpts = {}): number[] {
-  const { ctx, rnd } = P;
-  const dressed = o.dressed === true;
-  if (w < 2.4 || h < 2.4) {
-    const t = rrPoly(x, y, Math.max(0.5, w), Math.max(0.5, h), 0.3, rnd, 0.1);
-    fillPoly(ctx, t, base, 0.9);
-    return t;
-  }
-  const r = o.round ?? Math.min(w, h) * (dressed ? 0.1 : 0.24);
-  const poly = deform(rrPoly(x, y, w, h, r, rnd, dressed ? 0.5 : 0.9), rnd, 2, dressed ? 0.02 : 0.034);
-  const sh = o.shadow ?? 1;
-  // relief shadow on the mortar / stones below
-  fillPoly(ctx, shift(poly, 0.55, 0.95), '#3E2E34', 0.2 * sh);
-  fillPoly(ctx, shift(poly, 1.0, 1.7), '#3E2E34', 0.09 * sh);
-  // the glazes
-  fillPoly(ctx, poly, base, 0.9);
-  fillPoly(ctx, deform(poly, rnd, 1, 0.03), mix(base, rnd.pick(['#F0E0C0', '#948A82', '#C9AE86', '#B6B7B2']), 0.5), 0.3);
-  // bloom to the light, shadow sinking to the lower right (gradient fills of the stone's own outline: no clipping)
-  const g = ctx.createLinearGradient(x, y, x + w * 0.65, y + h * 1.05);
-  g.addColorStop(0, rgba(LIGHT_WASH, 0.22 + (o.lit ?? 0) * 0.3));
-  g.addColorStop(0.45, rgba(LIGHT_WASH, 0));
-  g.addColorStop(1, rgba(mix(base, SHADE_WASH, 0.7), 0.4));
-  ctx.fillStyle = g;
-  tracePoly(ctx, poly);
-  ctx.fill();
-  // pigment pooled under the lower edge, a thin pale rim catching the light at the top left
-  const pg = ctx.createLinearGradient(0, y + h * 0.62, 0, y + h);
-  pg.addColorStop(0, rgba(mix(base, SHADE_WASH, 0.6), 0));
-  pg.addColorStop(1, rgba(mix(base, SHADE_WASH, 0.6), 0.26));
-  ctx.fillStyle = pg;
-  tracePoly(ctx, poly);
-  ctx.fill();
-  ctx.fillStyle = rgba(LIGHT_WASH, 0.5 + (o.lit ?? 0) * 0.2);
-  ribbon(ctx, [x + r * 0.9, y + 0.7, x + w * 0.5, y + 0.55, x + w - r * 1.3, y + 0.8], 0.55, 0.9);
-  ribbon(ctx, [x + 0.7, y + h - r * 1.2, x + 0.6, y + h * 0.5, x + r * 0.8, y + 0.9], 0.45, 0.9);
-  // granulation: grains of pigment and lifted paper, kept inside the stone
-  const ns = Math.round(w * h * (o.speck ?? 0.3) * 0.45);
-  const dk = rgba(mix(base, SHADE_WASH, 0.7), 0.3);
-  const lt = 'rgba(251,246,234,0.3)';
-  for (let i = 0; i < ns; i++) {
-    ctx.fillStyle = rnd.chance(0.35) ? lt : dk;
-    const sz = rnd.range(0.2, 0.5);
-    ctx.fillRect(x + r * 0.5 + rnd.next() * (w - r), y + r * 0.5 + rnd.next() * (h - r), sz * 1.4, sz);
-  }
-  if ((o.lichen ?? 0) > 0 && rnd.chance(o.lichen!)) {
-    const lc = rnd.pick(['#9BA454', '#C8C27C', '#7E9060', '#D6D2A8']);
-    ctx.fillStyle = rgba(lc, 0.3);
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.ellipse(x + w * rnd.range(0.25, 0.75), y + h * rnd.range(0.3, 0.7), w * rnd.range(0.06, 0.15), h * rnd.range(0.08, 0.18), rnd.range(0, 3), 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  // broken ink on the shaded edges
-  const ink = o.ink ?? 0.65;
-  if (rnd.chance(ink) && w > 5 && h > 4) {
-    const p = 0.5;
-    const jx = () => rnd.range(-0.35, 0.35);
-    edgeInk(P, [x + w * 0.62 + jx(), y + p, x + w - p + jx(), y + h * 0.28, x + w - p + jx(), y + h * 0.7, x + w - r * 0.7, y + h - p, x + w * 0.55 + jx(), y + h - p + jx() * 0.5, x + w * 0.3 + jx(), y + h - p, x + r * 0.9, y + h - p], 0.42, 0.5);
-    if (rnd.chance(0.3)) edgeInk(P, [x + p, y + h * 0.75, x + p + jx(), y + h * 0.35, x + r * 0.9, y + p + 0.2, x + w * 0.35, y + p], 0.3, 0.22);
-  }
-  return poly;
+  wcStone(P, x, y, w, h, base, { vis: 0.62 + 0.3 * (o.ink ?? 0.65), dressed: o.dressed, round: o.round, lit: o.lit });
+  return rrPoly(x, y, w, h, o.round ?? 1, P.rnd, 0);
 }
 
 /**
