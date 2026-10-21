@@ -6,8 +6,15 @@ import { DEFAULT_VINE_INPUTS, VINE_LIMITS, horizonMonths, validateVineInputs } f
 import type { VineField, VineInputs, VineValidation } from '../engine';
 import { storyDuration, storyMonths } from './story';
 
-export type Speed = 0.5 | 1 | 2 | 4;
-export const SPEEDS: readonly Speed[] = [0.5, 1, 2, 4];
+/** Playback speed, a multiple of the normal pace: anywhere from SPEED_MIN to SPEED_MAX, in tenths. */
+export type Speed = number;
+export const SPEED_MIN = 0.1;
+export const SPEED_MAX = 5;
+/** a speed within the range, rounded to a tenth (so the readout never shows 2.37x) */
+export const clampSpeed = (s: number): Speed => {
+  const v = Number.isFinite(s) ? s : 1;
+  return Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, v)) * 10) / 10;
+};
 export type Mode = 'story' | 'explore';
 export type DraftFields = Record<VineField, string>;
 export const FIELDS: readonly VineField[] = ['balance', 'apr', 'fixedPayment', 'minPercent', 'minFloor'];
@@ -300,7 +307,9 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
     },
 
     setSpeed(speed) {
-      state.speed = speed;
+      const s = clampSpeed(speed);
+      if (s === state.speed) return;
+      state.speed = s;
       emit('speed');
     },
 

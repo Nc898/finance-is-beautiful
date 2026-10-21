@@ -232,6 +232,18 @@ describe('playback', () => {
     expect(reasons).toContain('story-end');
   });
 
+  it('speed runs from 0.1x to 5x, in tenths', () => {
+    const s = createStore();
+    s.actions.setSpeed(0.02);
+    expect(s.state.speed).toBe(0.1);
+    s.actions.setSpeed(9);
+    expect(s.state.speed).toBe(5);
+    s.actions.setSpeed(2.37);
+    expect(s.state.speed).toBe(2.4);
+    s.actions.setSpeed(Number.NaN);
+    expect(s.state.speed).toBe(1);
+  });
+
   it('speed scales the story clock', () => {
     const s = createStore();
     s.actions.setSpeed(4);

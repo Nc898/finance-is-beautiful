@@ -14,7 +14,7 @@ import {
 } from '../engine';
 import type { PlanId, PlanSnapshot, VineField } from '../engine';
 import { FIELDS } from './store';
-import type { Reason, Speed, Store } from './store';
+import { SPEED_MAX, SPEED_MIN, type Reason, type Store } from './store';
 import { BEATS, captionForBeat, minimumLiveLine, storyBeat, storyCaption } from './story';
 import type { StoryBeat, StoryCaption } from './story';
 import { fixedNote, interestText, owedText, resultsSentence, sceneSummary, scrubSentence, timelineTicks } from './text';
@@ -109,7 +109,17 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const yearReadout = $('year-readout');
   const ticksEl = $('scale-ticks');
   const reduceBox = $<HTMLInputElement>('reduce-motion');
-  const speedInputs = Array.from(document.querySelectorAll<HTMLInputElement>('#speeds input'));
+  const speedSlider = $('speed') as HTMLInputElement;
+  const speedReadout = $('speed-readout');
+  // the speed slider runs on a log scale (0..1000), so slow speeds get as much travel as fast ones and 1x sits a
+  // little past the middle; near 1x it settles on 1x exactly
+  const LOG_SPAN = Math.log(SPEED_MAX / SPEED_MIN);
+  const sliderToSpeed = (v: number): number => {
+    const s = SPEED_MIN * Math.exp((v / 1000) * LOG_SPAN);
+    return Math.abs(s - 1) < 0.06 ? 1 : s;
+  };
+  const speedToSlider = (s: number): number => Math.round((Math.log(s / SPEED_MIN) / LOG_SPAN) * 1000);
+  const speedText = (s: number): string => `${Number.isInteger(s) ? s : s.toFixed(1)}`;
   const overlay = $('overlay');
 
   interface PlanLabelEls {
@@ -500,7 +510,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   }
 
   function syncSpeed(): void {
-    for (const r of speedInputs) r.checked = Number(r.value) === state.speed;
+    const s = state.speed;
+    setText(speedReadout, `${speedText(s)}×`);
+    speedSlider.setAttribute('aria-valuetext', `${speedText(s)} times speed`);
+    // leave the thumb where the hand put it unless the speed came from elsewhere
+    if (Math.abs(sliderToSpeed(Number(speedSlider.value)) - s) > 0.051) speedSlider.value = String(speedToSlider(s));
+    speedSlider.style.setProperty('--frac', String(Number(speedSlider.value) / 1000));
   }
 
   function syncDrafts(): void {
@@ -574,11 +589,10 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   playBtn.addEventListener('click', () => actions.togglePlay());
   replayBtn.addEventListener('click', () => actions.replayStory());
   skipBtn.addEventListener('click', () => actions.skipToExplore());
-  for (const r of speedInputs) {
-    r.addEventListener('change', () => {
-      if (r.checked) actions.setSpeed(Number(r.value) as Speed);
-    });
-  }
+  speedSlider.addEventListener('input', () => {
+    actions.setSpeed(sliderToSpeed(Number(speedSlider.value)));
+    speedSlider.style.setProperty('--frac', String(Number(speedSlider.value) / 1000));
+  });
   reduceBox.addEventListener('change', () => actions.setReducedMotion(reduceBox.checked));
 
   timeline.addEventListener('input', () => actions.scrubTo(Number(timeline.value)));

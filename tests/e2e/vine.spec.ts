@@ -370,7 +370,9 @@ test.describe('Nip It in the Bud', () => {
     await scrub(page, 0);
     await page.locator('#btn-play').click();
     await expect(page.locator('#btn-play')).toContainText('Pause');
-    await page.locator('.speed:has-text("4×")').click();
+    // the speed slider runs on a log scale from 0.1x (0) to 5x (1000) in steps of 10: 4x is at about 1000 * ln(40) / ln(50)
+    await page.locator('#speed').fill(String(Math.round((100 * Math.log(40)) / Math.log(50)) * 10));
+    await expect(page.locator('#speed-readout')).toHaveText('4×');
     await expect.poll(async () => (await state(page)).months, { timeout: 8000 }).toBeGreaterThan(30);
     expect((await state(page)).monthsPerSecond).toBeGreaterThan(20);
     await page.locator('#btn-play').click();
@@ -525,7 +527,7 @@ test.describe('Nip It in the Bud: accessibility', () => {
     await gotoVine(page);
     await expect(page.getByRole('link', { name: /back to all demonstrations/ })).toHaveAttribute('href', './index.html');
     await expect(page.getByRole('slider', { name: 'Timeline in months' })).toBeVisible();
-    await expect(page.getByRole('radiogroup', { name: 'Playback speed' })).toBeVisible();
+    await expect(page.getByRole('slider', { name: 'Playback speed' })).toBeVisible();
     for (const name of ['Card balance', 'Interest rate', 'Fixed monthly payment', 'Share of balance', 'Floor']) {
       await expect(page.getByRole('textbox', { name: new RegExp(name) })).toBeVisible();
     }

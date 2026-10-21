@@ -64,11 +64,10 @@
             <span id="play-label">Play story</span>
           </button>
 
-          <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
-            <label class="speed"><input type="radio" name="speed" value="0.5" /><span>0.5×</span></label>
-            <label class="speed"><input type="radio" name="speed" value="1" checked /><span>1×</span></label>
-            <label class="speed"><input type="radio" name="speed" value="2" /><span>2×</span></label>
-            <label class="speed"><input type="radio" name="speed" value="4" /><span>4×</span></label>
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
           </div>
 
           <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
