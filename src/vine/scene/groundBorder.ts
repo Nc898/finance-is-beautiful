@@ -209,8 +209,9 @@ function mapleLeaf(ctx: CanvasRenderingContext2D, rnd: Rand, x: number, y: numbe
 export function paintBorder(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, gd: number): void {
   // the view's bottom edge (the layer reaches a little beyond the screen)
   const yb = v.ymax - 18;
-  const x0 = Math.max(v.xmin, -150);
-  const x1 = Math.min(v.xmax, 1150);
+  // the whole width of the view, however wide the window (the side panel can be collapsed)
+  const x0 = v.xmin;
+  const x1 = v.xmax;
   const laneGap = 46;
   // a deepening of the lawn along the very bottom, as the nearest ground goes into shade and saturation
   ctx.save();
@@ -236,7 +237,8 @@ export function paintBorder(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, g
   // positions along the edge: dense at the two corners, sparse in the middle
   const spots: Array<{ x: number; w: number }> = [];
   for (let x = x0; x < x1; ) {
-    const edge = Math.min(1, Math.min(Math.abs(x - 40), Math.abs(x - 960)) / 240);
+    // dense from the corners of the garden outward to the view's edges, open in the middle
+    const edge = Math.min(1, Math.min(Math.max(0, x - 40), Math.max(0, 960 - x)) / 240);
     const gap = rnd.range(18, 32) * (0.7 + 0.8 * edge);
     if (Math.abs(x - LANE.x) > laneGap) spots.push({ x, w: 1 - 0.55 * edge });
     x += gap;

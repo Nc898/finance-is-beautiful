@@ -204,7 +204,7 @@ export function paintLeaves(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, f
   };
   for (const id of PLANS) {
     const w = WALL_STUB[id];
-    for (let i = 0; i < 6; i++) drift(rnd.range(w.x0, w.x1), w.yBase + rnd.range(3, 8), rnd.range(10, 26), rnd.range(3, 6), rnd.int(16, 34));
+    for (let i = 0, n = Math.round((w.x1 - w.x0) / 50); i < n; i++) drift(rnd.range(w.x0, w.x1), w.yBase + rnd.range(3, 8), rnd.range(10, 26), rnd.range(3, 6), rnd.int(16, 34));
   }
   for (let i = 0; i < 4; i++) drift(rnd.range(FENCE.x0 + 6, FENCE.x1 - 6), FENCE.y + 3, rnd.range(10, 20), 4, rnd.int(10, 22));
   for (const t of trees) drift(t.x, t.y + 4, 40, 8, 40);

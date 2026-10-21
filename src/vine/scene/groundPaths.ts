@@ -405,8 +405,9 @@ export function paintPaths(ctx: CanvasRenderingContext2D, rnd: Rand, xmin: numbe
   const lane = WAYS.find((w) => w.name === 'lane-front')!;
   const ways = WAYS.map((w) => (w === lane ? { ...w, pts: [...w.pts, [LANE.x, Math.max(760, ymax + 40), Math.min(26, 20.5 + Math.max(0, ymax - 720) * 0.006)] as P3] } : w));
   const field = new PathField(ways);
-  const x0 = Math.max(xmin, -130);
-  const x1 = Math.min(xmax, 1130);
+  // the whole width of the view, however wide the window (the side panel can be collapsed)
+  const x0 = xmin;
+  const x1 = xmax;
   const cells = makeCells(field, rnd, x0 - 20, x1 + 20, LANE.yBack - 12, Math.max(780, ymax + 50));
   const pal = makeNoise2D(777);
   paintWornStrip(ctx, rnd, x0, x1);

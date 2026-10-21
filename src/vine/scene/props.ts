@@ -760,7 +760,7 @@ export function makeGardenWall(id: PlanId, q: number): Sprite {
   const N = M + 3;
   const sky = new Float32Array(N).fill(0);
   let guard = 0;
-  while (guard++ < 1500) {
+  while (guard++ < 20000) {
     // start at the leftmost column that is (nearly) the lowest part of the wall that still needs building up
     let maxS = -1e9;
     for (let x = 0; x < M; x++) if (sky[x]! - tgt(x) > 1.1) maxS = Math.max(maxS, sky[x]!);

@@ -13,11 +13,12 @@ export const LANE = { x: 500, yBack: 322 } as const;
 /**
  * The low drystone garden wall at the outer edge of each garden. It ends just behind the leaf pile: the leaves fall
  * at the cottage, behind the wall's line, and are raked forward to the pile, so a longer wall would stand across
- * the gardener's way (and the raked leaves') to the pile, the rake and the bench.
+ * the gardener's way (and the raked leaves') to the pile, the rake and the bench. Its outer end runs far past the
+ * edge of the widest view (the side panel can be collapsed on a wide screen).
  */
 export const WALL_STUB: Record<PlanId, { x0: number; x1: number; yBase: number; h: number }> = {
-  minimum: { x0: -70, x1: 80, yBase: 556, h: 30 },
-  fixed: { x0: 920, x1: 1070, yBase: 556, h: 30 },
+  minimum: { x0: -1100, x1: 80, yBase: 556, h: 30 },
+  fixed: { x0: 920, x1: 2100, yBase: 556, h: 30 },
 };
 
 /** where the rake leans when nobody is using it: foot on the ground, top against the garden wall (world units) */
