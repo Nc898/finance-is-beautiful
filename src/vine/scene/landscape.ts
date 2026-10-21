@@ -205,11 +205,15 @@ function paintHills(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
     for (const x of X) pts.push(x, ridge(x));
     for (let i = X.length - 1; i >= 0; i--) pts.push(X[i]!, base);
     const top = Math.min(...X.map(ridge));
+    // below the hedge the hills fade out to nothing (they run on under the lawn, so the lawn's wash, laid over them,
+    // would otherwise come out darker down to their foot and stop in a hard line there)
+    const hedge = Math.min(0.95, Math.max(0.55, (HEDGE_Y - top) / (base - top)));
     soft.ctx.clearRect(v.xmin, y0, v.xmax - v.xmin, y1 - y0);
     const g = soft.ctx.createLinearGradient(0, top, 0, base);
     g.addColorStop(0, rgba(color, a * 0.95));
-    g.addColorStop(0.5, rgba(color, a * 0.78));
-    g.addColorStop(1, rgba(color, a * 0.4));
+    g.addColorStop(Math.min(0.5, hedge * 0.7), rgba(color, a * 0.78));
+    g.addColorStop(hedge, rgba(color, a * 0.4));
+    g.addColorStop(1, rgba(color, 0));
     soft.ctx.fillStyle = g;
     for (let i = 0; i < 2; i++) {
       tracePoly(soft.ctx, deform(pts, rnd, 2, 0.012));
@@ -219,8 +223,9 @@ function paintHills(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
     ctx.globalCompositeOperation = 'multiply';
     const g2 = ctx.createLinearGradient(0, top, 0, base);
     g2.addColorStop(0, rgba(color, a * o.crisp));
-    g2.addColorStop(o.fade, rgba(color, a * o.crisp * 0.55));
-    g2.addColorStop(1, rgba(color, a * o.crisp * 0.2));
+    g2.addColorStop(Math.min(o.fade, hedge * 0.8), rgba(color, a * o.crisp * 0.55));
+    g2.addColorStop(hedge, rgba(color, a * o.crisp * 0.2));
+    g2.addColorStop(1, rgba(color, 0));
     ctx.fillStyle = g2;
     for (let i = 0; i < 2; i++) {
       tracePoly(ctx, deform(pts, rnd, 3, 0.02 + 0.008 * i));
