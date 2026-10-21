@@ -47,4 +47,28 @@ const dataUrl = await page.evaluate(async (b64) => {
 const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
 writeFileSync(`${out}/preview-vine.webp`, buf);
 console.log(`baked ${out}/preview-vine.webp (${Math.round(buf.length / 1024)} KB) at story ${at}s`);
+
+// the landing entry's drifting leaves: painted by the scene's own leaf painter (src/vine/scene/leaves.ts), each
+// at 4x the size it shows at, written as public/assets/vine-leaf-1..5.webp
+const leaves = await page.evaluate(async () => {
+  const { paintLeafInto } = await import('/src/vine/scene/leaves.ts');
+  const { Rand } = await import('/src/scene/prng.ts');
+  // [shape 0 maple / 1 oak / 2 birch, colour group (crimson, scarlet, rust, brown, amber, gold), tone 0 lit .. 2 shaded]
+  const picks = [[0, 1, 0], [0, 4, 0], [1, 2, 1], [0, 0, 1], [2, 5, 0]];
+  return picks.map(([shape, group, tone], i) => {
+    const cv = document.createElement('canvas');
+    cv.width = 192;
+    cv.height = 192;
+    const c = cv.getContext('2d');
+    c.translate(96, 104);
+    c.scale(11, 11);
+    paintLeafInto(c, new Rand(8100 + i * 31), shape, group, tone, 1);
+    return cv.toDataURL('image/webp', 0.9);
+  });
+});
+leaves.forEach((u, i) => {
+  const b = Buffer.from(u.split(',')[1], 'base64');
+  writeFileSync(`${out}/vine-leaf-${i + 1}.webp`, b);
+});
+console.log(`baked ${leaves.length} leaves (${out}/vine-leaf-*.webp)`);
 await browser.close();

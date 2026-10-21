@@ -360,13 +360,14 @@ html[data-ready] .hero-sub {
   position: absolute;
   width: 20px;
   height: 20px;
-  opacity: 0.9;
+  opacity: 0.92;
+  user-select: none;
 }
-.vine-leaf.l1 { left: -3.5%; top: 18%; width: 39px; height: 39px; transform: rotate(-24deg); }
-.vine-leaf.l2 { left: 53%; top: 7%; width: 31px; height: 31px; transform: rotate(32deg); }
-.vine-leaf.l3 { left: 57%; top: 70%; width: 44px; height: 44px; transform: rotate(-58deg); }
-.vine-leaf.l4 { left: 95%; top: 28%; width: 34px; height: 34px; transform: rotate(14deg); }
-.vine-leaf.l5 { left: 2%; top: 84%; width: 29px; height: 29px; transform: rotate(70deg); }
+.vine-leaf.l1 { left: -3.5%; top: 18%; width: 34px; height: 34px; transform: rotate(-28deg); }
+.vine-leaf.l2 { left: 53%; top: 7%; width: 28px; height: 28px; transform: rotate(38deg); }
+.vine-leaf.l3 { left: 57%; top: 70%; width: 36px; height: 36px; transform: rotate(-64deg); }
+.vine-leaf.l4 { left: 95%; top: 28%; width: 30px; height: 30px; transform: rotate(118deg); }
+.vine-leaf.l5 { left: 2%; top: 84%; width: 26px; height: 26px; transform: rotate(150deg); }
 @media (prefers-reduced-motion: no-preference) {
   .vine-leaf { animation: leaf-sway 7s ease-in-out infinite; }
   .vine-leaf.l2 { animation-duration: 8.4s; animation-delay: -2s; }
