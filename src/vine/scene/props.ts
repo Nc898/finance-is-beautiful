@@ -7,7 +7,7 @@
  * glazes, a bloom toward the sun (upper left) and a shadow wash the other way, pigment pooled inside the edge,
  * dry-brush grain, granulation and a broken, tapering sepia contour.
  */
-import { Rand } from '../../scene/prng';
+import { Rand, makeNoise2D } from '../../scene/prng';
 import { deform, rgba, tracePoly } from '../../scene/watercolor';
 import { grassTuft, strokePoly } from '../../river/scene/paint';
 import { brush, feather, inkDashes, mix, paintForm, ribbon, smoothPoly, speckle, bounds, type Pt } from '../../river/scene/boatInk';
@@ -17,6 +17,8 @@ import type { Sprite } from './art';
 import { cpuSprite, finishSprite } from './propSprite';
 import { WOOD, darker, dropLeaf, grainIn, lighter, plank, quad, softShadow, strew, sunAndShade } from './propPaint';
 import type { PlanId } from '../types';
+import { lump, softWash, type Paint } from './cottagePaint';
+import { backrun, wcStone } from './cottageWash';
 
 /** the shadow goes behind everything already painted (so the sun glaze never tints it) */
 function shadowBehind(ctx: CanvasRenderingContext2D, f: () => void): void {
@@ -660,73 +662,6 @@ export function makeBench(seed: number, q: number, seat = 31): Sprite {
 /** stone colours: warm and cool greys, a few buff and rust-stained ones */
 const STONE_COLS = ['#CDBB98', '#C3AB86', '#D2BF9A', '#C9AE8C', '#ABABA8', '#B6B6B1', '#A8ACAC', '#BAB6A6', '#C4B9A0', '#BBAE98', '#D0B07C', '#BE9C7E'] as const;
 
-/**
- * One drystone block painted as a wash: glazes, a bloom of the lit colour toward the top, deeper pigment sunk
- * toward the underside, a lit top edge, grains, and broken ink only along the shaded (right and lower) edges.
- * `pts` is the flat outline in order, starting at the top left and going clockwise.
- */
-function stoneBlock(ctx: CanvasRenderingContext2D, rnd: Rand, pts: number[], col: string, o: { shadow?: number; dark?: number } = {}): void {
-  const poly = deform(pts, rnd, 1, 0.014);
-  const b = bounds(poly);
-  const shade = mix(darker(col, 0.55), '#4A3C5A', 0.15);
-  const k = o.dark ?? 0;
-  const base = k > 0 ? mix(col, '#5A4E5A', k) : col;
-  // a thin shadow under the stone, on the one below
-  if (o.shadow !== undefined) {
-    ctx.fillStyle = 'rgba(34,24,38,0.28)';
-    tracePoly(ctx, [b.x0 + 0.5, b.y1 - 0.4, b.x1 + 0.6, b.y1 - 0.4, b.x1 - 0.6, b.y1 + o.shadow, b.x0 + 1.4, b.y1 + o.shadow * 1.1]);
-    ctx.fill();
-  }
-  ctx.fillStyle = rgba(base, 0.76);
-  tracePoly(ctx, poly);
-  ctx.fill();
-  ctx.fillStyle = rgba(base, 0.24);
-  tracePoly(ctx, deform(poly, rnd, 1, 0.02));
-  ctx.fill();
-  ctx.save();
-  tracePoly(ctx, poly);
-  ctx.clip();
-  // lit toward the top, sinking into shade toward the underside and the right
-  const g = ctx.createLinearGradient(b.x0, b.y0, b.x0 + b.w * 0.25, b.y1);
-  g.addColorStop(0, rgba(lighter(base, 0.7), 0.42 * (1 - k)));
-  g.addColorStop(0.35, rgba(lighter(base, 0.5), 0.08));
-  g.addColorStop(0.7, rgba(shade, 0.06));
-  g.addColorStop(1, rgba(shade, 0.4));
-  ctx.fillStyle = g;
-  ctx.fillRect(b.x0 - 1, b.y0 - 1, b.w + 2, b.h + 2);
-  const sg = ctx.createLinearGradient(b.x0 + b.w * 0.55, 0, b.x1, 0);
-  sg.addColorStop(0, rgba(shade, 0));
-  sg.addColorStop(1, rgba(shade, 0.2));
-  ctx.fillStyle = sg;
-  ctx.fillRect(b.x0 - 1, b.y0 - 1, b.w + 2, b.h + 2);
-  // a patch of a second colour bleeding in (iron stain, lichen bloom or a cooler vein)
-  if (rnd.chance(0.55)) {
-    const bl: number[] = [];
-    const cx = b.x0 + b.w * rnd.range(0.2, 0.8);
-    const cy = b.y0 + b.h * rnd.range(0.25, 0.8);
-    const rr = Math.min(b.w * 0.3, b.h * 0.9);
-    for (let i = 0; i < 8; i++) bl.push(cx + Math.cos(i * 0.785) * rr * rnd.range(0.8, 1.3), cy + Math.sin(i * 0.785) * rr * 0.6 * rnd.range(0.8, 1.2));
-    feather(ctx, bl, rnd.pick(['#C9A878', '#9CA0A8', '#B58E72', '#A9B08A']), 0.5, rnd, 3, 1, 0.45, 0.12);
-  }
-  // pigment pooled inside the edge
-  ctx.strokeStyle = rgba(shade, 0.16);
-  ctx.lineWidth = 1.1;
-  tracePoly(ctx, poly);
-  ctx.stroke();
-  speckle(ctx, rnd, b.x0, b.y0, b.w, b.h, Math.round(b.w * b.h * 0.5), shade, 0.26, '#FFF4DC', 0.3, 0.2);
-  ctx.restore();
-  // the lit top edge: a pale, broken stroke along the upper outline
-  const n = poly.length / 2;
-  const top: number[] = [];
-  for (let i = 0; i < n; i++) if (poly[2 * i + 1]! < b.cy - b.h * 0.1 && (i < n * 0.35 || i > n * 0.9)) top.push(poly[2 * i]!, poly[2 * i + 1]! + 0.3);
-  if (top.length >= 4) inkDashes(ctx, top, rnd, { closed: false, color: '#FFF6E0', alpha: 0.5, w: 0.55, dash: [3, 9], gap: [0.4, 1.6] });
-  // broken ink only on the shaded edges: down the right side and along the underside
-  const ink: number[] = [];
-  const iR = Math.floor(n * 0.2);
-  const iL = Math.floor(n * 0.75);
-  for (let i = iR; i <= iL; i++) ink.push(poly[2 * i]!, poly[2 * i + 1]!);
-  if (ink.length >= 4) inkDashes(ctx, ink, rnd, { closed: false, color: '#3A2A28', alpha: 0.62, w: 0.55, dash: [3, 9], gap: [0.5, 2.2] });
-}
 
 /** a low drystone wall segment with an upright coping, seen from the front; pivot = ground at the left end */
 export function makeGardenWall(id: PlanId, q: number): Sprite {
@@ -736,199 +671,130 @@ export function makeGardenWall(id: PlanId, q: number): Sprite {
   const len = w.x1 - w.x0;
   const H = w.h;
   const { sp, ctx } = cpuSprite(len + 30, H + 34, 8, H + 12, q);
-  const j2 = (a: number): number => rnd.range(-a, a);
-  // the inner end (toward the middle of the garden) steps down like a broken stub; the outer end runs off the view
+  // painted the way the cottage walls are (cottageWash): one wet wash for the whole wall, then stones as glazes,
+  // stated near the garden end (where the eye is) and loosening along the wall, rounded coping on top
+  const P = { ctx, rnd } as unknown as Paint;
   const innerRight = id === 'minimum';
+  // the inner end (toward the middle of the garden) steps down like a broken stub; the outer end runs off the view
+  const fromInner = (x: number): number => (innerRight ? len - x : x);
+  const nz = makeNoise2D(seed + 7);
   const topAt = (x: number): number => {
-    const d = innerRight ? len - x : x;
-    const k = Math.max(0, Math.min(1, d / 40));
-    return -H * (0.5 + 0.5 * Math.pow(k, 0.7)) + 1.5;
+    const k = Math.max(0, Math.min(1, fromInner(x) / 40));
+    return -H * (0.5 + 0.5 * Math.pow(k, 0.7)) + 1.5 + (nz(x * 0.03, 0.4) - 0.5) * 2.2;
   };
-  const wobble = Array.from({ length: 12 }, () => rnd.range(-1.1, 1.1));
-  const copeZone = 7.4;
-  const tgt = (x: number): number => topAt(x) + copeZone + wobble[Math.max(0, Math.min(11, Math.floor(x / (len / 11.99))))]!;
-  // the dark packing and voids behind everything: stones are laid over it, and what they leave shows as black gaps
-  const fill: number[] = [-3, 1.5];
-  for (let x = 0; x <= len; x += 6) fill.push(x, topAt(x) + copeZone - 1);
-  fill.push(len + 3, 1.5);
-  ctx.fillStyle = '#463C48';
-  tracePoly(ctx, fill);
-  ctx.fill();
-  // flat-bedded stones laid on a skyline: always start where the wall is lowest, never longer than the level run there,
-  // so the courses wander, stones differ a lot in length and thickness, and gaps are pinned with small wedges
-  const M = Math.ceil(len);
-  const N = M + 3;
-  const sky = new Float32Array(N).fill(0);
-  let guard = 0;
-  while (guard++ < 20000) {
-    // start at the leftmost column that is (nearly) the lowest part of the wall that still needs building up
-    let maxS = -1e9;
-    for (let x = 0; x < M; x++) if (sky[x]! - tgt(x) > 1.1) maxS = Math.max(maxS, sky[x]!);
-    if (maxS < -1e8) break;
-    let xi = 0;
-    while (xi < M && !(sky[xi]! - tgt(xi) > 1.1 && sky[xi]! >= maxS - 1.2)) xi++;
-    // the level run starting here
-    let run = 0;
-    while (xi + run < M && sky[xi + run]! >= maxS - 3.6 && sky[xi + run]! - tgt(xi + run) > 1.1) run++;
-    const r0 = rnd.next();
-    let ww = r0 < 0.22 ? rnd.range(8, 13) : r0 < 0.65 ? rnd.range(14, 27) : rnd.range(27, 48);
-    ww = Math.min(ww, run + 2.5);
-    if (run < 5) ww = Math.max(4, run + 1);
-    const x0 = xi;
-    let x1 = Math.min(M, x0 + ww);
-    // the stone rests on the highest point below it
-    let base = 1e9;
-    let maxTgt = -1e9;
-    const span = () => {
-      base = 1e9;
-      maxTgt = -1e9;
-      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
-        base = Math.min(base, sky[x]!);
-        maxTgt = Math.max(maxTgt, tgt(x));
-      }
-    };
-    span();
-    // where the wall steps down at its end, a long stone would reach under the lower top and have no room: shorten it
-    // to the stretch that has room for a stone (a long one would leave the course unbuilt there, a dark hole)
-    while (x1 - x0 > 4 && base - maxTgt < 3.8) {
-      x1 -= 1;
-      span();
-    }
-    ww = x1 - x0;
-    let hh = Math.min(12.5, Math.max(3.8, ww * rnd.range(0.2, 0.55) + rnd.range(-0.8, 1.6)));
-    let top = base - hh;
-    if (top < maxTgt) {
-      top = maxTgt;
-      hh = base - top;
-    }
-    if (hh < 2.2) {
-      // too little room for a stone here: this stretch is as high as it goes
-      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) if (sky[x]! - tgt(x) < 3.3) sky[x] = Math.min(sky[x]!, tgt(x) - 1);
-      if (!(sky[Math.floor(x0)]! - tgt(Math.floor(x0)) <= 1.1)) sky[Math.floor(x0)] = tgt(Math.floor(x0)) - 1;
-      continue;
-    }
-    // small pinning stones wedged into any gap under this one
-    {
-      let gx = -1;
-      for (let x = Math.floor(x0); x <= Math.ceil(x1) + 1; x++) {
-        const gap = x <= Math.ceil(x1) ? sky[x]! - base : 0;
-        if (gap > 1.9 && gx < 0) gx = x;
-        if ((gap <= 1.9 || x > Math.ceil(x1)) && gx >= 0) {
-          const gw = x - gx;
-          if (gw >= 2.5 && rnd.chance(0.9)) {
-            const wx0 = gx + 0.3;
-            const wx1 = Math.min(x - 0.3, wx0 + rnd.range(3.5, 10));
-            const yl = sky[Math.min(N - 1, Math.floor(wx0))]!;
-            const yr = sky[Math.min(N - 1, Math.floor(wx1))]!;
-            const pts = [wx0 + 0.6, base + 0.6, (wx0 + wx1) / 2, base + 0.2, wx1 - 0.5, base + 0.7, wx1, (base + yr) / 2, wx1 - 0.8, yr, (wx0 + wx1) / 2, Math.max(yl, yr) + 0.3, wx0 + 0.8, yl, wx0, (base + yl) / 2];
-            stoneBlock(ctx, rnd, pts, rnd.pick(STONE_COLS), { dark: 0.28 });
-          }
-          gx = -1;
-        }
-      }
-    }
-    const l1 = rnd.range(0, Math.min(2.6, ww * 0.12));
-    const l2 = rnd.range(0, Math.min(2.6, ww * 0.12));
-    const sh = rnd.chance(0.07) ? 1 : 0; // a through-stone, standing a little proud of the face
-    const bot = base + rnd.range(0, 0.7) + sh * 0.9;
-    const tp = top - sh * 0.5;
-    const xa = x0 + 0.3;
-    const xb = x1 - 0.3;
-    const pts = [
-      xa + 1.4 + l1, tp + j2(0.4),
-      (xa + xb) / 2 + j2(ww * 0.1), tp - rnd.range(0, 0.9) + j2(0.3),
-      xb - 1.4 - l2, tp + j2(0.4),
-      xb + j2(0.5), tp + Math.min(2.2, hh * 0.3),
-      xb + j2(0.6) - l2 * 0.4, bot - 0.2,
-      (xa + xb) / 2 + j2(ww * 0.1), bot + j2(0.4),
-      xa + l1 * 0.5, bot - 0.1,
-      xa + j2(0.5), tp + Math.min(2.0, hh * 0.3),
-    ];
-    const cool = rnd.chance(0.4);
-    stoneBlock(ctx, rnd, pts, cool ? rnd.pick(STONE_COLS.slice(4, 8)) : rnd.pick(STONE_COLS), { shadow: 1.5 + sh * 2 });
-    // lichen: a small scatter of pale rounded discs on some stones
-    if (rnd.chance(0.28) && ww > 8) {
-      const lx = x0 + ww * rnd.range(0.2, 0.75);
-      const ly = top + hh * rnd.range(0.25, 0.6);
-      const lc = rnd.pick(['#C7C98A', '#B7C07A', '#D8B56A', '#E3E0C2']);
-      for (let i = 0, n = rnd.int(3, 6); i < n; i++) {
-        ctx.fillStyle = rgba(lc, 0.55);
-        ctx.beginPath();
-        ctx.arc(lx + rnd.range(-2.6, 2.6), ly + rnd.range(-1, 1), rnd.range(0.5, 1.2), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) sky[x] = top - 0.3;
+  const vis = (x: number, y: number): number => {
+    const near = Math.max(0, 1 - fromInner(x) / 260);
+    const low = Math.max(0, Math.min(1, (y + H * 0.45) / (H * 0.45)));
+    return Math.max(0.25, Math.min(1, 0.32 + 0.55 * near + 0.2 * low + (nz(x * 0.05, y * 0.1 + 3) - 0.5) * 0.6));
+  };
+
+  // ---- the body: one wash, warm grey, colours run in wet, lit along the top and sinking into shade at the foot
+  const body: number[] = [-2, 1.2];
+  for (let x = -2; x <= len + 2; x += 4) body.push(x, topAt(Math.min(len, Math.max(0, x))) + 2.2);
+  body.push(len + 2, 1.2);
+  ctx.save();
+  tracePoly(ctx, deform(body, rnd, 2, 0.006));
+  ctx.clip();
+  ctx.fillStyle = '#B8AE9E';
+  ctx.fillRect(-4, -H - 8, len + 10, H + 12);
+  for (let i = 0; i < Math.round(len / 18); i++) {
+    softWash(ctx, lump(rnd.range(-6, len + 6), rnd.range(-H, 0), rnd.range(14, 36), rnd.range(6, 12), rnd, 12, 0.3), rnd.pick(['#C9B794', '#A9A6A2', '#B79E86', '#9EA0A6', '#C4A878', '#8E9478']), 0.3, rnd, 3, 0.55);
   }
-  // the coping: stones set on edge, upright and slanted, along the top
+  const g = ctx.createLinearGradient(0, -H, 0, 1);
+  g.addColorStop(0, 'rgba(255,244,214,0.26)');
+  g.addColorStop(0.5, 'rgba(255,244,214,0)');
+  g.addColorStop(1, 'rgba(62,48,70,0.38)');
+  ctx.fillStyle = g;
+  ctx.fillRect(-4, -H - 8, len + 10, H + 12);
+  for (let i = 0; i < Math.round(len / 120); i++) backrun(ctx, rnd.range(10, len - 10), rnd.range(-H * 0.7, -6), rnd.range(10, 22), rnd.range(4, 8), rnd.pick(['#A49A88', '#8E8A88']), 0.3, rnd);
+
+  // ---- the courses: stones as glazes over the wash (the gaps are the wash showing, not a black void)
+  let yb = 0;
+  for (;;) {
+    const ch = rnd.range(5.4, 9.2);
+    if (yb - ch < -H - 2) break;
+    let x = -rnd.range(0, 10);
+    while (x < len) {
+      const sw = rnd.chance(0.22) ? rnd.range(5, 10) : rnd.chance(0.3) ? rnd.range(24, 40) : rnd.range(11, 24);
+      const top = topAt(Math.min(len, Math.max(0, x + sw / 2))) + 2.6;
+      // drystone, not brick: heights vary a lot within a course, the odd big stone takes two, small ones sit high
+      const tall = rnd.chance(0.12) ? rnd.range(1.4, 1.8) : 1;
+      const lift = rnd.chance(0.3) ? rnd.range(0.5, 2.2) : rnd.range(-0.6, 0.6);
+      const sh = Math.min(ch * tall * rnd.range(0.55, 1.02), yb - lift - top - 0.4);
+      if (sh > 2.6) {
+        const v = vis(x + sw / 2, yb - sh / 2) * rnd.range(0.75, 1.15);
+        const n = nz((x + sw / 2) * 0.02, yb * 0.08);
+        let col: string = rnd.pick(STONE_COLS);
+        col = mix(col, n > 0.5 ? '#EADCC0' : '#7E7870', Math.abs(n - 0.5) * 0.6);
+        col = mix(col, '#5C6258', Math.max(0, (yb + 8) / 10) * 0.3);
+        wcStone(P, x + 0.6, yb - lift - sh, sw - 1.2, sh - 0.3, col, { vis: v, round: Math.min(sw, sh) * rnd.range(0.25, 0.48) });
+      }
+      x += sw;
+    }
+    yb -= ch;
+  }
+
+  // ---- the coping: rounded stones of every width, some leaning, sitting along the top
   {
     let x = -rnd.range(0, 4);
-    while (x < len + 3) {
-      const cw = rnd.range(3.4, 7.6);
-      const t0 = topAt(Math.min(len, Math.max(0, x + cw / 2)));
-      const bot = t0 + copeZone + 0.8;
-      const hc = rnd.range(6.2, 9.6);
-      const tp = Math.max(t0 - 1.8, bot - hc - rnd.range(0, 1.2));
-      const shear = rnd.range(-0.34, 0.34) * (bot - tp) * 0.5;
-      const xa = Math.max(x, -4);
-      const xb = Math.min(x + cw, len + 4);
-      if (xb - xa > 1.8) {
-        const pts = [
-          xa + shear + j2(0.5), tp + 1.1 + j2(0.3),
-          xa + shear + (xb - xa) * 0.45, tp - rnd.range(0, 0.8),
-          xb + shear - 0.6, tp + 0.2 + j2(0.3),
-          xb + shear + 0.1, tp + 1.8,
-          xb + 0.2, bot - 0.6,
-          (xa + xb) / 2, bot + 0.3,
-          xa - 0.1, bot - 0.5,
-          xa + shear * 0.5, (tp + bot) / 2,
-        ];
-        const col = rnd.pick(STONE_COLS);
-        stoneBlock(ctx, rnd, pts, rnd.chance(0.5) ? lighter(col, 0.12) : col, { shadow: 0.8 });
-      }
-      x += cw - rnd.range(0, 1.3);
+    while (x < len + 2) {
+      const cw = rnd.chance(0.3) ? rnd.range(4, 7) : rnd.range(7, 14);
+      const t = topAt(Math.min(len, Math.max(0, x + cw / 2)));
+      const ch = rnd.range(4.6, 9.4);
+      const lean = rnd.range(-0.34, 0.34);
+      ctx.save();
+      ctx.translate(x + cw / 2, t + ch * 0.5 + rnd.range(-1.2, 1.6));
+      ctx.rotate(lean);
+      const v = Math.min(1, vis(x + cw / 2, t) + 0.15);
+      wcStone(P, -cw / 2, -ch / 2, cw - 0.6, ch, mix(rnd.pick(STONE_COLS), '#E8DCC2', rnd.range(0.05, 0.3)), { vis: v, round: Math.min(cw, ch) * 0.48, lit: 0.4 });
+      ctx.restore();
+      x += cw - rnd.range(0.2, 1.4);
     }
   }
-  // moss: on top of the coping, in the crevices and creeping up from the foot
-  for (let i = 0; i < 34; i++) {
+  // the shade the coping casts on the face just below it
+  {
+    const pts: number[] = [];
+    for (let x = -2; x <= len + 2; x += 5) pts.push(x, topAt(Math.min(len, Math.max(0, x))) + 6.2);
+    for (let x = len + 2; x >= -2; x -= 5) pts.push(x, topAt(Math.min(len, Math.max(0, x))) + 9.6 + rnd.range(0, 1.4));
+    softWash(ctx, pts, '#3E3048', 0.16, rnd, 3, 0.95, 0.02);
+  }
+  ctx.restore();
+
+  // ---- moss in the crevices and over the coping, lichen here and there
+  for (let i = 0; i < Math.round(len / 9); i++) {
     const mx = rnd.range(0, len);
     const onTop = rnd.chance(0.55);
-    const my = onTop ? topAt(mx) + rnd.range(-1, 3) : rnd.range(-H * 0.6, -1);
+    const my = onTop ? topAt(mx) + rnd.range(0.5, 3.4) : rnd.range(-H * 0.55, -1.5);
     const mp: number[] = [];
-    const rr = rnd.range(2, onTop ? 7 : 4.5);
+    const rr = rnd.range(1.8, onTop ? 6 : 3.8);
     for (let k = 0; k < 9; k++) mp.push(mx + Math.cos(k * 0.7) * rr * rnd.range(0.7, 1.2), my + Math.sin(k * 0.7) * rr * 0.4 * rnd.range(0.7, 1.2));
-    feather(ctx, mp, rnd.pick(['#8FA050', '#A3B058', '#7C9040', '#B9A044', '#6F8C48']), onTop ? 0.55 : 0.42, rnd, 3, 1, 0.5, 0.16);
+    feather(ctx, mp, rnd.pick(['#8FA050', '#A3B058', '#7C9040', '#B9A044', '#6F8C48']), onTop ? 0.42 : 0.3, rnd, 3, 1, 0.5, 0.16);
   }
-  // the lower stones sink into shade, the right side darkens a little, the upper left catches the sun
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-atop';
-  const sg = ctx.createLinearGradient(0, -H, 0, 0);
-  sg.addColorStop(0, 'rgba(255,240,200,0.1)');
-  sg.addColorStop(0.55, 'rgba(70,56,80,0)');
-  sg.addColorStop(1, 'rgba(60,44,70,0.26)');
-  ctx.fillStyle = sg;
-  ctx.fillRect(-4, -H - 6, len + 12, H + 8);
-  const dg = ctx.createLinearGradient(0, 0, len, 0);
-  dg.addColorStop(0, 'rgba(255,238,190,0.08)');
-  dg.addColorStop(1, 'rgba(60,44,70,0.12)');
-  ctx.fillStyle = dg;
-  ctx.fillRect(-4, -H - 6, len + 12, H + 8);
-  ctx.restore();
-  // grass and weeds at its foot and sprouting from the coping, a few tumbled stones and leaves
+  for (let i = 0; i < Math.round(len / 30); i++) {
+    const lx = rnd.range(0, len);
+    const ly = rnd.range(-H * 0.7, -4);
+    ctx.fillStyle = rgba(rnd.pick(['#D6D3A2', '#C7C98A', '#E3E0C2']), 0.4);
+    for (let k = 0, n = rnd.int(3, 6); k < n; k++) {
+      ctx.beginPath();
+      ctx.arc(lx + rnd.range(-2.4, 2.4), ly + rnd.range(-1, 1), rnd.range(0.5, 1.1), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ---- grass and weeds at its foot and sprouting from the coping, a few tumbled stones and leaves
   const pal = ['#B2B455', '#8E9C42', '#C9B65A', '#A6A64A', '#D6BA62'];
   for (let x = -6; x < len + 6; x += rnd.range(4, 9)) grassTuft(ctx, x, rnd.range(0, 2.8), rnd.range(3, 8), rnd, 1, pal);
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < Math.round(len / 18); i++) {
     const gx = rnd.range(2, len - 2);
-    grassTuft(ctx, gx, topAt(gx) + copeZone * 0.55, rnd.range(3, 6), rnd, 0.9, pal);
+    grassTuft(ctx, gx, topAt(gx) + 2.6, rnd.range(3, 6), rnd, 0.9, pal);
   }
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < Math.round(len / 34); i++) {
     const sx = rnd.range(4, len);
-    const sw = rnd.range(5, 11);
-    const sh2 = rnd.range(3, 5.4);
-    const pts = [sx + 1, -sh2, sx + sw / 2, -sh2 - 0.6, sx + sw - 1, -sh2 + 0.2, sx + sw, -sh2 * 0.4, sx + sw - 1, 0.6, sx + sw / 2, 1, sx + 0.8, 0.5, sx, -sh2 * 0.5];
-    stoneBlock(ctx, rnd, pts, rnd.pick(STONE_COLS), { shadow: 1.2 });
+    const sw = rnd.range(5, 10);
+    const sh = rnd.range(3, 5);
+    wcStone(P, sx, -sh + rnd.range(0, 1.4), sw, sh, rnd.pick(STONE_COLS), { vis: 0.7, round: sh * 0.45 });
   }
-  strew(ctx, rnd, 22, -4, len + 6, 0.4, 7, 0.5);
+  strew(ctx, rnd, Math.round(len / 7), -4, len + 6, 0.4, 7, 0.5);
   shadowBehind(ctx, () => {
     softShadow(ctx, rnd, len * 0.5 + 4, 3.4, len * 0.54, 6, 0.2);
     softShadow(ctx, rnd, len * 0.5 + 8, 6, len * 0.5, 3, 0.12);
