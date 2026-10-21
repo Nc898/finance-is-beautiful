@@ -270,6 +270,9 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       setText(T.amount, amount);
       T.w = T.root.offsetWidth;
       T.h = T.root.offsetHeight;
+      // the interest line sits in the label, under what is owed: the label's size follows it
+      L.w = L.root.offsetWidth;
+      L.h = L.root.offsetHeight;
     }
   }
 
@@ -297,8 +300,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       measureAll();
     }
     for (const id of PLANS) {
+      // (the interest line sits inside the label, under what is owed, so it moves with it)
       put(labels[id].root, `l${id}`, a[id], labels[id].w, labels[id].h, range);
-      put(tags[id].root, `t${id}`, hooks.pileAnchor(id), tags[id].w, tags[id].h, range);
     }
   }
 

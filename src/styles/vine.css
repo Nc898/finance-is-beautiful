@@ -110,8 +110,7 @@ input {
 }
 
 /* during the opening close-up the labels wait; they fade in as the camera settles */
-.overlay .plan-label,
-.overlay .pile-tag {
+.overlay .plan-label {
   /* filter: opacity() composes with each label's own show/hide opacity */
   filter: opacity(var(--label-fade, 1));
 }
@@ -226,8 +225,7 @@ input {
   --label-max: 250px;
 }
 
-.plan-label,
-.pile-tag {
+.plan-label {
   position: absolute;
   top: 0;
   left: 0;
@@ -242,8 +240,9 @@ input {
   max-width: var(--label-max);
 }
 
+/* the interest paid so far: a line in the label, under what is owed */
 .pile-tag {
-  max-width: 190px;
+  margin-top: 2px;
 }
 
 .pl-id {

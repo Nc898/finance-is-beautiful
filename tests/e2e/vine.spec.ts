@@ -416,13 +416,16 @@ test.describe('Nip It in the Bud', () => {
         expect(b.x + b.w, `${b.id} at t=${t}`).toBeLessThanOrEqual(limit + 1);
         expect(b.w).toBeGreaterThan(0);
       }
-      for (let i = 0; i < boxes.length; i++) {
-        for (let j = i + 1; j < boxes.length; j++) {
-          const a = boxes[i];
-          const b = boxes[j];
-          const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          expect(overlap, `${a.id} vs ${b.id} at t=${t}`).toBe(false);
-        }
+      // the two cottages' labels never touch
+      const [lm, lf, tm, tf] = boxes;
+      const overlap = lm.x < lf.x + lf.w && lf.x < lm.x + lm.w && lm.y < lf.y + lf.h && lf.y < lm.y + lm.h;
+      expect(overlap, `labels overlap at t=${t}`).toBe(false);
+      // each label carries its interest line, under what is owed
+      for (const [lab, tag] of [[lm, tm], [lf, tf]]) {
+        expect(tag.x, `${tag.id} at t=${t}`).toBeGreaterThanOrEqual(lab.x - 1);
+        expect(tag.x + tag.w, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.x + lab.w + 1);
+        expect(tag.y + tag.h, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.y + lab.h + 1);
+        expect(tag.y, `${tag.id} at t=${t}`).toBeGreaterThan(lab.y + lab.h / 2);
       }
     }
   });

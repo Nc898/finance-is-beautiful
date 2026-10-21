@@ -669,10 +669,10 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     },
     labelAnchor(id) {
-      // above the chimney and its first wisps of smoke, so the label never sits on them
+      // well above the chimney and its first wisps of smoke, so the label (three lines) never sits on them
       const r = COTTAGE[id].ridge;
       const top = cottages ? Math.min(r.y, cottages[id].chimney.y) : r.y - 40;
-      return toScreen(r.x, top - 26);
+      return toScreen(r.x, top - 52);
     },
     pileAnchor(id) {
       const h = gardens[id].pile?.dims().h ?? 10;
