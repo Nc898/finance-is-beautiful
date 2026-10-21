@@ -145,6 +145,8 @@ const CARRY_HAND: V3 = [6, 13, -8];
 const FOLLOW_MAX = 90;
 /** the largest turn (rad) a walk begins with: bigger ones are one turn on the spot first */
 const WALK_TURN = 2.0;
+/** how far along the wall the gardener shuffles with the shears still raised (beyond it, arms down and a walk) */
+const SIDE_KEEP = 64;
 
 interface RakePlan {
   /** where the gardener stands (world), and the way they face there */
@@ -765,7 +767,7 @@ class GardenerImpl implements Gardener {
         this.goal = { x: spotX, d: PATH_Y / KAPPA, spread: 0, minWalk: 2.5, side: true };
         this.yawWant = WALL_YAW;
         this.sideMode = true;
-        this.sideKeep = this.wPrune.v > 0.9 && Math.abs(spotX - gp.px) <= 30;
+        this.sideKeep = this.wPrune.v > 0.9 && Math.abs(spotX - gp.px) <= SIDE_KEEP;
         return this.sideKeep;
       }
       this.goTo(spot, WALL_YAW, 2.5);
@@ -776,13 +778,14 @@ class GardenerImpl implements Gardener {
       this.yawWant = WALL_YAW;
       return facingWall && this.still && (this.armsDown() || this.wPrune.target > 0.5);
     }
-    // out of reach (or off the path): a short way along the wall is a side-step, facing it still; farther is a walk
+    // out of reach (or off the path): a short way along the wall is a side-step, facing it still, shears up (a
+    // shuffle along the wall, cutting as he goes); farther is a walk
     const dist = Math.abs(spotX - gp.px);
-    if (onPath && dist <= 34) {
+    if (onPath && dist <= SIDE_KEEP + 4) {
       this.yawWant = WALL_YAW;
       this.sideMode = true;
       this.walkOK = facingWall;
-      this.sideKeep = this.wPrune.v > 0.9 && dist <= 30;
+      this.sideKeep = this.wPrune.v > 0.9 && dist <= SIDE_KEEP;
       this.goal = { x: spotX, d: PATH_Y / KAPPA, spread: 0, minWalk: 2.5, side: true };
       return this.sideKeep;
     }

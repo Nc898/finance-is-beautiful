@@ -42,6 +42,8 @@ import type { Gardener, GardenerIntent } from './gardenerApi';
 const SNIP_RADIUS = 30;
 /** a snip only takes a branch that lies wholly within arm's reach of the shears (world units, each way) */
 const ARM_BOX = { x: 80, up: 160, down: 160 };
+/** behind the balance, the arm box may widen this much (a branch cut at its stem and pulled off the wall) */
+const ARM_WIDE = 2.2;
 
 interface Garden {
   id: PlanId;
@@ -118,14 +120,21 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       ext.v1[i] = v1;
     }
   };
-  /** the branch at node i lies within arm's reach of the shears (so cutting it never drops vine elsewhere) */
-  const withinArm = (gd: Garden, i: number, sh: { x: number; y: number }): boolean => {
+  /**
+   * The branch at node i lies within arm's reach of the shears (so cutting it never drops vine far off). `wide`
+   * (when the gardener has fallen behind the balance) lets him cut a branch at its stem and pull the severed
+   * branch off the wall even where it reaches past his arm.
+   */
+  const withinArm = (gd: Garden, i: number, sh: { x: number; y: number }, wide = 1): boolean => {
     const xa = toWorldX(gd.tf, ext.u0[i]!);
     const xb = toWorldX(gd.tf, ext.u1[i]!);
     const yTop = toWorldY(gd.tf, ext.v1[i]!);
     const yBot = toWorldY(gd.tf, ext.v0[i]!);
-    return Math.min(xa, xb) >= sh.x - ARM_BOX.x && Math.max(xa, xb) <= sh.x + ARM_BOX.x && yTop >= sh.y - ARM_BOX.up && yBot <= sh.y + ARM_BOX.down;
+    const bx = ARM_BOX.x * wide;
+    return Math.min(xa, xb) >= sh.x - bx && Math.max(xa, xb) <= sh.x + bx && yTop >= sh.y - ARM_BOX.up * wide && yBot <= sh.y + ARM_BOX.down * wide;
   };
+  /** how far the arm box widens with the backlog (1 when keeping up, up to ARM_WIDE well behind) */
+  const wideFor = (excess: number): number => 1 + (ARM_WIDE - 1) * Math.min(1, Math.max(0, (excess - 0.03) / 0.09));
   const gardens: Record<PlanId, Garden> = {
     minimum: newGarden('minimum'),
     fixed: newGarden('fixed'),
@@ -266,7 +275,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
    * choose the next growth to aim at: reachable and about the size of cut we need, and above all close to where
    * the gardener already stands, so they keep working in one spot instead of walking after every snip
    */
-  const chooseAim = (gd: Garden, chunk: number, behind: boolean): number | null => {
+  const chooseAim = (gd: Garden, chunk: number, behind: boolean, wide = 1): number | null => {
     refreshExtent(gd.st);
     const feet = gd.g!.feet();
     const sh = gd.g!.shears();
@@ -278,10 +287,11 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       const fit = Math.abs(Math.log(Math.max(c.mass, 1e-5) / chunk));
       const dx = Math.abs(w.x - feet.x);
       // within a side-step (about 28 units) the gardener keeps the shears up; further means arms down, a pivot,
-      // a walk and a pivot back to the wall, so it is worth it only for growth that really needs cutting
-      const move = dx > 28 ? (behind ? 50 : 70) : 0;
-      // only growth that can be cut whole from where the shears will be
-      if (!withinArm(gd, c.i, w)) continue;
+      // a walk and a pivot back to the wall (two or three seconds of no cutting), so it is worth it only for growth
+      // that really needs cutting, and least of all when behind (with the wider reach, a stem in reach will do)
+      const move = dx > 62 ? (behind ? 140 : 70) : 0;
+      // only growth that can be cut whole from where the shears will be (a bigger branch, by its stem, when behind)
+      if (!withinArm(gd, c.i, w, wide)) continue;
       const ds = Math.hypot(w.x - sh.x, w.y - sh.y);
       // keeping up: the next stem is the one the hand reaches soonest (near the shears, without a walk);
       // behind: a branch big enough to make up the difference, even if it means a few steps to reach it
@@ -299,7 +309,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
    * is far behind, the same snip takes a cluster of neighbouring branches (up to twelve cuts, all within
    * reach of the shears), so the wall keeps pace with the balance without anything vanishing elsewhere.
    */
-  const snip = (gd: Garden, chunk: number, target: number, finalCut: boolean) => {
+  const snip = (gd: Garden, chunk: number, target: number, finalCut: boolean, wide = 1) => {
     const sh = gd.g!.shears();
     if (finalCut) {
       dropPieces(gd, gd.st.cutNode(0, true).map((r) => r.i));
@@ -324,7 +334,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
         if (cuts === 0 && d > SNIP_RADIUS) continue;
         // never cut more than is due (the wall would drop below the balance and have to grow back)
         if (c.mass > left * 1.6 + 0.02) continue;
-        if (!withinArm(gd, c.i, sh)) continue;
+        if (!withinArm(gd, c.i, sh, wide)) continue;
         const s = d * 0.06 + Math.abs(Math.log(Math.max(c.mass, 1e-5) / want));
         if (s < bs) {
           bs = s;
@@ -461,17 +471,20 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
       mass = gd.st.mass();
     }
     const excess = mass - target;
-    // paid off with only scraps left: the last cut is at the root, and what remains comes down with it
-    let finalCut = clear && mass >= 0.03 && mass < 0.15;
+    // paid off: the last cut is at the root, and what remains comes down with it (the label reads "paid off", so the
+    // wall must clear with it, not branch by branch over the next few seconds)
+    let finalCut = clear && mass >= 0.03;
+    const wide = wideFor(excess);
     // how much one snip should take: enough to keep up at this speed, never so much that a branch vanishes
     const rate = Math.max(0, cv.pruning * mps);
     // a working gardener manages a snip about every 0.6 s (hand to the next stem, open, close), so one snip takes
     // about a second's worth of payments plus half of any backlog (several neighbouring cuts if need be)
-    const chunk = Math.min(0.6, Math.max(0.008, rate * 1.1 + excess * 0.5));
+    // (when well behind, one snip takes most of the backlog: a whole branch cut at its stem)
+    const chunk = Math.min(0.6, Math.max(0.008, rate * 1.1 + excess * (excess > 0.06 ? 0.9 : 0.5)));
     // snips that happened since last frame
     while (gd.lastSnips < g.snips) {
       gd.lastSnips++;
-      if (mass - target > 0.0015 || (clear && mass >= 0.03)) snip(gd, chunk, target, finalCut);
+      if (mass - target > 0.0015 || (clear && mass >= 0.03)) snip(gd, chunk, target, finalCut, wide);
       mass = gd.st.mass();
     }
     // raking: only the clippings the tines pass over move, along with the tines; at the pile they join it
@@ -496,7 +509,8 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     let intent: GardenerIntent;
     if (gd.raking && gd.rakeAt) intent = { activity: 'rake', target: gd.rakeAt, pace: 1.3 };
     else if (needCut) {
-      if (gd.aim === null || gd.st.g[gd.aim]! < 0.999) gd.aim = finalCut ? 0 : chooseAim(gd, chunk, excess > 0.08);
+      // (paid off: straight to the root, whatever was planned)
+      if (gd.aim === null || gd.st.g[gd.aim]! < 0.999 || (finalCut && gd.aim !== 0)) gd.aim = finalCut ? 0 : chooseAim(gd, chunk, excess > 0.08, wide);
       // the wall is due to be clear and only stubs are left: the last cut is at the root
       if (gd.aim === null && clear) {
         finalCut = true;
