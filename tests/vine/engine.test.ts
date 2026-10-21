@@ -11,6 +11,8 @@ import {
   formatDuration,
   formatMoney,
   horizonMonths,
+  INTEREST_AT,
+  PAYMENT_AT,
   minimumDue,
   planName,
   planSchedule,
@@ -289,6 +291,28 @@ describe('planSnapshot', () => {
         expect(mid.payment).toBe(planSchedule(D, id).rows[k].payment);
         expect(mid.interest).toBe(planSchedule(D, id).rows[k].interest);
       }
+    }
+  });
+
+  it('shows what is owed as a statement does: up when the interest is charged, down when the payment lands', () => {
+    for (const id of PLANS) {
+      const { rows } = planSchedule(D, id);
+      for (const k of [0, 1, 7, 33]) {
+        const start = k === 0 ? 5000 : rows[k - 1].balance;
+        const r = rows[k];
+        // the balance stands at first, never sliding
+        expect(at(id, k + INTEREST_AT * 0.5).owed).toBeCloseTo(start, 9);
+        // the month's interest is charged: up by exactly that
+        expect(at(id, k + (INTEREST_AT + PAYMENT_AT) / 2).owed).toBeCloseTo(start + r.interest, 9);
+        // the payment lands: down to the month's closing balance
+        expect(at(id, k + (PAYMENT_AT + 1) / 2).owed).toBeCloseTo(r.balance, 9);
+        // the interest counter ticks up with the charge, not a slide
+        expect(at(id, k + INTEREST_AT * 0.5).interestCharged).toBeCloseTo(at(id, k).interestPaid, 9);
+        expect(at(id, k + INTEREST_AT + 0.01).interestCharged).toBeCloseTo(at(id, k + 1).interestPaid, 9);
+      }
+      // it matches the smooth balance at every whole month, and reads 0 once paid off
+      for (const k of [1, 5, 20]) expect(at(id, k).owed).toBeCloseTo(at(id, k).balance, 9);
+      expect(at(id, rows.length).owed).toBe(0);
     }
   });
 

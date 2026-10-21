@@ -194,11 +194,13 @@ test.describe('Nip It in the Bud', () => {
     await page.waitForTimeout(800);
     await expect(cap().locator('.cap-1')).toHaveText('Minimum payments trim a little. The vine keeps coming back.');
     const s = await state(page);
-    // the balance moves linearly within a month, as the labels do
+    // what is owed reads as a statement does: the month's opening balance, then up by its interest once that is
+    // charged, then down to the closing balance once the payment lands (src/vine/engine INTEREST_AT, PAYMENT_AT)
     const whole = Math.floor(s.months);
+    const f = s.months - whole;
     const a = simulate(D, 'minimum', whole).balance;
     const b = simulate(D, 'minimum', whole + 1).balance;
-    const owed = a + (b - a) * (s.months - whole);
+    const owed = f < 0.2 ? a : f < 0.62 ? a + (a * D.apr) / 12 : b;
     await expect(cap().locator('.cap-2')).toHaveText(`Year ${Math.floor(whole / 12)}: ${usd(owed)} still owed.`);
     await expect(page.locator('#lab-minimum .pl-owed')).toHaveText(`${usd(owed)} still owed`);
     // the line updates without the caption swapping layers

@@ -75,10 +75,17 @@ export interface PlanSchedule {
 export interface PlanSnapshot {
   id: PlanId;
   month: number;
-  /** Still owed. */
+  /** Still owed, moving smoothly across the month (what the vine follows). */
   balance: number;
-  /** Interest paid so far. */
+  /**
+   * Still owed as a statement shows it, for the numbers on screen: it steps up when the month's interest is charged
+   * and down when the payment lands (never a steady slide).
+   */
+  owed: number;
+  /** Interest paid so far, moving smoothly (the pile follows it). */
   interestPaid: number;
+  /** Interest charged so far, stepping up as each month's interest is charged (for the numbers on screen). */
+  interestCharged: number;
   /** Principal paid so far (balance cleared). */
   principalPaid: number;
   /** All payments so far (principal + interest). */

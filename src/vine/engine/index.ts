@@ -20,6 +20,10 @@ export * from './format';
 /** A balance under this is treated as cleared. */
 export const CLEARED_BELOW = 0.005;
 
+/** Within a month, the share of it at which the interest is charged, and then the payment lands (statement figures). */
+export const INTEREST_AT = 0.2;
+export const PAYMENT_AT = 0.62;
+
 /** The card's minimum payment at this balance: max(floor, interest + share of balance), at most what is owed. */
 export function minimumDue(balance: number, inputs: VineInputs): number {
   if (!(balance > 0)) return 0;
@@ -132,11 +136,21 @@ export function planSnapshot(inputs: VineInputs, id: PlanId, month: number): Pla
   const principalPaid = start - balance;
   const row = k < n ? rows[k] : undefined;
   const paidOff = schedule.cleared && m >= n - 1e-9;
+  // the statement figures: through month k + 1 the balance stands, then the interest is charged, then the payment lands
+  let owed = b0;
+  let interestCharged = i0;
+  if (row && f >= INTEREST_AT) {
+    owed = b0 + row.interest;
+    interestCharged = cumInterest[k + 1];
+  }
+  if (row && f >= PAYMENT_AT) owed = row.balance;
   return {
     id,
     month: m,
     balance,
+    owed: paidOff ? 0 : owed,
     interestPaid,
+    interestCharged,
     principalPaid,
     totalPaid: principalPaid + interestPaid,
     payment: paidOff || !row ? 0 : row.payment,

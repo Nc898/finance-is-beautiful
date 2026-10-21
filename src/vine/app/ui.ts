@@ -433,8 +433,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     if (!force && key === tableKey) return;
     tableKey = key;
     for (const s of snaps) {
-      setCell(`${s.id}.owed`, s.paidOff ? 'Paid off' : formatCurrency(s.balance));
-      setCell(`${s.id}.sofar`, formatCurrency(s.interestPaid));
+      setCell(`${s.id}.owed`, s.paidOff ? 'Paid off' : formatCurrency(s.owed));
+      setCell(`${s.id}.sofar`, formatCurrency(s.interestCharged));
       setCell(`${s.id}.pay`, s.paidOff ? '$0' : formatCurrency(s.payment));
     }
     setText($('how-age'), yearMonthLabel(state.months).toLowerCase());

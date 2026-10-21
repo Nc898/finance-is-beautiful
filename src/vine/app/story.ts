@@ -225,7 +225,7 @@ function payoffClause(inputs: VineInputs, id: 'minimum' | 'fixed'): string {
 /** The live line in the minimum beat: "Year 12: $1,176 still owed." */
 export function minimumLiveLine(inputs: VineInputs, months: number): string {
   const snap = planSnapshot(inputs, 'minimum', months);
-  return snap.paidOff ? `${yearLabel(months)}: paid off.` : `${yearLabel(months)}: ${formatCurrency(snap.balance)} still owed.`;
+  return snap.paidOff ? `${yearLabel(months)}: paid off.` : `${yearLabel(months)}: ${formatCurrency(snap.owed)} still owed.`;
 }
 
 /** Caption text for a beat, using live values from the engine (never hard-coded dollars). */

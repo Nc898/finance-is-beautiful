@@ -16,12 +16,12 @@ import type { PlanSnapshot, VineInputs } from '../engine';
 
 /** "$2,736 still owed" or "Paid off in 2 years, 10 months". */
 export function owedText(snap: PlanSnapshot): string {
-  return snap.paidOff ? `Paid off in ${formatDuration(snap.payoffMonth)}` : `${formatCurrency(snap.balance)} still owed`;
+  return snap.paidOff ? `Paid off in ${formatDuration(snap.payoffMonth)}` : `${formatCurrency(snap.owed)} still owed`;
 }
 
 /** "$4,412 in interest" (interest paid so far). */
 export function interestText(snap: PlanSnapshot): string {
-  return `${formatCurrency(snap.interestPaid)} in interest`;
+  return `${formatCurrency(snap.interestCharged)} in interest`;
 }
 
 /** One sentence about a cottage, used by the hidden summary and scrub announcements. */
