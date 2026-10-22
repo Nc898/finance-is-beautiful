@@ -102,6 +102,7 @@ export function startLoop(store: Store, scene: VineSceneAPI, ui: UI): Loop {
     const f: VineFrame = {
       timeMs: now,
       monthsPerSecond: state.playing ? state.monthsPerSecond : 0,
+      speed: state.playing ? state.speed : 1,
       cottages: [cottageVisual(snaps[0], inputs), cottageVisual(snaps[1], inputs)],
       reducedMotion: state.reducedMotion,
       camera: camZoom > 1 ? { zoom: camZoom, focus: camFocus } : undefined,

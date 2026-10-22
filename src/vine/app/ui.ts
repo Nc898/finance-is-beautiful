@@ -10,6 +10,7 @@ import {
   planName,
   planSchedule,
   planShortName,
+  statementMonth,
   yearMonthLabel,
 } from '../engine';
 import type { PlanId, PlanSnapshot, VineField } from '../engine';
@@ -302,8 +303,10 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   function placeLabels(): void {
     const range = labelRange();
     const a = { minimum: hooks.labelAnchor('minimum'), fixed: hooks.labelAnchor('fixed') };
-    // The two labels must never touch: they may be no wider than the space between the two ridges.
-    const maxW = Math.round(Math.max(LABEL_MIN_W, Math.min(LABEL_MAX_W, Math.abs(a.fixed.x - a.minimum.x) - 14)));
+    // The two labels must never touch: they may be no wider than the space between the two ridges, nor than half
+    // the stage (on a phone both are pushed in from the edges, toward each other).
+    const room = Math.min(Math.abs(a.fixed.x - a.minimum.x), (range.hi - range.lo) / 2) - 14;
+    const maxW = Math.round(Math.max(LABEL_MIN_W, Math.min(LABEL_MAX_W, room)));
     if (maxW !== lastMaxW) {
       lastMaxW = maxW;
       overlay.style.setProperty('--label-max', `${maxW}px`);
@@ -442,7 +445,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   function updateTables(force = false, snaps: readonly PlanSnapshot[] = lastSnaps): void {
     if (!how.open || snaps.length === 0) return;
     fillPlanTable();
-    const key = `${Math.floor(state.months + 1e-9)}|${planTableKey}`;
+    const key = `${statementMonth(state.months)}|${planTableKey}`;
     if (!force && key === tableKey) return;
     tableKey = key;
     for (const s of snaps) {
@@ -450,7 +453,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       setCell(`${s.id}.sofar`, formatCurrency(s.interestCharged));
       setCell(`${s.id}.pay`, s.paidOff ? '$0' : formatCurrency(s.payment));
     }
-    setText($('how-age'), yearMonthLabel(state.months).toLowerCase());
+    setText($('how-age'), yearMonthLabel(statementMonth(state.months)).toLowerCase());
   }
 
   /* ---------------- per-frame update ---------------- */
@@ -478,17 +481,17 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
     for (const s of snaps) updateLabel(s);
 
-    // Timeline + readouts.
-    const months = Math.floor(state.months + 1e-9);
+    // Timeline + readouts (on the statement month, so the clock turns over as each month's interest is charged).
+    const months = statementMonth(state.months);
     const tKey = `${months}|${timeline.max}`;
     if (tKey !== timelineKey) {
       timelineKey = tKey;
       if (document.activeElement !== timeline || String(months) !== timeline.value) timeline.value = String(months);
       const span = Math.max(1, store.horizon());
       timeline.style.setProperty('--frac', String(months / span));
-      timeline.setAttribute('aria-valuetext', yearMonthLabel(state.months));
-      setText(ageReadout, yearMonthLabel(state.months));
-      setText(yearReadout, yearMonthLabel(state.months));
+      timeline.setAttribute('aria-valuetext', yearMonthLabel(months));
+      setText(ageReadout, yearMonthLabel(months));
+      setText(yearReadout, yearMonthLabel(months));
     }
 
     updateTables(false, snaps);
@@ -693,12 +696,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       case 'pause':
         syncPlay();
         refreshSummary();
-        announce(`Paused. ${yearMonthLabel(state.months)}.`);
+        announce(`Paused. ${yearMonthLabel(statementMonth(state.months))}.`);
         break;
       case 'play-end':
         syncPlay();
         refreshSummary();
-        announce(`Reached the end. ${yearMonthLabel(state.months)}.`);
+        announce(`Reached the end. ${yearMonthLabel(statementMonth(state.months))}.`);
         break;
       case 'speed':
         syncSpeed();

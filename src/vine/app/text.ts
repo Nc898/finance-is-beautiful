@@ -10,6 +10,7 @@ import {
   planName,
   planSchedule,
   plansMatch,
+  statementMonth,
   yearMonthLabel,
 } from '../engine';
 import type { PlanSnapshot, VineInputs } from '../engine';
@@ -35,7 +36,7 @@ export function sceneSummary(inputs: VineInputs, months: number): string {
   const rate = inputs.apr > 0 ? `${formatPercent(inputs.apr)} a year` : 'no interest';
   const parts = [
     `Two cottages with autumn vines, each the same ${formatCurrency(inputs.balance)} card balance at ${rate}. The vine on the wall is what is still owed; the pile of clippings is the interest paid.`,
-    `${yearMonthLabel(months)}.`,
+    `${yearMonthLabel(statementMonth(months))}.`,
     ...snaps.map((s) => planSentence(inputs, s)),
   ];
   return parts.join(' ');
@@ -54,7 +55,7 @@ export function resultsSentence(inputs: VineInputs): string {
 /** Spoken after a scrub: "Year 5, month 3. Minimum payments: ..." */
 export function scrubSentence(inputs: VineInputs, months: number): string {
   const snaps = allPlans(inputs, months);
-  return `${yearMonthLabel(months)}. ${snaps.map((s) => planSentence(inputs, s)).join(' ')}`;
+  return `${yearMonthLabel(statementMonth(months))}. ${snaps.map((s) => planSentence(inputs, s)).join(' ')}`;
 }
 
 /** The note under the fixed payment field when it is under the card's first minimum (the card takes the minimum). */

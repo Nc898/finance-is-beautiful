@@ -102,10 +102,15 @@ export interface Camera {
   oy: number;
 }
 
+/** the narrowest slice of the world a camera fits: both cottages and their piles, the lawn's far sides cropped */
+export const PORTRAIT_VIEW_W = 870;
+
 export function fitCamera(cssW: number, cssH: number, dpr: number, insets: Insets): Camera {
   const availH = Math.max(80, cssH - insets.top - insets.bottom);
   const availW = Math.max(120, cssW - (insets.side ?? 0));
-  const s = Math.min(availW / WORLD.width, availH / WORLD.height);
+  // portrait / narrow (as in the river): fit the gardens alone, cottage wall to cottage wall, not the whole lawn
+  const viewW = Math.max(PORTRAIT_VIEW_W, Math.min(WORLD.width, (WORLD.width * availW) / availH / 1.3));
+  const s = Math.min(availW / viewW, availH / WORLD.height);
   const ox = (cssW - WORLD.width * s) / 2;
   const oy = insets.top + (availH - WORLD.height * s) / 2;
   return { cssW, cssH, dpr: Math.min(2, dpr || 1), s, ox, oy };

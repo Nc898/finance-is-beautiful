@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import { frames, usd } from './helpers';
 
 /** Shape of `window.__vine.getState()` (see src/vine/main.ts). */
@@ -41,8 +41,37 @@ async function gotoVine(page: Page, opts: { pause?: boolean } = {}): Promise<str
     await page.evaluate(() => window.__vine.actions.pause());
     await frames(page, 2);
   }
+  // phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would
+  const toggle = page.locator('#panel-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeVisible();
+    await frames(page, 2);
+  }
   return errors;
 }
+
+/** On a phone the open panel covers the whole stage: fold it to reach the stage's own buttons, then open it again. */
+async function onStage(page: Page, act: () => Promise<void>): Promise<void> {
+  const toggle = page.locator('#panel-toggle');
+  const covers = (page.viewportSize()?.width ?? 1440) < 700 && (await toggle.getAttribute('aria-expanded')) === 'true';
+  if (covers) {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeHidden();
+  }
+  await act();
+  if (covers) {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeVisible();
+  }
+}
+
+const clickSkip = (page: Page) => onStage(page, () => page.locator('#btn-skip').click());
+
+/** Tests that follow the normal-motion story (autoplay, the close-up, beat timings) do not apply under reduced motion,
+ * which holds each beat still instead; reduced-motion.spec and the reduced-motion test below cover that story. */
+const normalMotionOnly = (info: TestInfo) =>
+  test.skip(info.project.use.reducedMotion === 'reduce', 'the reduced-motion story has its own timing (see the reduced-motion test)');
 
 const seek = async (page: Page, seconds: number) => {
   await page.evaluate((s) => window.__vine.actions.seekStory(s), seconds);
@@ -102,7 +131,8 @@ test.describe('Nip It in the Bud', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the story autoplays from the start and hands off to explore', async ({ page }) => {
+  test('the story autoplays from the start and hands off to explore', async ({ page }, info) => {
+    normalMotionOnly(info);
     await gotoVine(page, { pause: false });
     // autoplay: the story clock runs by itself
     await expect.poll(async () => (await state(page)).storyTime, { timeout: 10_000 }).toBeGreaterThan(0.3);
@@ -120,7 +150,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('skip goes straight to explore at the last month', async ({ page }) => {
     await gotoVine(page, { pause: false });
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await frames(page, 3);
     const s = await state(page);
     expect(s.mode).toBe('explore');
@@ -131,7 +161,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('the numbers at the end match the engine (labels, readouts and tables)', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await frames(page, 3);
     expect(await labelTexts(page, 'minimum')).toEqual({ name: 'Minimum payments', owed: 'Paid off in 19 years, 2 months', tag: '$8,100 in interest' });
     expect(await labelTexts(page, 'fixed')).toEqual({ name: 'A fixed $200 a month', owed: 'Paid off in 2 years, 10 months', tag: '$1,750 in interest' });
@@ -180,13 +210,14 @@ test.describe('Nip It in the Bud', () => {
     expect((await labelTexts(page, 'fixed')).owed).toBe(`${usd(e.fixed.balance)} still owed`.replace(/.*/, 'Paid off in 2 years, 10 months'));
   });
 
-  test('story captions carry the live numbers, and the minimum beat follows the clock in place', async ({ page }) => {
+  test('story captions carry the live numbers, and the minimum beat follows the clock in place', async ({ page }, info) => {
+    normalMotionOnly(info);
     await gotoVine(page);
     await seek(page, 8);
     await page.waitForTimeout(800);
     const cap = () => page.locator('#caption .cap.on:not(.cap-ghost)');
     await expect(cap().locator('.cap-1')).toHaveText('Interest grows it back every month.');
-    await expect(cap().locator('.cap-2')).toHaveText('About $92 a month to start.');
+    await expect(cap().locator('.cap-2')).toHaveText('About $92 a month to start. Each clipping on the pile is interest paid.');
     await seek(page, 16);
     await page.waitForTimeout(800);
     await expect(cap().locator('.cap-1')).toHaveText('A fixed $200 a month clears it in 2 years, 10 months.');
@@ -201,7 +232,9 @@ test.describe('Nip It in the Bud', () => {
     const a = simulate(D, 'minimum', whole).balance;
     const b = simulate(D, 'minimum', whole + 1).balance;
     const owed = f < 0.2 ? a : f < 0.62 ? a + (a * D.apr) / 12 : b;
-    await expect(cap().locator('.cap-2')).toHaveText(`Year ${Math.floor(whole / 12)}: ${usd(owed)} still owed.`);
+    // (the year turns over with the statement: a month counts from when its interest is charged)
+    const shown = f < 0.2 ? whole : whole + 1;
+    await expect(cap().locator('.cap-2')).toHaveText(`Year ${Math.floor(shown / 12)}: ${usd(owed)} still owed.`);
     await expect(page.locator('#lab-minimum .pl-owed')).toHaveText(`${usd(owed)} still owed`);
     // the line updates without the caption swapping layers
     const layerBefore = await page.locator('#caption .cap.on:not(.cap-ghost)').getAttribute('data-layer');
@@ -211,12 +244,12 @@ test.describe('Nip It in the Bud', () => {
     await seek(page, 44);
     await page.waitForTimeout(800);
     await expect(cap().locator('.cap-1')).toHaveText('Minimum payments: 19 years, 2 months and $8,100 in interest.');
-    await expect(cap().locator('.cap-2')).toHaveText('A fixed $200: $1,750 in interest.');
+    await expect(cap().locator('.cap-2')).toHaveText('A fixed $200 saves $6,350 and 16 years, 4 months.');
   });
 
   test('changing the interest rate re-renders the numbers and the timeline', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     const before = await state(page);
     await page.locator('#f-apr').fill('30');
     await page.locator('#f-apr').press('Enter');
@@ -235,7 +268,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('the fixed payment names its cottage, and a payment under the minimum explains itself', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await expect(page.locator('#note-fixedPayment')).toBeHidden();
     await page.locator('#f-fixedPayment').fill('350');
     await page.locator('#f-fixedPayment').press('Enter');
@@ -301,7 +334,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('an invalid input shows an inline error and keeps the last valid numbers', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     const input = page.locator('#f-balance');
     await input.fill('50');
     await input.press('Enter');
@@ -335,7 +368,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('an interest rate of 0 is accepted: nothing grows back', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await page.locator('#f-apr').fill('0');
     await page.locator('#f-apr').press('Enter');
     await frames(page, 3);
@@ -366,7 +399,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('play, pause and speed work in explore', async ({ page }) => {
     await gotoVine(page);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('#btn-play').click();
     await expect(page.locator('#btn-play')).toContainText('Pause');
@@ -393,7 +426,7 @@ test.describe('Nip It in the Bud', () => {
     await expect(page.locator('#dock')).toBeHidden({ timeout: 2000 });
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('body').click({ position: { x: 5, y: 400 } });
     await page.keyboard.press('Space');
@@ -402,6 +435,8 @@ test.describe('Nip It in the Bud', () => {
 
   test('labels sit inside the stage and do not overlap each other', async ({ page }) => {
     await gotoVine(page);
+    // (a phone's panel covers the garden: the labels are seen with it folded away)
+    if ((page.viewportSize()?.width ?? 1440) < 700) await page.locator('#panel-toggle').click();
     for (const t of [14, 20, 30, 44]) {
       await seek(page, t);
       await page.waitForTimeout(500);
@@ -412,7 +447,8 @@ test.describe('Nip It in the Bud', () => {
         }),
       );
       // the visible garden is the stage minus the open panel
-      const limit = (await page.locator('#dock').boundingBox())!.x;
+      const dock = page.locator('#dock');
+      const limit = (await dock.isVisible()) ? (await dock.boundingBox())!.x : page.viewportSize()!.width;
       for (const b of boxes) {
         expect(b.x, `${b.id} at t=${t}`).toBeGreaterThanOrEqual(-1);
         expect(b.x + b.w, `${b.id} at t=${t}`).toBeLessThanOrEqual(limit + 1);
@@ -432,7 +468,8 @@ test.describe('Nip It in the Bud', () => {
     }
   });
 
-  test('the labels wait out the opening close-up and appear as the camera settles', async ({ page }) => {
+  test('the labels wait out the opening close-up and appear as the camera settles', async ({ page }, info) => {
+    normalMotionOnly(info);
     await gotoVine(page);
     await seek(page, 2);
     await page.waitForTimeout(900);
@@ -446,6 +483,9 @@ test.describe('Nip It in the Bud', () => {
     await gotoVine(page, { pause: false });
     const region = page.locator('#announcer');
     await expect(region).toHaveAttribute('aria-live', 'polite');
+    // (reduced motion does not autoplay: start the story so there is something to pause)
+    await page.evaluate(() => window.__vine.actions.play());
+    await frames(page, 2);
     await page.evaluate(() => window.__vine.actions.pause());
     await expect(region).toContainText('Paused');
     const before = await region.textContent();
@@ -469,7 +509,7 @@ test.describe('Nip It in the Bud', () => {
     for (const id of ['minimum', 'fixed']) await expect(page.locator(`#lab-${id}`)).toBeVisible();
     // the opening is not zoomed, so the labels are there from the start
     expect(await page.evaluate(() => Number(document.documentElement.style.getPropertyValue('--label-fade') || '1'))).toBe(1);
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await frames(page, 3);
     expect((await labelTexts(page, 'minimum')).tag).toBe('$8,100 in interest');
     expect(errors).toEqual([]);
@@ -502,7 +542,7 @@ test.describe('Nip It in the Bud: accessibility', () => {
       const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
       expect(r.violations, `story t=${t}\n` + describeViolations(r)).toEqual([]);
     }
-    await page.locator('#btn-skip').click();
+    await clickSkip(page);
     await page.waitForTimeout(1800);
     let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
     expect(results.violations, 'explore\n' + describeViolations(results)).toEqual([]);

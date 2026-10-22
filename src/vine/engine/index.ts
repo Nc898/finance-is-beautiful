@@ -24,6 +24,14 @@ export const CLEARED_BELOW = 0.005;
 export const INTEREST_AT = 0.2;
 export const PAYMENT_AT = 0.62;
 
+/**
+ * The whole month the clock shows: a month starts counting when its interest is charged, so the readouts never
+ * trail the statement figures (at 1.3 months the second month's interest is in, and the clock says month 2).
+ */
+export function statementMonth(months: number): number {
+  return Math.max(0, Math.floor(months + 1 - INTEREST_AT + 1e-9));
+}
+
 /** The card's minimum payment at this balance: max(floor, interest + share of balance), at most what is owed. */
 export function minimumDue(balance: number, inputs: VineInputs): number {
   if (!(balance > 0)) return 0;

@@ -12,9 +12,12 @@
   --error: #b8452b;
   /* the two plans: rust for the minimum payments, emerald for the fixed payment (text uses the deeper inks) */
   --rust: #c4553a;
-  --rust-ink: #9c3a24;
+  --rust-ink: #8a321e;
   --fix: var(--emerald);
-  --fix-ink: var(--emerald-deep);
+  --fix-ink: #0f4a35;
+  /* text over the painted sky: a softer ink than --ink (never the panel's --muted), on a pale lifted wash */
+  --ink-soft: #4a4236;
+  --lift: rgba(251, 246, 234, 0.74);
   --rule: rgba(47, 42, 34, 0.18);
   --rule-strong: rgba(47, 42, 34, 0.55);
   --wash: rgba(47, 42, 34, 0.07);
@@ -182,15 +185,32 @@ input {
 }
 
 .cap {
+  position: relative;
+  isolation: isolate;
   grid-area: 1 / 1;
-  /* a soft glow hugging the letters (no paper-coloured oval over the sky) */
-  text-shadow: 0 0 10px rgba(251, 246, 234, 0.95), 0 0 4px rgba(251, 246, 234, 0.9), 0 0 2px rgba(251, 246, 234, 0.9);
   opacity: 0;
   transition: opacity 0.6s ease;
   padding: 4px 16px;
   font-family: var(--serif);
   font-style: italic;
   text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+}
+
+/* this sky darkens to a deep blue at the top, so the words sit on a pale wash, like a lifted cloud with soft edges */
+.cap::before,
+.year-readout::before,
+.plan-label::before {
+  content: '';
+  position: absolute;
+  inset: -6px -22px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--lift);
+  filter: blur(16px);
+}
+
+.cap::before {
+  inset: -10px -8px;
 }
 
 .cap-ghost {
@@ -212,7 +232,7 @@ input {
   margin-top: 4px;
   font-size: 16px;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 
 .cap-2:empty {
@@ -292,11 +312,23 @@ input {
   position: absolute;
   top: 56px;
   left: var(--gutter);
+  isolation: isolate;
   font: italic 400 22px/1.2 var(--serif);
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  color: var(--ink-soft);
   text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
   pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.year-readout::before {
+  inset: -10px -26px;
+  background: rgba(251, 246, 234, 0.82);
+}
+
+/* with the panel open its own readout shows the month, so the scene's copy steps aside */
+.app.panel-open .year-readout {
+  opacity: 0;
 }
 
 /* Identity emblems (never colour alone): a vine leaf for the minimum plan, secateurs for the fixed one. */

@@ -18,6 +18,7 @@ import {
   planSchedule,
   planShortName,
   planSnapshot,
+  statementMonth,
   plansMatch,
   validateVineInputs,
   wholeMonths,
@@ -477,6 +478,21 @@ describe('formatting', () => {
     expect(yearMonthLabel(230)).toBe('Year 19, month 2');
     expect(yearLabel(144)).toBe('Year 12');
     expect(wholeMonths(-3)).toBe(0);
+  });
+
+  it('the clock turns over as each month has its interest charged (the statement month)', () => {
+    expect(statementMonth(0)).toBe(0);
+    expect(statementMonth(INTEREST_AT - 0.01)).toBe(0);
+    expect(statementMonth(INTEREST_AT)).toBe(1);
+    expect(statementMonth(1.3)).toBe(2);
+    expect(statementMonth(63)).toBe(63);
+    expect(statementMonth(230)).toBe(230);
+    expect(statementMonth(-1)).toBe(0);
+    // the month shown always has its interest in the statement figures
+    const at = 1.3;
+    const snap = planSnapshot(D, 'minimum', at);
+    const twoMonths = planSnapshot(D, 'minimum', 2).interestCharged;
+    expect(snap.interestCharged).toBeCloseTo(twoMonths, 9);
   });
 
   it('money shows whole dollars, and cents only when there are some', () => {

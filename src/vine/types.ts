@@ -133,6 +133,11 @@ export interface VineFrame {
   timeMs: number;
   /** Months passing per second right now (0 when paused or scrubbing). The scene paces the work from it. */
   monthsPerSecond: number;
+  /**
+   * Playback speed while playing (1 when paused). The gardens' work (snips, raking, falling clippings) runs at it, as
+   * in a video played fast or slow, so the gardeners keep pace with the money at any speed.
+   */
+  speed?: number;
   cottages: [CottageVisual, CottageVisual];
   reducedMotion: boolean;
   /** Optional opening camera move: zoom ≥ 1 about a focus (a cottage's vine, or the middle of both). */

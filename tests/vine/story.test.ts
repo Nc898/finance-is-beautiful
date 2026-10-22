@@ -193,12 +193,12 @@ describe('story captions', () => {
     expect(captionForBeat('intro', D)).toEqual({
       beat: 'intro',
       primary: 'Two cottages. The same $5,000 vine.',
-      secondary: 'A credit card balance at 22% a year.',
+      secondary: 'Each vine is a credit card balance at 22% a year.',
     });
     expect(captionForBeat('interest', D)).toEqual({
       beat: 'interest',
       primary: 'Interest grows it back every month.',
-      secondary: 'About $92 a month to start.',
+      secondary: 'About $92 a month to start. Each clipping on the pile is interest paid.',
     });
     expect(captionForBeat('fixed', D).primary).toBe('A fixed $200 a month clears it in 2 years, 10 months.');
     expect(captionForBeat('minimum', D, 144)).toEqual({
@@ -210,7 +210,7 @@ describe('story captions', () => {
     expect(captionForBeat('results', D)).toEqual({
       beat: 'results',
       primary: 'Minimum payments: 19 years, 2 months and $8,100 in interest.',
-      secondary: 'A fixed $200: $1,750 in interest.',
+      secondary: 'A fixed $200 saves $6,350 and 16 years, 4 months.',
     });
     expect(captionForBeat('handoff', D).primary).toBe('Explore your own garden');
   });
@@ -225,22 +225,45 @@ describe('story captions', () => {
     expect(storyCaption(30, D).live).toBe(true);
   });
 
+  it('the live line turns the year over with the statement, as the readouts do', () => {
+    // month 12's interest is charged a fifth of the way through it, so 11.2 months already reads as year 1
+    expect(minimumLiveLine(D, 11.1)).toMatch(/^Year 0:/);
+    expect(minimumLiveLine(D, 11.2)).toMatch(/^Year 1:/);
+  });
+
+  it('the results say what the fixed plan saves, as the totals on screen add up', () => {
+    const shown = (n: number) => Math.round(n);
+    const min = planSchedule(D, 'minimum');
+    const fixed = planSchedule(D, 'fixed');
+    expect(formatCurrency(shown(min.totalInterest) - shown(fixed.totalInterest))).toBe('$6,350');
+    // identical plans have nothing to compare
+    expect(captionForBeat('results', { ...D, fixedPayment: 20 }).secondary).toMatch(/^A fixed \$20: \$[\d,]+ in interest\.$/);
+    // no interest: only time is saved
+    expect(captionForBeat('results', { ...D, apr: 0 }).secondary).toMatch(/^A fixed \$200 clears it [\w ,]+ sooner\.$/);
+    // a minimum plan that never clears: the fixed one does, with less interest
+    const slow = { ...D, balance: 40_000, apr: 0.3, minPercent: 0.005, minFloor: 0, fixedPayment: 1500 };
+    if (!planSchedule(slow, 'minimum').cleared) {
+      expect(captionForBeat('results', slow).secondary).toMatch(/^A fixed \$1,500 clears it in .+, with \$[\d,]+ less interest\.$/);
+    }
+  });
+
   it('every number comes from the inputs and the engine', () => {
     const inp = { ...D, balance: 8000, apr: 0.18, fixedPayment: 350 };
     const min = planSchedule(inp, 'minimum');
     const fixed = planSchedule(inp, 'fixed');
     expect(captionForBeat('intro', inp).primary).toBe('Two cottages. The same $8,000 vine.');
-    expect(captionForBeat('intro', inp).secondary).toBe('A credit card balance at 18% a year.');
-    expect(captionForBeat('interest', inp).secondary).toBe('About $120 a month to start.');
+    expect(captionForBeat('intro', inp).secondary).toBe('Each vine is a credit card balance at 18% a year.');
+    expect(captionForBeat('interest', inp).secondary).toBe('About $120 a month to start. Each clipping on the pile is interest paid.');
     expect(captionForBeat('fixed', inp).primary).toBe(`A fixed $350 a month clears it in ${formatDuration(fixed.payoffMonth)}.`);
     const results = captionForBeat('results', inp);
     expect(results.primary).toBe(`Minimum payments: ${formatDuration(min.payoffMonth)} and ${formatCurrency(min.totalInterest)} in interest.`);
-    expect(results.secondary).toBe(`A fixed $350: ${formatCurrency(fixed.totalInterest)} in interest.`);
+    const saved = formatCurrency(Math.round(min.totalInterest) - Math.round(fixed.totalInterest));
+    expect(results.secondary).toBe(`A fixed $350 saves ${saved} and ${formatDuration(min.payoffMonth - fixed.payoffMonth)}.`);
   });
 
   it('with no interest nothing grows back', () => {
     const inp = { ...D, apr: 0 };
-    expect(captionForBeat('intro', inp).secondary).toBe('A credit card balance with no interest at all.');
+    expect(captionForBeat('intro', inp).secondary).toBe('Each vine is a credit card balance with no interest at all.');
     expect(captionForBeat('interest', inp).primary).toBe('With no interest, nothing grows back.');
     expect(captionForBeat('results', inp).primary).toContain('$0 in interest');
   });

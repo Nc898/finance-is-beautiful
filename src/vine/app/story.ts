@@ -23,6 +23,7 @@ import {
   planSchedule,
   planSnapshot,
   plansMatch,
+  statementMonth,
   yearLabel,
 } from '../engine';
 import type { VineInputs } from '../engine';
@@ -225,7 +226,23 @@ function payoffClause(inputs: VineInputs, id: 'minimum' | 'fixed'): string {
 /** The live line in the minimum beat: "Year 12: $1,176 still owed." */
 export function minimumLiveLine(inputs: VineInputs, months: number): string {
   const snap = planSnapshot(inputs, 'minimum', months);
-  return snap.paidOff ? `${yearLabel(months)}: paid off.` : `${yearLabel(months)}: ${formatCurrency(snap.owed)} still owed.`;
+  const year = yearLabel(statementMonth(months));
+  return snap.paidOff ? `${year}: paid off.` : `${year}: ${formatCurrency(snap.owed)} still owed.`;
+}
+
+/** The results' second line: what the fixed plan saves ("A fixed $200 saves $6,350 and 16 years, 4 months."). */
+function savingsLine(inputs: VineInputs): string {
+  const min = planSchedule(inputs, 'minimum');
+  const fixed = planSchedule(inputs, 'fixed');
+  const pay = `A fixed ${formatMoney(inputs.fixedPayment)}`;
+  // the difference of the two totals as shown, so the sum on screen adds up
+  const saved = formatCurrency(Math.round(min.totalInterest) - Math.round(fixed.totalInterest));
+  const sooner = min.payoffMonth - fixed.payoffMonth;
+  const same = `${pay}: ${formatCurrency(fixed.totalInterest)} in interest.`;
+  if (plansMatch(inputs) || !fixed.cleared) return same;
+  if (!min.cleared) return `${pay} clears it in ${formatDuration(fixed.payoffMonth)}, with ${saved} less interest.`;
+  if (saved === '$0') return sooner >= 1 ? `${pay} clears it ${formatDuration(sooner)} sooner.` : same;
+  return sooner >= 1 ? `${pay} saves ${saved} and ${formatDuration(sooner)}.` : `${pay} saves ${saved}.`;
 }
 
 /** Caption text for a beat, using live values from the engine (never hard-coded dollars). */
@@ -236,11 +253,17 @@ export function captionForBeat(beat: StoryBeat, inputs: VineInputs, months?: num
       return {
         beat,
         primary: `Two cottages. The same ${formatCurrency(inputs.balance)} vine.`,
-        secondary: inputs.apr > 0 ? `A credit card balance at ${formatPercent(inputs.apr)} a year.` : 'A credit card balance with no interest at all.',
+        secondary: inputs.apr > 0
+          ? `Each vine is a credit card balance at ${formatPercent(inputs.apr)} a year.`
+          : 'Each vine is a credit card balance with no interest at all.',
       };
     case 'interest':
       return inputs.apr > 0
-        ? { beat, primary: 'Interest grows it back every month.', secondary: `About ${formatCurrency(firstInterest(inputs))} a month to start.` }
+        ? {
+            beat,
+            primary: 'Interest grows it back every month.',
+            secondary: `About ${formatCurrency(firstInterest(inputs))} a month to start. Each clipping on the pile is interest paid.`,
+          }
         : { beat, primary: 'With no interest, nothing grows back.', secondary: 'Every payment goes straight to the balance.' };
     case 'fixed': {
       if (plansMatch(inputs)) {
@@ -269,11 +292,10 @@ export function captionForBeat(beat: StoryBeat, inputs: VineInputs, months?: num
     }
     case 'results': {
       const min = planSchedule(inputs, 'minimum');
-      const fixed = planSchedule(inputs, 'fixed');
       return {
         beat,
         primary: `Minimum payments: ${payoffClause(inputs, 'minimum')} and ${formatCurrency(min.totalInterest)} in interest.`,
-        secondary: `A fixed ${formatMoney(inputs.fixedPayment)}: ${formatCurrency(fixed.totalInterest)} in interest.`,
+        secondary: savingsLine(inputs),
       };
     }
     case 'handoff':
