@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="Three debts and one monthly budget. The snowball method clears the smallest debt first for a quick win; the avalanche goes after the highest rate and costs less. Watch both roll down their hills." />
+<title>On a Roll</title>
+</head>
+<body>
+<!-- loader: On a Roll -->
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two snowy hillsides with three snowballs each, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="hill-label" id="lab-snowball" data-hill="snowball">
+          <p class="hl-id"><span data-emblem="snowball"></span><span class="hl-name"></span></p>
+          <p class="hl-owed"></p>
+          <div class="int-tag" id="tag-snowball" data-hill="snowball"><p class="it-amount"></p></div>
+        </div>
+        <div class="hill-label" id="lab-avalanche" data-hill="avalanche">
+          <p class="hl-id"><span data-emblem="avalanche"></span><span class="hl-name"></span></p>
+          <p class="hl-owed"></p>
+          <div class="int-tag" id="tag-avalanche" data-hill="avalanche"><p class="it-amount"></p></div>
+        </div>
+        <span class="ball-tag" id="bt-snowball-medical" data-hill="snowball" data-debt="medical"></span>
+        <span class="ball-tag" id="bt-snowball-car" data-hill="snowball" data-debt="car"></span>
+        <span class="ball-tag" id="bt-snowball-card" data-hill="snowball" data-debt="card"></span>
+        <span class="ball-tag" id="bt-avalanche-medical" data-hill="avalanche" data-debt="medical"></span>
+        <span class="ball-tag" id="bt-avalanche-car" data-hill="avalanche" data-debt="car"></span>
+        <span class="ball-tag" id="bt-avalanche-card" data-hill="avalanche" data-debt="card"></span>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0, month 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="On a Roll, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>On a Roll</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-replay">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Replay<span class="long"> story</span></span>
+          </button>
+          <button type="button" class="btn quiet" id="btn-skip">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Skip<span class="long"> to explore</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play story</span>
+          </button>
+
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="32" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field wide" data-field="budget">
+            <label for="f-budget">Monthly budget ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease monthly budget">−</button>
+              <input id="f-budget" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-budget note-budget" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase monthly budget">+</button>
+            </div>
+            <p class="field-error" id="err-budget" hidden></p>
+            <p class="field-note" id="note-budget" hidden></p>
+          </div>
+
+          <fieldset class="debt" data-debt="medical">
+            <legend>Medical bill</legend>
+            <div class="debt-fields">
+              <div class="field" data-field="medical.balance">
+                <label for="f-medical-balance"><span class="sr-only">Medical bill </span>Balance ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease medical bill balance">−</button>
+                  <input id="f-medical-balance" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-medical-balance" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase medical bill balance">+</button>
+                </div>
+                <p class="field-error" id="err-medical-balance" hidden></p>
+              </div>
+              <div class="field" data-field="medical.apr">
+                <label for="f-medical-apr"><span class="sr-only">Medical bill </span>Interest rate (APR %)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease medical bill interest rate">−</button>
+                  <input id="f-medical-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-medical-apr" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase medical bill interest rate">+</button>
+                </div>
+                <p class="field-error" id="err-medical-apr" hidden></p>
+              </div>
+              <div class="field" data-field="medical.minPayment">
+                <label for="f-medical-minPayment"><span class="sr-only">Medical bill </span>Minimum payment ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease medical bill minimum payment">−</button>
+                  <input id="f-medical-minPayment" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-medical-minPayment" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase medical bill minimum payment">+</button>
+                </div>
+                <p class="field-error" id="err-medical-minPayment" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="debt" data-debt="car">
+            <legend>Car loan</legend>
+            <div class="debt-fields">
+              <div class="field" data-field="car.balance">
+                <label for="f-car-balance"><span class="sr-only">Car loan </span>Balance ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease car loan balance">−</button>
+                  <input id="f-car-balance" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-car-balance" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase car loan balance">+</button>
+                </div>
+                <p class="field-error" id="err-car-balance" hidden></p>
+              </div>
+              <div class="field" data-field="car.apr">
+                <label for="f-car-apr"><span class="sr-only">Car loan </span>Interest rate (APR %)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease car loan interest rate">−</button>
+                  <input id="f-car-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-car-apr" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase car loan interest rate">+</button>
+                </div>
+                <p class="field-error" id="err-car-apr" hidden></p>
+              </div>
+              <div class="field" data-field="car.minPayment">
+                <label for="f-car-minPayment"><span class="sr-only">Car loan </span>Minimum payment ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease car loan minimum payment">−</button>
+                  <input id="f-car-minPayment" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-car-minPayment" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase car loan minimum payment">+</button>
+                </div>
+                <p class="field-error" id="err-car-minPayment" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="debt" data-debt="card">
+            <legend>Credit card</legend>
+            <div class="debt-fields">
+              <div class="field" data-field="card.balance">
+                <label for="f-card-balance"><span class="sr-only">Credit card </span>Balance ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease credit card balance">−</button>
+                  <input id="f-card-balance" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-card-balance" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase credit card balance">+</button>
+                </div>
+                <p class="field-error" id="err-card-balance" hidden></p>
+              </div>
+              <div class="field" data-field="card.apr">
+                <label for="f-card-apr"><span class="sr-only">Credit card </span>Interest rate (APR %)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease credit card interest rate">−</button>
+                  <input id="f-card-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-card-apr" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase credit card interest rate">+</button>
+                </div>
+                <p class="field-error" id="err-card-apr" hidden></p>
+              </div>
+              <div class="field" data-field="card.minPayment">
+                <label for="f-card-minPayment"><span class="sr-only">Credit card </span>Minimum payment ($)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease credit card minimum payment">−</button>
+                  <input id="f-card-minPayment" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-card-minPayment" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase credit card minimum payment">+</button>
+                </div>
+                <p class="field-error" id="err-card-minPayment" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: fixed interest rates and fixed minimum payments, with no new borrowing, fees or penalties. Real minimums vary. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">The whole plan</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-plan">
+                <caption class="sr-only">Each method from start to finish</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col" id="th-snowball"><span data-emblem="snowball"></span><span class="th-name">Snowball</span></th>
+                    <th scope="col" id="th-avalanche"><span data-emblem="avalanche"></span><span class="th-name">Avalanche</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">The order</th><td data-cell="snowball.order"></td><td data-cell="avalanche.order"></td></tr>
+                  <tr class="strong"><th scope="row">Debt-free in</th><td data-cell="snowball.payoff"></td><td data-cell="avalanche.payoff"></td></tr>
+                  <tr><th scope="row">Months</th><td data-cell="snowball.months"></td><td data-cell="avalanche.months"></td></tr>
+                  <tr><th scope="row">Total paid</th><td data-cell="snowball.paid"></td><td data-cell="avalanche.paid"></td></tr>
+                  <tr class="strong"><th scope="row">Total interest</th><td data-cell="snowball.interest"></td><td data-cell="avalanche.interest"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">When each debt clears</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-clears">
+                <caption class="sr-only">The month each debt is cleared, on each hill</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Debt</span></th>
+                    <th scope="col"><span data-emblem="snowball"></span><span class="th-name">Snowball</span></th>
+                    <th scope="col"><span data-emblem="avalanche"></span><span class="th-name">Avalanche</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Medical bill</th><td data-cell="snowball.clear.medical"></td><td data-cell="avalanche.clear.medical"></td></tr>
+                  <tr><th scope="row">Car loan</th><td data-cell="snowball.clear.car"></td><td data-cell="avalanche.clear.car"></td></tr>
+                  <tr><th scope="row">Credit card</th><td data-cell="snowball.clear.card"></td><td data-cell="avalanche.clear.card"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">At <span id="how-age">year 0, month 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-now">
+                <caption class="sr-only">Each method at the current month</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span data-emblem="snowball"></span><span class="th-name">Snowball</span></th>
+                    <th scope="col"><span data-emblem="avalanche"></span><span class="th-name">Avalanche</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Still owed</th><td data-cell="snowball.owed"></td><td data-cell="avalanche.owed"></td></tr>
+                  <tr><th scope="row">Interest so far</th><td data-cell="snowball.sofar"></td><td data-cell="avalanche.sofar"></td></tr>
+                  <tr><th scope="row">Debts cleared</th><td data-cell="snowball.count"></td><td data-cell="avalanche.count"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">The first months</h2>
+            <div class="table-wrap">
+              <table class="compare excerpt" id="excerpt-snowball">
+                <caption class="excerpt-cap">Snowball</caption>
+                <thead><tr><th scope="col">Month</th><th scope="col">Interest</th><th scope="col">Paid</th><th scope="col">Owed</th><th scope="col">Extra to</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table class="compare excerpt" id="excerpt-avalanche">
+                <caption class="excerpt-cap">Avalanche</caption>
+                <thead><tr><th scope="col">Month</th><th scope="col">Interest</th><th scope="col">Paid</th><th scope="col">Owed</th><th scope="col">Extra to</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <ul class="conventions">
+              <li>Each month the interest on a debt is its balance × rate ÷ 12. It is added first, then the payments come off.</li>
+              <li>Every minimum is paid. Whatever is left of the budget goes to the target debt, and on to the next one if the target is cleared.</li>
+              <li>When a debt is cleared its payment rolls on to the next. The budget stays the same, so the next debt is paid down faster.</li>
+              <li>Snowball targets the smallest balance first; avalanche, the highest rate first. The order is set at the start.</li>
+              <li>A snowball is what is still owed, on one scale for both hills. Snow settling on it is interest; snow that breaks off is a payment.</li>
+              <li>Fixed rates and fixed minimums, with no new borrowing, fees or penalties. Real minimums vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/snow/main.ts"></script>
+</body>
+</html>

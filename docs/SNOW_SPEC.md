@@ -34,8 +34,9 @@ Honest, hopeful, never preachy: neither is "wrong".
   - avalanche saves $1,653 and 2 months; snowball's first win comes 21 months sooner (month 4 vs 25).
 - Validation like the vine (finite numbers, ranges in SNOW_LIMITS), plus: each minimum must cover its debt's first
   month of interest ("at least $261 to cover the interest"), and the budget must be at least the sum of the
-  minimums ("at least $520, the three minimums"). APR 0 is valid. If the budget equals the minimums, or both
-  orders are the same, the two hills are identical and the story says so plainly.
+  minimums ("at least $520, the three minimums"). APR 0 is valid. When the two schedules are the same month by
+  month (`hillsMatch`: e.g. both orders agree, or every rate is 0%), the story says so plainly. A budget of only the
+  minimums is NOT that case: a cleared debt's minimum still rolls on, in each strategy's own order.
 - Assumptions note: fixed rates and fixed minimum payments, no new borrowing, fees or penalties; real minimums
   vary; illustration only, not advice.
 
@@ -123,8 +124,8 @@ tree or the sledge.
 | 42–48 | 32 | "Avalanche: $4,642 in interest. Snowball: $6,295." / "Snowball's first win came 21 months sooner." | results |
 | 48–52 | 32 | "Explore your own debts" | hand off to explore, paused at the end |
 Copy is live (every number from the engine), hopeful and plain. No em-dashes. Month marks adapt to the inputs (the
-first clear on either hill, the avalanche's top-rate clear, each payoff); when the two orders are the same or the
-budget is only the minimums, the story says so ("With these debts both orders are the same.") and runs on.
+first clear on either hill, the avalanche's top-rate clear, each payoff); when the two schedules match
+(`hillsMatch`), the story says so ("With these debts both orders are the same.") and runs on.
 Reduced motion: discrete holds with short eased tweens, no autoplay, as the vine.
 
 ## Controls (right panel, same look as the vine)

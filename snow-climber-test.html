@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>On a Roll - climber harness</title>
+<style>
+  :root { --paper:#FBF6EA; --shade:#EFE5CF; --ink:#2F2A22; --muted:#6B6152; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--paper); color:var(--ink); font: 12px/1.35 system-ui, sans-serif; }
+  #cv { display:block; width:100%; background:#EEF2F8; }
+  #ui { padding:8px 10px; display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; background:var(--shade); }
+  #ui button, #ui select { font:inherit; padding:3px 8px; border:1px solid var(--ink); background:var(--paper); cursor:pointer; }
+  #ui label { display:inline-flex; gap:4px; align-items:center; }
+  #ui .grp { display:inline-flex; gap:6px; align-items:center; padding-right:10px; border-right:1px solid #C9BDA0; }
+  #stat { padding:4px 10px; white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="ui">
+  <b>Climber harness</b>
+  <span class="grp">
+    <label>climber <select id="who"><option>snowball</option><option>avalanche</option></select></label>
+    <button data-a="idle">idle</button>
+    <button data-a="push">push</button>
+    <button data-a="cheer">cheer</button>
+    <button data-a="rest">rest</button>
+  </span>
+  <span class="grp">
+    <label>lane <select id="lane"><option>medical</option><option>car</option><option selected>card</option></select></label>
+    <label>radius <input id="rad" type="range" min="4" max="52" step="1" value="30" /><output id="rado">30</output></label>
+    <label>ball speed <input id="spd" type="range" min="0" max="140" step="1" value="30" /><output id="spdo">30</output></label>
+    <button id="reset">ball to top</button>
+  </span>
+  <label><input id="reduced" type="checkbox" /> reduced</label>
+  <label><input id="grid" type="checkbox" /> grid</label>
+  <label><input id="follow" type="checkbox" checked /> follow</label>
+  <button id="play">pause</button>
+  <button id="step">step 1/60</button>
+</div>
+<canvas id="cv" width="1000" height="560"></canvas>
+<div id="stat"></div>
+<script type="module">
+import { createClimber } from '/src/snow/scene/climber.ts';
+import { LANES, REST, WORLD, ballRadius, depthScale, laneDir, lanePoint } from '/src/snow/scene/geom.ts';
+
+const cv = document.getElementById('cv');
+const $ = (id) => document.getElementById(id);
+const Q = 3;
+const KAPPA = 0.4;
+
+/* ------------------------------------------------------------ state */
+const H = (window.H = {
+  who: 'snowball',
+  g: { snowball: null, avalanche: null },
+  intent: {},
+  /** the test ball of each hill: lane, progress 0..1, speed (world units/s along the lane), radius (world units) */
+  ball: {},
+  reduced: false,
+  grid: false,
+  follow: true,
+  t: 0,
+  frame: 0,
+});
+
+const laneLen = (id, lane) => {
+  const l = LANES[id][lane];
+  return Math.hypot(l.end.x - l.start.x, l.end.y - l.start.y);
+};
+
+H.make = (id = H.who) => {
+  H.g[id] = createClimber(id, Q);
+  H.intent[id] = { activity: 'idle', target: null, dir: null, radius: 0 };
+  H.ball[id] = { lane: 'card', p: 0.02, v: 30, r: 30, run: true };
+  return H.g[id];
+};
+H.init = () => {
+  H.t = 0;
+  H.frame = 0;
+  H.make('snowball');
+  H.make('avalanche');
+};
+
+/** the ball's contact point, lane direction and radius now */
+H.ballNow = (id) => {
+  const b = H.ball[id];
+  if (b.free) return { x: b.free.x, y: b.free.y, dir: { x: b.free.dx, y: b.free.dy }, r: b.r };
+  const p = lanePoint(id, b.lane, b.p);
+  return { x: p.x, y: p.y, dir: laneDir(id, b.lane), r: b.r };
+};
+H.setIntent = (id, activity) => {
+  if (activity === 'push') {
+    const bn = H.ballNow(id);
+    H.intent[id] = { activity, target: { x: bn.x, y: bn.y }, dir: bn.dir, radius: bn.r };
+  } else H.intent[id] = { activity, target: null, dir: null, radius: 0 };
+};
+H.set = (activity, id = H.who) => H.setIntent(id, activity);
+/** move a ball to another lane/progress/radius/speed (for switching target) */
+H.setBall = (id, o) => {
+  Object.assign(H.ball[id], o);
+  if (H.intent[id].activity === 'push') H.setIntent(id, 'push');
+};
+
+H.advance = (frames = 1, dt = 1 / 60) => {
+  for (let i = 0; i < frames; i++) {
+    H.t += dt;
+    H.frame++;
+    for (const id of ['snowball', 'avalanche']) {
+      const b = H.ball[id];
+      if (b.vt !== undefined) b.v += Math.max(-(b.acc ?? 1e9) * dt, Math.min((b.acc ?? 1e9) * dt, b.vt - b.v));
+      if (b.free) { if (b.run) { b.free.x += b.free.dx * b.v * dt; b.free.y += b.free.dy * b.v * dt; } }
+      else if (b.run) b.p = Math.min(1.2, b.p + (b.v / laneLen(id, b.lane)) * dt);
+      if (H.intent[id].activity === 'push') H.setIntent(id, 'push');
+      H.g[id].update(dt, H.intent[id], H.t, H.reduced);
+    }
+    if (H.onFrame) H.onFrame(H);
+  }
+};
+H.place = (id = H.who) => {
+  if (H.intent[id].activity === 'push') H.setIntent(id, 'push');
+  H.g[id].place(H.intent[id]);
+};
+
+/* ------------------------------------------------------------ drawing */
+function backdrop(c, view) {
+  const g = c.createLinearGradient(0, view.y0, 0, view.y1);
+  g.addColorStop(0, '#DDE6F2');
+  g.addColorStop(0.35, '#F4F6FA');
+  g.addColorStop(1, '#EEF1F8');
+  c.fillStyle = g;
+  c.fillRect(view.x0 - 10, view.y0 - 10, view.x1 - view.x0 + 20, view.y1 - view.y0 + 20);
+  // a few wind ripples so motion over the ground can be read
+  c.strokeStyle = 'rgba(120,140,190,0.18)';
+  c.lineWidth = 0.8;
+  for (let y = Math.floor(view.y0 / 12) * 12; y < view.y1; y += 12) {
+    for (let x = Math.floor(view.x0 / 40) * 40 + ((y / 12) % 2) * 20; x < view.x1; x += 40) {
+      c.beginPath();
+      c.moveTo(x, y);
+      c.quadraticCurveTo(x + 8, y - 1.5, x + 16, y);
+      c.stroke();
+    }
+  }
+  // the lanes, faint
+  c.strokeStyle = 'rgba(80,100,170,0.2)';
+  c.lineWidth = 1.2;
+  for (const id of ['snowball', 'avalanche']) {
+    for (const lane of ['medical', 'car', 'card']) {
+      const l = LANES[id][lane];
+      c.beginPath();
+      c.moveTo(l.start.x, l.start.y);
+      c.lineTo(l.end.x, l.end.y);
+      c.stroke();
+    }
+  }
+  if (H.grid) {
+    c.lineWidth = 0.5;
+    for (let x = Math.floor(view.x0 / 10) * 10; x < view.x1; x += 10) {
+      c.strokeStyle = x % 50 === 0 ? 'rgba(40,40,160,.45)' : 'rgba(40,40,160,.16)';
+      c.beginPath(); c.moveTo(x, view.y0); c.lineTo(x, view.y1); c.stroke();
+    }
+    for (let y = Math.floor(view.y0 / 10) * 10; y < view.y1; y += 10) {
+      c.strokeStyle = y % 50 === 0 ? 'rgba(160,40,40,.4)' : 'rgba(160,40,40,.14)';
+      c.beginPath(); c.moveTo(view.x0, y); c.lineTo(view.x1, y); c.stroke();
+    }
+  }
+  // the sledges' places
+  for (const id of ['snowball', 'avalanche']) {
+    const r = REST[id];
+    c.fillStyle = '#9B7A52';
+    c.fillRect(r.x - 22, r.y - 14, 44, 5);
+    c.fillStyle = '#6E5236';
+    c.fillRect(r.x - 24, r.y - 9, 48, 2);
+    c.fillStyle = 'rgba(255,0,0,.5)';
+    c.fillRect(r.x - 1, r.y - 1, 2, 2);
+  }
+}
+
+function drawBall(c, x, y, r, spin) {
+  // a snowball: lit upper left, blue-violet shadow, contact shadow
+  c.fillStyle = 'rgba(70,80,130,0.22)';
+  c.beginPath();
+  c.ellipse(x, y + 1, r * 0.95, r * 0.28, 0, 0, 7);
+  c.fill();
+  const cx = x, cy = y - r;
+  const g = c.createRadialGradient(cx - r * 0.4, cy - r * 0.45, r * 0.1, cx, cy, r);
+  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(0.6, '#EEF1FA');
+  g.addColorStop(1, '#AEB6D6');
+  c.fillStyle = g;
+  c.beginPath();
+  c.arc(cx, cy, r, 0, 7);
+  c.fill();
+  c.strokeStyle = 'rgba(50,50,90,0.55)';
+  c.lineWidth = 0.8;
+  c.stroke();
+  c.fillStyle = 'rgba(60,60,90,0.5)';
+  for (let k = 0; k < 6; k++) {
+    const a = spin + k * 1.05;
+    c.beginPath();
+    c.arc(cx + Math.cos(a) * r * 0.5, cy + Math.sin(a * 1.3) * r * 0.5, Math.max(0.8, r * 0.04), 0, 7);
+    c.fill();
+  }
+}
+
+/** draw the world as seen in `view` (world units) into context c at width w, offset (ox, oy) */
+H.render = (c, view, opts = {}) => {
+  c.save();
+  const sx = opts.w / (view.x1 - view.x0);
+  c.translate(-view.x0 * sx + (opts.ox || 0), -view.y0 * sx + (opts.oy || 0));
+  c.scale(sx, sx);
+  c.beginPath();
+  c.rect(view.x0, view.y0, view.x1 - view.x0, view.y1 - view.y0);
+  c.clip();
+  backdrop(c, view);
+  // things in depth order (ground contact y): the climbers, the balls
+  const things = [];
+  for (const id of opts.only ? [opts.only] : ['snowball', 'avalanche']) {
+    const f = H.g[id].feet();
+    things.push({ y: f.y, draw: () => {
+      c.fillStyle = 'rgba(60,70,120,.22)';
+      c.beginPath(); c.ellipse(f.x, f.y + 1, 20, 4.5, 0, 0, 7); c.fill();
+      H.g[id].draw(c);
+    } });
+    if (H.intent[id].activity === 'push' || opts.balls) {
+      const bn = H.ballNow(id);
+      things.push({ y: bn.y, draw: () => drawBall(c, bn.x, bn.y, bn.r, H.t * (H.ball[id].v / Math.max(8, bn.r)) * 0.02) });
+    }
+  }
+  things.sort((a, b) => a.y - b.y);
+  for (const t of things) t.draw();
+  if (opts.contacts) {
+    for (const id of opts.only ? [opts.only] : ['snowball', 'avalanche']) {
+      const d = H.g[id].debug();
+      for (const ct of d.contacts) {
+        c.fillStyle = ct.grounded ? '#f40' : '#07f';
+        for (const p of [ct.heel, ct.toe]) { c.beginPath(); c.arc(p.x, p.y, 0.7, 0, 7); c.fill(); }
+      }
+    }
+  }
+  c.restore();
+};
+
+function followView(id, w = 260, h = 190, dy = 0) {
+  const f = H.g[id].feet();
+  const y1 = f.y + 22 + dy;
+  return { x0: f.x - w / 2, x1: f.x + w / 2, y0: y1 - h, y1 };
+}
+H.followView = followView;
+
+/** a strip of frames to a PNG data URL: n panels, one every `every` frames, each a crop around the climber */
+H.strip = (o) => {
+  const id = o.who || H.who;
+  const w = o.w || 170, h = o.h || 200, cols = o.cols || 8, scale = o.scale || 1.6;
+  const n = o.n;
+  const rows = Math.ceil(n / cols);
+  const pw = Math.round(w * scale), ph = Math.round(h * scale);
+  const out = document.createElement('canvas');
+  out.width = pw * Math.min(cols, n); out.height = ph * rows;
+  const c = out.getContext('2d');
+  const every = o.every || 2;
+  let frame = 0;
+  let lock = null;
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < every; k++) { if (o.drive) o.drive(frame); H.advance(1); frame++; }
+    let view = o.fixed ? { ...o.fixed } : followView(id, w, h, o.dy || 0);
+    if (o.follow === 'lock') {
+      if (lock === null) lock = (view.x0 + view.x1) / 2;
+      view = { ...view, x0: lock - w / 2, x1: lock + w / 2 };
+    }
+    const col = i % cols, row = Math.floor(i / cols);
+    H.render(c, view, { w: pw, ox: col * pw, oy: row * ph, contacts: o.contacts, only: id, balls: o.balls });
+    c.fillStyle = 'rgba(0,0,0,.75)';
+    c.font = '11px monospace';
+    c.fillText(String(H.frame), col * pw + 4, row * ph + 12);
+    c.strokeStyle = 'rgba(0,0,0,.25)';
+    c.strokeRect(col * pw + 0.5, row * ph + 0.5, pw - 1, ph - 1);
+  }
+  return out.toDataURL('image/png');
+};
+
+/** a still of both climbers or one, from `view`, at `w` px wide */
+H.still = (view, w = 1000, only = null) => {
+  const out = document.createElement('canvas');
+  out.width = w; out.height = Math.round((w * (view.y1 - view.y0)) / (view.x1 - view.x0));
+  H.render(out.getContext('2d'), view, { w, only });
+  return out.toDataURL('image/png');
+};
+
+/** a sheet of views: the climber standing, turned to each of 16 directions (debugFace) */
+H.views = (id = H.who, scale = 2.2) => {
+  const g = H.g[id];
+  const f = g.feet();
+  const w = 70, h = 150;
+  const cols = 8;
+  const out = document.createElement('canvas');
+  out.width = Math.round(w * scale) * cols; out.height = Math.round(h * scale) * 2;
+  const c = out.getContext('2d');
+  for (let k = 0; k < 16; k++) {
+    g.debugFace((k / 16) * Math.PI * 2);
+    const view = { x0: f.x - w / 2, x1: f.x + w / 2, y0: f.y + 12 - h, y1: f.y + 12 };
+    H.render(c, view, { w: Math.round(w * scale), ox: (k % cols) * Math.round(w * scale), oy: Math.floor(k / cols) * Math.round(h * scale), only: id });
+  }
+  return out.toDataURL('image/png');
+};
+
+/** a few of the views, large: views(ks, scale) */
+H.viewsSel = (id, ks, scale = 5, w = 64, h = 150) => {
+  const g = H.g[id];
+  const f = g.feet();
+  const pw = Math.round(w * scale), ph = Math.round(h * scale);
+  const out = document.createElement('canvas');
+  out.width = pw * ks.length; out.height = ph;
+  const c = out.getContext('2d');
+  ks.forEach((k, i) => {
+    g.debugFace((k / 16) * Math.PI * 2);
+    const view = { x0: f.x - w / 2, x1: f.x + w / 2, y0: f.y + 12 - h, y1: f.y + 12 };
+    H.render(c, view, { w: pw, ox: i * pw, oy: 0, only: id });
+  });
+  return out.toDataURL('image/png');
+};
+
+/* ------------------------------------------------------------ metrics */
+const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+/**
+ * Run `frames` (drive(frame) first each frame) and report: foot sliding (a grounded contact point must not move),
+ * the largest per-frame pelvis step and its change (jerk), the mittens' distance to the ball's surface, the
+ * pelvis speed against the ball's speed, and the largest per-frame joint displacement.
+ */
+H.measure = (frames, drive, id = H.who, dt = 1 / 60) => {
+  const prevJ = {};
+  const maxV = {};
+  const hold = {};
+  let slide = 0, slideAt = null;
+  let prevP = null, prevPV = null, maxPelvisA = 0, maxPelvisV = 0;
+  let maxGlove = 0, minGlove = 1e9, pushFrames = 0, pushOffBall = 0;
+  const speeds = [];
+  const NAMES = ['hip', 'ankles0', 'ankles1', 'gloves0', 'gloves1', 'elbows0', 'elbows1', 'neck', 'shoulder', 'knees0', 'knees1'];
+  const maxAt = {};
+  const maxSp = {};
+  for (let f = 0; f < frames; f++) {
+    if (drive) drive(f);
+    H.advance(1, dt);
+    const d = H.g[id].debug();
+    const J = { hip: d.hip, ankles0: d.ankles[0], ankles1: d.ankles[1], gloves0: d.gloves[0], gloves1: d.gloves[1], elbows0: d.elbows[0], elbows1: d.elbows[1], neck: d.neck, shoulder: d.shoulder, knees0: d.knees[0], knees1: d.knees[1] };
+    for (const nm of NAMES) {
+      if (prevJ[nm]) {
+        const v = dist2(J[nm], prevJ[nm]);
+        if (!(nm in maxV) || v > maxV[nm]) { maxV[nm] = v; maxAt[nm] = f; }
+      }
+      prevJ[nm] = J[nm];
+    }
+    const p = d.pelvis;
+    if (prevP) {
+      const v = [p[0] - prevP[0], p[1] - prevP[1]];
+      maxPelvisV = Math.max(maxPelvisV, Math.hypot(v[0], v[1]));
+      if (prevPV) maxPelvisA = Math.max(maxPelvisA, Math.hypot(v[0] - prevPV[0], v[1] - prevPV[1]));
+      prevPV = v;
+      speeds.push(Math.hypot(v[0], v[1]) / dt);
+    }
+    prevP = p;
+    d.contacts.forEach((ct, i) => {
+      for (const [nm, pt] of [['heel', ct.heel], ['toe', ct.toe]]) {
+        const key = i + nm;
+        const on = ct.grounded && Math.abs(pt.h) < 0.35;
+        if (on) {
+          if (!hold[key]) hold[key] = { x: pt.x, y: pt.y, f };
+          else {
+            const s = Math.hypot(pt.x - hold[key].x, pt.y - hold[key].y);
+            if (s > slide) { slide = s; slideAt = { f, key, from: hold[key].f }; }
+          }
+        } else hold[key] = null;
+      }
+    });
+    if (H.g[id].pushing && d.ball) {
+      pushFrames++;
+      // the mittens' distance from the ball's surface (rig units): the glove centre should sit ~3.4-4 outside it
+      for (const gl of d.gloveU) {
+        const dd = Math.hypot(gl[0] - d.ball.c[0], gl[1] - d.ball.c[1], gl[2] - d.ball.c[2]) - d.ball.R;
+        maxGlove = Math.max(maxGlove, dd);
+        minGlove = Math.min(minGlove, dd);
+      }
+    }
+  }
+  const r = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, +(+v).toFixed(2)]));
+  return { frames, slide: +slide.toFixed(3), slideAt, maxPelvisV: +maxPelvisV.toFixed(2), maxPelvisA: +maxPelvisA.toFixed(3), maxV: r(maxV), maxAt, pushFrames, mitten: pushFrames ? { min: +minGlove.toFixed(2), max: +maxGlove.toFixed(2) } : null, speedMean: speeds.length ? +(speeds.reduce((a, b) => a + b, 0) / speeds.length).toFixed(1) : 0 };
+};
+
+/* ------------------------------------------------------------ interactive */
+H.init();
+let playing = true;
+let last = performance.now();
+const mainView = () => (H.follow ? followView(H.who, 300, 190) : { x0: 0, x1: 1000, y0: 270, y1: 640 });
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (playing && !H.paused) H.advance(1, dt);
+  cv.width = cv.clientWidth;
+  cv.height = Math.round(cv.clientWidth * (H.follow ? 190 / 300 : 370 / 1000));
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, cv.width, cv.height);
+  H.render(c, mainView(), { w: cv.width, only: H.follow ? H.who : null });
+  const d = H.g[H.who].debug();
+  $('stat').textContent = JSON.stringify(d.state);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+document.querySelectorAll('button[data-a]').forEach((b) => b.addEventListener('click', () => H.set(b.dataset.a)));
+$('who').addEventListener('change', () => { H.who = $('who').value; });
+$('lane').addEventListener('change', () => H.setBall(H.who, { lane: $('lane').value, p: 0.02 }));
+$('rad').addEventListener('input', () => { $('rado').textContent = $('rad').value; H.setBall(H.who, { r: +$('rad').value }); });
+$('spd').addEventListener('input', () => { $('spdo').textContent = $('spd').value; H.setBall(H.who, { v: +$('spd').value }); });
+$('reset').addEventListener('click', () => H.setBall(H.who, { p: 0.02 }));
+$('reduced').addEventListener('change', () => (H.reduced = $('reduced').checked));
+$('grid').addEventListener('change', () => (H.grid = $('grid').checked));
+$('follow').addEventListener('change', () => (H.follow = $('follow').checked));
+$('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'pause' : 'play'; });
+$('step').addEventListener('click', () => { playing = false; $('play').textContent = 'play'; H.advance(1); });
+H.pause = () => { playing = false; $('play').textContent = 'play'; };
+H.resume = () => { playing = true; $('play').textContent = 'pause'; };
+window.__ready = true;
+</script>
+</body>
+</html>
