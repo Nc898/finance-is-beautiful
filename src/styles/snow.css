@@ -311,9 +311,11 @@ input {
   position: absolute;
   top: 0;
   left: 0;
+  display: grid;
+  justify-items: center;
   width: max-content;
-  padding: 1px 7px;
-  border-radius: 999px;
+  padding: 2px 8px 3px;
+  border-radius: 9px;
   background: rgba(251, 246, 234, 0.82);
   font: 600 12px/1.4 var(--sans);
   font-variant-numeric: tabular-nums;
@@ -322,6 +324,22 @@ input {
   pointer-events: none;
   will-change: transform;
   transition: opacity 0.4s ease, visibility 0s linear 0s;
+}
+
+.bt-name {
+  line-height: 1.3;
+}
+
+/* what is owed on the debt now, under its name and rate */
+.bt-owed {
+  font-weight: 500;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.bt-owed:empty {
+  display: none;
 }
 
 .ball-tag.off {

@@ -167,7 +167,7 @@ test.describe('On a Roll', () => {
       await expect(page.locator(`#tag-${id}`)).toBeVisible();
     }
     for (const hill of ['snowball', 'avalanche']) {
-      expect(await page.locator(`[id^="bt-${hill}-"]`).allTextContents()).toEqual(['Medical 0%', 'Car 6%', 'Card 26%']);
+      expect(await page.locator(`[id^="bt-${hill}-"] .bt-name`).allTextContents()).toEqual(['Medical 0%', 'Car 6%', 'Card 26%']);
     }
     expect(await page.locator('#summary').textContent()).toBe(label);
     expect(errors).toEqual([]);
@@ -245,6 +245,12 @@ test.describe('On a Roll', () => {
         const t = await labelTexts(page, id);
         expect(t.owed, `${id} at month ${months}`).toBe(DEBTS.every((d) => e.bal[d] === 0) ? 'Debt-free' : `${usd(e.owed)} still owed`);
         expect(t.tag, `${id} at month ${months}`).toBe(`${usd(e.interest)} in interest`);
+        // each ball's tag: what is owed on that debt now (gone once it is cleared)
+        for (const d of DEBTS) {
+          const owed = page.locator(`#bt-${id}-${d} .bt-owed`);
+          if (e.bal[d] === 0) await expect(page.locator(`#bt-${id}-${d}`)).toHaveClass(/off/);
+          else await expect(owed, `${id} ${d} at month ${months}`).toHaveText(usd(e.bal[d]));
+        }
       }
     }
     // the spec's month-12 figures, debt by debt: medical 0, car $1,253, card $11,458 (snowball); 520, 4,150, 7,668 (avalanche)
@@ -316,8 +322,8 @@ test.describe('On a Roll', () => {
     expect(s.horizon).toBeGreaterThan(before.horizon);
     await expect(page.locator('#timeline')).toHaveAttribute('max', String(s.horizon));
     // the ball tag follows the rate
-    await expect(page.locator('#bt-snowball-card')).toHaveText('Card 30%');
-    await expect(page.locator('#bt-avalanche-card')).toHaveText('Card 30%');
+    await expect(page.locator('#bt-snowball-card .bt-name')).toHaveText('Card 30%');
+    await expect(page.locator('#bt-avalanche-card .bt-name')).toHaveText('Card 30%');
     // the clock stays where it was, so the labels now show money still owed
     expect(s.months).toBe(before.months);
     const inp = { ...D, debts: { ...D.debts, card: { ...D.debts.card, apr: 0.3 } } };
@@ -450,7 +456,7 @@ test.describe('On a Roll', () => {
     expect((await labelTexts(page, 'snowball')).tag).toBe('$0 in interest');
     await scrub(page, s.horizon);
     expect((await labelTexts(page, 'avalanche')).tag).toBe('$0 in interest');
-    await expect(page.locator('#bt-snowball-card')).toHaveText('Card 0%');
+    await expect(page.locator('#bt-snowball-card .bt-name')).toHaveText('Card 0%');
   });
 
   test('steppers change values and the money fields read with grouping', async ({ page }) => {
@@ -547,7 +553,7 @@ test.describe('On a Roll', () => {
     await scrub(page, 2);
     for (const hill of ['snowball', 'avalanche']) {
       for (const [debt, text] of [['medical', 'Medical 0%'], ['car', 'Car 6%'], ['card', 'Card 26%']] as const) {
-        await expect(page.locator(`#bt-${hill}-${debt}`)).toHaveText(text);
+        await expect(page.locator(`#bt-${hill}-${debt} .bt-name`)).toHaveText(text);
         await expect(page.locator(`#bt-${hill}-${debt}`)).toBeVisible();
       }
     }

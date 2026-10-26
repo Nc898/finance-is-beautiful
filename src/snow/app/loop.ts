@@ -2,8 +2,8 @@
  * The one requestAnimationFrame loop: advance the clocks, derive snapshots,
  * build the SnowFrame, render, and let the UI update only what changed.
  */
-import { DEBTS, allStrategies, largestStart } from '../engine';
-import type { SnowInputs, StrategySnapshot } from '../engine';
+import { DEBTS, allStrategies, largestStart, strategySchedule } from '../engine';
+import type { DebtId, SnowInputs, StrategyId, StrategySnapshot } from '../engine';
 import type { BallVisual, HillVisual, SnowFrame, SnowSceneAPI } from '../types';
 import type { Store } from './store';
 import { CAMERA_ZOOM, storyCamera } from './story';
@@ -24,19 +24,55 @@ const FRAME_MS = 1000 / 60 - 2;
 /** In reduced motion the scene keeps being drawn for this long after anything changes, so it can settle. */
 const SETTLE_MS = 1500;
 
+const rollCache = new WeakMap<SnowInputs, Record<StrategyId, Record<DebtId, number | null>>>();
+
+/**
+ * Each debt's balance at the start of the month it first gets more than its minimum (the extra): from then it is
+ * rolled down its lane. Null for a debt that never gets the extra (cleared by its minimums alone, at the top).
+ */
+export function rollStarts(inputs: SnowInputs, id: StrategyId): Record<DebtId, number | null> {
+  let hit = rollCache.get(inputs);
+  if (!hit) {
+    hit = {} as Record<StrategyId, Record<DebtId, number | null>>;
+    rollCache.set(inputs, hit);
+  }
+  const have = hit[id];
+  if (have) return have;
+  const rows = strategySchedule(inputs, id).rows;
+  const out = { medical: null, car: null, card: null } as Record<DebtId, number | null>;
+  for (const d of DEBTS) {
+    for (let i = 0; i < rows.length; i++) {
+      const start = i === 0 ? inputs.debts[d].balance : rows[i - 1]!.debts[d].balance;
+      if (start <= 0.005) break;
+      const row = rows[i]!.debts[d];
+      const due = Math.min(inputs.debts[d].minPayment, start + row.interest);
+      if (row.payment > due + 1e-6) {
+        out[d] = start;
+        break;
+      }
+    }
+  }
+  hit[id] = out;
+  return out;
+}
+
 /**
  * One hill's scene state from its snapshot. Sizes are fractions of the LARGEST starting balance, so the same debt
- * looks the same on both hills at the same balance and the comparison stays honest.
+ * looks the same on both hills at the same balance and the comparison stays honest. A ball waits at the top until it
+ * first gets the extra, then rolls down its lane as that balance is paid off (see BallVisual.progress).
  */
 export function hillVisual(snap: StrategySnapshot, inputs: SnowInputs): HillVisual {
   const scale = largestStart(inputs);
+  const rolls = rollStarts(inputs, snap.id);
+  const queue = strategySchedule(inputs, snap.id).order.filter((d) => !snap.debts[d].paidOff);
   const ball = (id: (typeof DEBTS)[number]): BallVisual => {
     const d = snap.debts[id];
-    const start = inputs.debts[id].balance;
+    const from = rolls[id];
     return {
       id,
       size: Math.max(0, d.balance / scale),
-      progress: Math.max(0, Math.min(1, 1 - d.balance / start)),
+      progress: from === null ? 0 : Math.max(0, Math.min(1, 1 - d.balance / from)),
+      queue: queue.indexOf(id),
       snowfall: d.interest / scale,
       rolling: d.payment / scale,
       target: snap.target === id && !d.paidOff,

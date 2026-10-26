@@ -1,12 +1,14 @@
 /**
  * Constants of the climber's figure and stage that the director, the painting and the scene share. The skeleton is
  * the vine gardener's (gardenerDims.ts, in rig units); the climber is drawn at UNIT of the gardener's scale so the
- * woolly hat still comes to CLIMBER_H (122) from the boots at PATH_Y.
+ * woolly hat comes to CLIMBER_H (80) from the boots at PATH_Y.
  */
 import { REST } from './geom';
 
 /** rig unit -> world units at PATH_Y */
-export const UNIT = 0.95;
+export const UNIT = 0.62;
+/** the scale the sledge is painted at, against the climber's (it was drawn for UNIT 0.95) */
+export const SLEDGE_K = UNIT / 0.95;
 
 /** a seated climber's hip joint above the sledge's seat top is about this; the hips sit over REST, the feet a stride toward the viewer */
 export const SLEDGE_SEAT_H = 14;

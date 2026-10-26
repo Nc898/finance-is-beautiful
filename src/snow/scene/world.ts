@@ -155,6 +155,7 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   // ---- the pines, far to near
   const puffSpots: Array<{ x: number; y: number }> = [];
   const standing: StandingPine[] = [];
+  const near: Array<{ p: PinePlan; s: PineSprite; k: number; x0: number; y0: number; w: number; h: number; Ad: number }> = [];
   // the part of the world on screen (the layer itself reaches a margin further, for the camera's zoom)
   const sx0 = -cam.ox / cam.s;
   const sx1 = (cam.cssW - cam.ox) / cam.s;
@@ -170,16 +171,14 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
     const k = p.H / s.H;
     if (p.layer === 'crest') lay(p, s);
     else if (p.x + s.w * k > v.xmin && p.x - s.w * k < v.xmax) {
-      // painted once at the layer's resolution, the trunk foot where the sprite has it
+      // painted once at the screen's own resolution (so each frame draws it about 1:1), the trunk foot where the
+      // sprite has it
+      const Ad = cam.dpr * cam.s;
       const w = s.w * k;
       const h = s.h * k;
       const x0 = p.x - (p.flip ? s.w - s.px : s.px) * k;
       const y0 = p.y - s.py * k;
-      const pc = makeCanvas(Math.max(1, Math.ceil(w * A)), Math.max(1, Math.ceil(h * A)));
-      const pctx = pc.getContext('2d')!;
-      pctx.setTransform(A, 0, 0, A, -x0 * A, -y0 * A);
-      layPine(pctx, s, p.x, p.y, k, p.flip);
-      standing.push({ cv: pc, x0, y0, w, h, y: p.y });
+      near.push({ p, s, k, x0, y0, w, h, Ad });
     }
     // perches: the spire top and the front bough tips (not the back row of the wood, half hidden in it), on screen
     if (!back && p.H > 40) {
@@ -208,6 +207,14 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
       return Math.abs(q.x - u.x) < half;
     });
   for (let i = perches.length - 1; i >= 0; i--) if (covered(perches[i]!)) perches.splice(i, 1);
+  // the near pines, each painted once at the screen's resolution for drawing every frame
+  for (const n of near) {
+    const pc = makeCanvas(Math.max(1, Math.ceil(n.w * n.Ad)), Math.max(1, Math.ceil(n.h * n.Ad)));
+    const pctx = pc.getContext('2d')!;
+    pctx.setTransform(n.Ad, 0, 0, n.Ad, -n.x0 * n.Ad, -n.y0 * n.Ad);
+    layPine(pctx, n.s, n.p.x, n.p.y, n.k, n.p.flip);
+    standing.push({ cv: pc, x0: n.x0, y0: n.y0, w: n.w, h: n.h, y: n.p.y });
+  }
   lg('pines');
   await tick();
   if (!check()) return null;

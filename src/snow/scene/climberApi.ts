@@ -27,14 +27,19 @@ export type ClimberActivity =
   | 'cheer'
   /** every debt is cleared: walk to the sledge (REST), sit on it, rest (a slow breath, a look round, mittens on knees) */
   | 'rest'
+  /**
+   * walk to `target` and stand there easy, facing along `dir` (at the top of the hill, behind the next ball, watching
+   * the one rolling down; or at the start, behind the first). Never through a ball on the way.
+   */
+  | 'wait'
   /** stand easy where you are (the story's opening, or paused before the first month) */
   | 'idle';
 
 export interface ClimberIntent {
   activity: ClimberActivity;
-  /** push: the target ball's ground contact point (world units). Ignored otherwise. */
+  /** push: the target ball's ground contact point (world units). wait: where to stand. Ignored otherwise. */
   target: { x: number; y: number } | null;
-  /** push: the unit vector down the ball's lane (toward the snowbank). */
+  /** push: the unit vector down the ball's lane (toward the snowbank). wait: the way to face. */
   dir: { x: number; y: number } | null;
   /** push: the ball's radius this frame (world units), for where the mittens go and how far behind to stand. */
   radius: number;

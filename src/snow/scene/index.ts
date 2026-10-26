@@ -8,14 +8,16 @@
  * birds in them, the balls, climbers, sledges and the mounds with their flags, then the falling snow.
  *
  * The scene decides WHAT each climber does (as the vine's tend()); the climber decides HOW. Balls move only by the
- * frame's data. A jump of the timeline (scrubbing) shows the moment directly: tracks and clumps are functions of
+ * frame's data. The climbers work from the top of their hill: each pushes its target ball off the top and, once it is
+ * rolling, goes to wait behind the next one, watching it go (cheering when one breaks up); when the hill is clear it
+ * walks down to its sledge. A jump of the timeline (scrubbing) shows the moment directly: tracks and clumps are functions of
  * progress, the climbers are placed, breakups are instant; while playing, clumps are seen falling and a cleared ball
  * crumbles into the bank.
  */
 import type { DebtId, SnowFrame, SnowSceneAPI, SnowScreenPoint, StrategyId } from '../types';
 import { DEBTS, STRATEGIES } from '../types';
 import { ensurePaperTile } from '../../scene/sprites';
-import { HILL, REST, depthScale, fitCamera, laneDir, zoomTransform, type Camera, type Insets, type ZoomXf } from './geom';
+import { HILL, LANES, REST, depthScale, fitCamera, laneDir, zoomTransform, type Camera, type Insets, type ZoomXf } from './geom';
 import { paintPaperAndSky } from './sky';
 import { buildWorld, type WorldLayer } from './world';
 import { BallView, buildBallArt, type BallArt } from './balls';
@@ -25,11 +27,17 @@ import { Birds } from './birds';
 import { makeBirdArt } from './birdArt';
 import { createClimber } from './climber';
 import type { Climber, ClimberIntent } from './climberApi';
+import { SLEDGE_K } from './climberDims';
+import { KAPPA } from '../../vine/scene/gardenerDims';
 
 /** the longest step of climber work per update, seconds (a fast playback speed works in several such steps a frame) */
 const WORK_STEP = 1 / 45;
 /** how long a climber cheers when a ball breaks up (seconds of its own time) */
 const CHEER_TIME = 1.25;
+/** a climber pushes its ball this far down the lane (its share paid since it started rolling), then lets it roll */
+const PUSH_UNTIL = 0.12;
+/** how far beyond a waiting ball's edge the climber stands behind it (ground units) */
+const WAIT_BACK = 16;
 
 type Sledge = ReturnType<typeof makeSledge>;
 
@@ -56,6 +64,8 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
   const climbers: Partial<Record<StrategyId, Climber>> = {};
   const views = new Map<string, BallView>();
   const cheer: Record<StrategyId, number> = { snowball: 0, avalanche: 0 };
+  /** a climber's way up to a waiting spot: first straight up to this point, then across (kept until reached) */
+  const routes: Record<StrategyId, { key: string; wp: { x: number; y: number }; done: boolean } | null> = { snowball: null, avalanche: null };
   const prevPaid = new Map<string, boolean>();
   const key = (h: StrategyId, d: DebtId) => `${h}/${d}`;
 
@@ -115,16 +125,55 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
     return v;
   };
 
+  /**
+   * Stand behind (uphill of) a ball at the top of its lane, facing down it. A climber below that spot first walks
+   * straight up its own lane (empty above the ball it has just pushed), then across behind the waiting balls, so it
+   * never walks through one.
+   */
+  const waitBehind = (id: StrategyId, debt: DebtId, topOfLane = false): ClimberIntent => {
+    const v = viewFor(id, debt);
+    const dir = laneDir(id, debt);
+    const gx = dir.x;
+    const gd = dir.y / KAPPA;
+    const gl = Math.hypot(gx, gd) || 1;
+    // (watching the last ball go: from where it started, at the top of its lane)
+    const from = topOfLane ? LANES[id][debt].start : v.contact;
+    const back = (topOfLane ? 6 : v.r) + WAIT_BACK;
+    const at = { x: from.x - (gx / gl) * back, y: from.y - (gd / gl) * back * KAPPA };
+    // the way up is fixed when the climb starts (a goal that moved with the feet would drag the stride out of shape)
+    const key = `${debt}|${topOfLane ? 1 : 0}`;
+    const g = climbers[id];
+    let r = routes[id];
+    if (r && r.key !== key) r = routes[id] = null;
+    if (!r && g) {
+      const f = g.feet();
+      if (f.y > at.y + 10 && Math.abs(f.x - at.x) > 30) r = routes[id] = { key, wp: { x: f.x, y: at.y }, done: false };
+    }
+    if (r && !r.done && g) {
+      const f = g.feet();
+      if (Math.hypot(f.x - r.wp.x, f.y - r.wp.y) < 8) r.done = true;
+      else return { activity: 'wait', target: r.wp, dir, radius: 0 };
+    }
+    return { activity: 'wait', target: at, dir, radius: 0 };
+  };
+
   /** what a climber is doing at this moment */
   const intentFor = (id: StrategyId, hv: SnowFrame['hills'][number], mps: number, cheering: boolean): ClimberIntent => {
     if (cheering) return { activity: 'cheer', target: null, dir: null, radius: 0 };
     if (hv.paidOff) return { activity: 'rest', target: null, dir: null, radius: 0 };
-    let maxProg = 0;
-    for (const b of hv.balls) maxProg = Math.max(maxProg, b.progress);
-    const tb = hv.balls.find((b) => b.target && !b.paidOff);
-    if (!tb || (mps === 0 && maxProg < 0.003)) return { activity: 'idle', target: null, dir: null, radius: 0 };
-    const v = viewFor(id, tb.id);
-    return { activity: 'push', target: { x: v.contact.x, y: v.contact.y }, dir: laneDir(id, tb.id), radius: v.r };
+    const tb = hv.balls.find((b) => b.queue === 0);
+    const nb = hv.balls.find((b) => b.queue === 1);
+    if (!tb) return { activity: 'idle', target: null, dir: null, radius: 0 };
+    // the opening, before anything rolls: ready behind the first ball
+    if (mps === 0 && tb.progress < 0.002) return waitBehind(id, tb.id);
+    // pushing it off the top
+    if (tb.progress < PUSH_UNTIL) {
+      routes[id] = null;
+      const v = viewFor(id, tb.id);
+      return { activity: 'push', target: { x: v.contact.x, y: v.contact.y }, dir: laneDir(id, tb.id), radius: v.r };
+    }
+    // it rolls on alone: wait behind the next one, ready for it; with none left, watch this one from the top
+    return nb ? waitBehind(id, nb.id) : waitBehind(id, tb.id, true);
   };
 
   const api: SnowSceneAPI = {
@@ -220,7 +269,7 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
       for (const id of STRATEGIES) {
         const s = sledges[id];
         const r = REST[id];
-        const ds = depthScale(r.y);
+        const ds = depthScale(r.y) * SLEDGE_K;
         items.push({ y: r.y - 4, draw: () => ctx.drawImage(s.cv, r.x - s.px * ds, r.y - s.py * ds, s.w * ds, s.h * ds) });
         const g = climbers[id];
         if (g) {
@@ -241,7 +290,7 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
           const v = views.get(key(id, d));
           if (!v) continue;
           if (!v.paidOff) items.push({ y: v.contact.y, draw: () => v.drawBall(ctx, t) });
-          if (v.hasMound) items.push({ y: v.lane.end.y, draw: () => v.drawMound(ctx, t) });
+          if (v.hasMound) items.push({ y: v.moundY, draw: () => v.drawMound(ctx, t) });
         }
       }
       items.sort((a, b) => a.y - b.y);

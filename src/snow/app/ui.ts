@@ -155,6 +155,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   }
   interface BallTagEls {
     root: HTMLElement;
+    name: HTMLElement;
+    owed: HTMLElement;
     w: number;
     h: number;
   }
@@ -170,7 +172,13 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     for (const d of DEBTS) {
       const el = $(`bt-${id}-${d}`);
       el.setAttribute('aria-hidden', 'true');
-      ballTags[id][d] = { root: el, w: 0, h: 0 };
+      // two lines: the debt and its rate, and what is owed on it now
+      const name = document.createElement('span');
+      name.className = 'bt-name';
+      const owed = document.createElement('span');
+      owed.className = 'bt-owed';
+      el.replaceChildren(name, owed);
+      ballTags[id][d] = { root: el, name, owed, w: 0, h: 0 };
     }
   }
 
@@ -282,6 +290,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const labelKey: Record<StrategyId, string> = { snowball: '', avalanche: '' };
   const tagKey: Record<StrategyId, string> = { snowball: '', avalanche: '' };
   const ballOff: Record<string, boolean> = {};
+  const ballOwed: Record<string, string> = {};
 
   function measureAll(): void {
     for (const id of STRATEGIES) {
@@ -299,7 +308,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   /** "Card 26%" and the like: the tags follow the rates in the inputs. */
   function writeBallTags(): void {
     for (const id of STRATEGIES) {
-      for (const d of DEBTS) setText(ballTags[id][d].root, ballTag(d, state.inputs.debts[d].apr));
+      for (const d of DEBTS) setText(ballTags[id][d].name, ballTag(d, state.inputs.debts[d].apr));
     }
     measureAll();
   }
@@ -330,8 +339,18 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     }
     // a debt that is cleared has no ball any more: its small tag goes with it
     for (const d of DEBTS) {
-      const off = snap.debts[d].paidOff;
+      // (gone with its ball, and from the moment what is owed rounds to nothing)
+      const off = snap.debts[d].paidOff || snap.debts[d].owed < 0.5;
       const k = `${snap.id}-${d}`;
+      // what is owed on it now, as a statement shows it (up with the month's interest, down with the payment)
+      const owedNow = off ? '' : formatCurrency(snap.debts[d].owed);
+      const bt = ballTags[snap.id][d];
+      if (ballOwed[k] !== owedNow) {
+        ballOwed[k] = owedNow;
+        setText(bt.owed, owedNow);
+        bt.w = bt.root.offsetWidth;
+        bt.h = bt.root.offsetHeight;
+      }
       if (ballOff[k] !== off) {
         ballOff[k] = off;
         ballTags[snap.id][d].root.classList.toggle('off', off);

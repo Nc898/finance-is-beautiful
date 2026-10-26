@@ -280,7 +280,17 @@ const STEP_M = 46;
 const TS_M = 0.6;
 const SIDE_STEP = 24;
 
+/** the figure scale the strides above are measured for (the vine's gardener at its path) */
+const S_REF = 0.95;
+
 export class Gait {
+  /**
+   * The figure's size against the one the strides were measured for: every step length and the follow thresholds are
+   * scaled by it (a smaller figure takes shorter steps, and reads speed against its own size), so the legs are never
+   * asked for a stride they cannot make.
+   */
+  private k = 1;
+
   /** the pelvis, on the ground (true units) */
   px = 0;
   pd = 0;
@@ -452,7 +462,7 @@ export class Gait {
       const lead: 0 | 1 = ux * this.lx + ud * this.ld >= 0 ? 0 : 1;
       const trail: 0 | 1 = lead === 0 ? 1 : 0;
       let X = Math.min(this.sOf(this.feet[lead]), this.sOf(this.feet[trail]));
-      const cyc = Math.max(1, Math.round((dist - X) / SIDE_STEP));
+      const cyc = Math.max(1, Math.round((dist - X) / (SIDE_STEP * this.k)));
       const r: number[] = [];
       let rs = 0;
       for (let j = 1; j <= cyc; j++) {
@@ -483,7 +493,7 @@ export class Gait {
       const Ltot = this.goalS - e / 2 - frontS;
       const hurry = dist > 160 ? 1.12 : 1;
       const mo = walkStyle === 'measured';
-      const Lnom = (mo ? STEP_M : STEP_NOM) * hurry;
+      const Lnom = (mo ? STEP_M : STEP_NOM) * hurry * this.k;
       const ts = mo ? TS_M : TS;
       const ramp0 = moving ? clamp(0.55 + (0.45 * Math.abs(v0)) / 45, 0.55, 1) : 0.62;
       let k = Ltot < 2 ? 1 : Math.max(1, Math.round(Ltot / (Lnom * 0.84)));
@@ -547,8 +557,9 @@ export class Gait {
     const f = this.follow!;
     const v = f.vx * f.hx + f.vd * f.hd;
     const off = Math.max(Math.abs(this.followLag), Math.abs(this.followLat) * 1.3);
-    if (fromStand) return v > FOLLOW_START_V || off > FOLLOW_START_LAG;
-    return v > FOLLOW_STOP_V || off > FOLLOW_STOP_LAG;
+    const k = this.k;
+    if (fromStand) return v > FOLLOW_START_V * k || off > FOLLOW_START_LAG * k;
+    return v > FOLLOW_STOP_V * k || off > FOLLOW_STOP_LAG * k;
   }
 
   /**
@@ -559,8 +570,9 @@ export class Gait {
   private planFollow(moving: boolean, vEnd: number): void {
     const f = this.follow!;
     const v = Math.max(0, f.vx * f.hx + f.vd * f.hd);
-    const T = followStepTime(v);
-    const Lnom = clamp(v * T, 5, FOLLOW_L_MAX);
+    // (the cadence for this speed relative to the figure's size)
+    const T = followStepTime(v / this.k);
+    const Lnom = clamp(v * T, 5 * this.k, FOLLOW_L_MAX * this.k);
     const T1 = moving ? T : T * 0.92;
     // the spot the pelvis should be at when the step lands, and the line to it
     const tx = f.x + f.vx * T1;
@@ -589,9 +601,10 @@ export class Gait {
     this.goalS = alongU;
     // the stride that puts the pelvis (the midpoint of the feet) on the spot, blended with the nominal stride
     let L = 0.5 * Lnom + (alongU - sFront);
-    L = clamp(L, Math.max(2.2, 0.3 * Lnom), moving ? Math.min(FOLLOW_L_MAX, 1.4 * Lnom + 6) : Math.min(FOLLOW_L_MAX, 1.3 * Lnom + 6));
+    const Lmax = FOLLOW_L_MAX * this.k;
+    L = clamp(L, Math.max(2.2 * this.k, 0.3 * Lnom), moving ? Math.min(Lmax, 1.4 * Lnom + 6 * this.k) : Math.min(Lmax, 1.3 * Lnom + 6 * this.k));
     const sLand = sFront + L;
-    const sNext = sLand + Math.max(Lnom, 2.2);
+    const sNext = sLand + Math.max(Lnom, 2.2 * this.k);
     this.steps = [
       { foot: rear.i, s: sLand, T: T1 },
       { foot: front.i, s: sNext, T },
@@ -642,6 +655,7 @@ export class Gait {
     this.ld = Math.cos(yaw);
     this.feet[0].S = S;
     this.feet[1].S = S;
+    this.k = Math.max(0.2, S / S_REF);
     this.measureFollow();
     if (!this.walking && allowStart && !this.turning) {
       if (this.follow) {
@@ -682,7 +696,7 @@ export class Gait {
     }
     this.still = Math.abs(this.px - ox) + Math.abs(this.pd - od) > 1e-5 || this.walking ? 0 : this.still + dt;
     // how much of the measured walk shows: the stride's share of a full stroll, eased
-    const ampT = walkStyle === 'measured' && this.walking && !this.side ? clamp(this.speed / (STEP_M / TS_M), 0, 1) : 0;
+    const ampT = walkStyle === 'measured' && this.walking && !this.side ? clamp(this.speed / ((STEP_M * this.k) / TS_M), 0, 1) : 0;
     if (dt > 0) this.amp += (ampT - this.amp) * (1 - Math.exp(-dt / 0.18));
   }
 

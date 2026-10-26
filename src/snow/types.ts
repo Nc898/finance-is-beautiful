@@ -3,7 +3,8 @@
  * without escalating). See docs/SNOW_SPEC.md.
  *
  * The idea: each debt is a snowball on a winter hillside. Interest is snow settling on it every month, so it grows;
- * every payment rolls it further down its lane and it sheds snow as it goes. Two hillsides start with the same three
+ * every payment shrinks it. The balls wait at the top of the hill; the climber pushes the debt getting the extra off
+ * the top, and it rolls down its lane as it is paid off, shedding snow as it goes. Two hillsides start with the same three
  * debts and the same monthly budget. Both pay every minimum and put everything left over on one target debt, and
  * when a debt is cleared its payment rolls on to the next. The left hill ("Snowball") targets the smallest balance
  * first; the right hill ("Avalanche") the highest interest rate first.
@@ -137,8 +138,14 @@ export interface BallVisual {
   id: DebtId;
   /** balance / largest starting balance (0 … ~1.2). The ball's painted AREA is proportional to it. */
   size: number;
-  /** How far down its lane: 1 − balance / this debt's starting balance, clamped 0 … 1 (1 = at the foot). */
+  /**
+   * How far down its lane (0 = waiting at the top, 1 = at the foot). A ball waits at the top until it first gets the
+   * extra (its minimums only shrink it there); from then it rolls: 1 − balance / its balance when it started to get
+   * the extra, clamped 0 … 1. A debt cleared by its minimums alone is cleared at the top (progress 0).
+   */
   progress: number;
+  /** Its place in the hill's order among the debts still owed: 0 = the target (being rolled), 1 = next, …; −1 cleared. */
+  queue: number;
   /** This month's interest on this debt / largest starting balance (per month): how thickly snow settles on it. */
   snowfall: number;
   /** This month's payment on this debt / largest starting balance (per month): how fast it is rolling. */

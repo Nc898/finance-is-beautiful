@@ -16,7 +16,7 @@ import {
   splitField,
 } from '../../src/snow/app/store';
 import type { Reason } from '../../src/snow/app/store';
-import { hillVisual } from '../../src/snow/app/loop';
+import { hillVisual, rollStarts } from '../../src/snow/app/loop';
 import { STORY_DURATION } from '../../src/snow/app/story';
 import { resultsSentence, scrubSentence } from '../../src/snow/app/text';
 
@@ -480,12 +480,23 @@ describe('scene frame values (hillVisual)', () => {
     expect(hillVisual(av0, D).balls[2].rolling).toBeCloseTo(580 / 12000, 12);
   });
 
-  it('progress is 1 minus balance over the debt\'s own starting balance, clamped to 0 to 1', () => {
+  it('a ball waits at the top until it gets the extra, then rolls as that balance is paid off', () => {
     const snap = allStrategies(D, 12)[0];
     const v = hillVisual(snap, D);
-    expect(v.balls[1].progress).toBeCloseTo(1 - snap.debts.car.balance / 6000, 12);
-    expect(v.balls[2].progress).toBeCloseTo(1 - snap.debts.card.balance / 12000, 12);
+    const rolls = rollStarts(D, 'snowball');
+    // the car started rolling at month 4, from its balance then; the card still waits at the top; medical is done
+    expect(rolls.medical).toBe(1000);
+    expect(rolls.car).toBeCloseTo(5547.75, 2);
+    expect(v.balls[1].progress).toBeCloseTo(1 - snap.debts.car.balance / rolls.car!, 12);
+    expect(v.balls[2].progress).toBe(0);
     expect(v.balls[0].progress).toBe(1);
+    // the queue: the car is being rolled, the card is next, the medical bill is cleared
+    expect(v.balls.map((b) => b.queue)).toEqual([-1, 0, 1]);
+    // avalanche: the medical bill never gets the extra; its minimums clear it at the top (month 25)
+    expect(rollStarts(D, 'avalanche').medical).toBeNull();
+    const a25 = hillVisual(allStrategies(D, 25)[1], D);
+    expect(a25.balls[0]).toMatchObject({ paidOff: true, progress: 0, queue: -1 });
+    expect(a25.balls.map((b) => b.queue)).toEqual([-1, 1, 0]);
     for (let m = 0; m <= END; m += 0.25) {
       for (const id of [0, 1] as const) {
         for (const b of hillVisual(allStrategies(D, m)[id], D).balls) {

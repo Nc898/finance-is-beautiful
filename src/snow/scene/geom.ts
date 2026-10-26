@@ -72,14 +72,14 @@ export const REST: Record<StrategyId, Pt> = {
   avalanche: { x: 934, y: 604 },
 };
 
-/** the climber's height (boots to hat top) at depth PATH_Y, as the vine's gardener */
-export const CLIMBER_H = 122;
+/** the climber's height (boots to hat top) at depth PATH_Y: small beside the pines (a person to a tree) */
+export const CLIMBER_H = 80;
 export const PATH_Y = 500;
-/** nearer things (lower on the page) are drawn a little larger */
-export const depthScale = (y: number): number => 1 + (y - PATH_Y) * 0.0014;
+/** nearer things (lower on the page) are drawn larger: the top of the hill reads as far up the slope */
+export const depthScale = (y: number): number => 1 + (y - PATH_Y) * 0.0018;
 
-/** the radius of a ball whose `size` is 1 (the largest starting debt), at depth PATH_Y */
-export const BALL_R_MAX = 46;
+/** the radius of a ball whose `size` is 1 (the largest starting debt), at depth PATH_Y: about the climber's height across */
+export const BALL_R_MAX = 38;
 
 /** a ball's radius (world units): its painted area is proportional to `size`, then perspective by depth */
 export const ballRadius = (size: number, y: number): number => BALL_R_MAX * Math.sqrt(Math.max(0, size)) * depthScale(y);

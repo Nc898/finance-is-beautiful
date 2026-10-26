@@ -194,7 +194,8 @@ export class BallView {
   cy = 0;
   theta = 0;
   private readonly marks: Marks;
-  private readonly end: { x: number; y: number };
+  /** where the ball breaks up: the foot of its lane, or the top for a debt its minimums cleared while it waited */
+  private end: { x: number; y: number };
   private readonly back: number;
   private readonly pRest: Float32Array;
   private readonly lat: Float32Array;
@@ -304,7 +305,8 @@ export class BallView {
     }
     for (const f of this.falling) f.age += dt;
     this.falling = this.falling.filter((f) => f.age < f.dur && this.progress >= this.pRest[f.i]! + this.back);
-    // ---- the crumble at the snowbank
+    // ---- the crumble at the snowbank (or at the top, where a debt its minimums cleared was waiting)
+    if (this.paidOff) this.end = { x: c.x, y: c.y };
     if (this.paidOff) {
       if (!wasPaid) {
         if (!o.scrub && !o.reduced && !first && o.playing) {
@@ -748,6 +750,11 @@ export class BallView {
       ctx.drawImage(this.art.flake, p.x - S, p.y - S, S * 2, S * 2);
     }
     ctx.globalAlpha = 1;
+  }
+
+  /** the depth of the mound and flag, for sorting with the climbers */
+  get moundY(): number {
+    return this.end.y;
   }
 
   /** where the name tag sits: just above the ball, or above the flag once cleared */

@@ -325,6 +325,11 @@ class ClimberImpl implements Climber {
     return { x: b.gx * c - b.gd * s, d: b.gx * s + b.gd * c };
   }
 
+  /** the facing (yaw, ground units) of a direction given in world units */
+  private yawOf(dir: { x: number; y: number }): number {
+    return Math.atan2(dir.y / KAPPA, dir.x);
+  }
+
   private idealFor(b: Ball): { x: number; d: number; yaw: number } {
     const p = this.pushPlan(b, this.S);
     const e = this.standDir(b);
@@ -472,6 +477,12 @@ class ClimberImpl implements Climber {
         const wp = this.restRoute(sit);
         if (wp) this.goTo(wp, null, 4);
         else if (this.goTo(sit, SIT_YAW, 1.2) && this.still && this.wPush.v < 0.05 && this.wCheer.v < 0.05) this.seat.go(1, 1.5);
+        break;
+      }
+      case 'wait': {
+        this.following = false;
+        tog = true;
+        if (it.target && it.dir) this.goTo(it.target, this.yawOf(it.dir), 3);
         break;
       }
       case 'idle':
@@ -711,6 +722,12 @@ class ClimberImpl implements Climber {
       this.ideal.d = y / KAPPA;
       this.idealV.x = 0;
       this.idealV.d = 0;
+    } else if (act === 'wait' && it.target && it.dir) {
+      this.ball = null;
+      this.idealValid = false;
+      x = it.target.x;
+      y = it.target.y;
+      yaw = this.yawOf(it.dir);
     } else {
       this.ball = null;
       this.idealValid = false;
@@ -723,7 +740,7 @@ class ClimberImpl implements Climber {
     this.started = true;
     this.wPush.snap(wPush);
     this.wCheer.snap(act === 'cheer' ? 1 : 0);
-    this.wTog.snap(act === 'idle' || (act === 'push' && !cur) ? 1 : 0);
+    this.wTog.snap(act === 'idle' || act === 'wait' || (act === 'push' && !cur) ? 1 : 0);
     this.yaw.snap(yaw);
     this.twist.snap(0);
     gp.stand(x, y / KAPPA, yaw);

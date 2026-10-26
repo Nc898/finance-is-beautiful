@@ -78,14 +78,18 @@ The snowballs (three per hill, the heart of the picture):
   them). Nothing vanishes away from the ball. Clumps along the track are deterministic in `progress` (clump i lies
   at track position p_i once the ball has passed it, and is seen falling only while playing), so scrubbing shows
   the same track.
-- The target ball is pushed by the climber; the others creep slowly down on their minimums by themselves (no one
-  touches them). Both are honest: place and size come only from the balance.
-- Cleared (`paidOff`): the last small ball reaches the snowbank and crumbles into it (a few chunks settle, a puff of
+- The balls wait in a row at the top of the hill. Each in turn (the strategy's order) is pushed off the top by the
+  climber and rolls down its lane as it is paid off: from the month it first gets the extra, `progress` is 1 − its
+  balance over its balance then. A waiting ball only shrinks (its minimums) and gathers snow (its interest); a debt
+  its minimums clear while it waits (the avalanche's medical bill, month 25) crumbles at the top, under its flag.
+  Place and size come only from the money (BallVisual in types.ts).
+- Cleared (`paidOff`): the last small ball reaches the snowbank (or, waiting, the top) and crumbles into it (a few chunks settle, a puff of
   powder), leaving a small mound and, planted in it, a little flag in the hill's colour. Only once; scrubbing
   back undoes it.
-- Each ball carries a small DOM name tag (positioned from ballAnchor): "Card 26%", "Car 6%", "Medical 0%".
+- Each ball carries a small DOM tag (positioned from ballAnchor): the debt and its rate ("Card 26%") over what is
+  owed on it now ("$11,458", the statement figure: up with the month's interest, down with the payment).
 
-Camera (story only): starts close on the tops of the lanes (focus 'both', zoom ~1.8), all six balls in view,
+Camera (story only): starts close on the tops of the lanes (focus 'both', zoom ~1.22), all six balls in view,
 and eases out to the whole valley as the first months pass (labels fade during the zoom, as in the vine).
 
 Performance: sky, mountains, pines, hills, creek and bank pre-rendered once per size into cached layers; per frame
@@ -96,14 +100,16 @@ only snowfall, the balls (cached textures, rotated), tracks and clumps, climbers
 One per hill, the vine gardener's character (same skeleton, measured walk, turning, depth sorting: build on
 src/vine/scene/gardener*.ts) dressed for winter: a knitted bobble hat, a scarf in the hill's colour (snowball:
 deep blue, avalanche: holly red), a padded coat, mittens, snow boots, breath that mists faintly in the cold.
-Proportions from geom.ts (CLIMBER_H, depthScale).
+Proportions from geom.ts (CLIMBER_H, depthScale): small beside the pines (the crest wood towers over a climber at
+the top of the lanes), its strides scaled to its size.
 
 Activities (ClimberIntent; the scene chooses, the climber performs; read climberApi.ts):
 - idle: stands easy, mittens together, a slow breath (misting), a glance up at the falling snow.
-- push: walks round to the uphill side of the target ball, sets both mittens on it near its widest point, leans
-  in, and walks with it down the lane at its pace (the ball sets the speed; the steps match it). Small balls mean
-  bending low; a big ball means arms up and shoulder in. When the target changes, the climber lets go, walks back
-  up to the next ball (round any ball in the way) and starts again.
+- The climbers work from the top of their hill. push: from behind the target ball, both mittens on it, leaning in,
+  it pushes the ball off the top and walks with it a little way (the ball sets the speed), then lets it roll on.
+- wait: walks (up its own lane, then across behind the waiting balls) to stand behind the next ball, facing down
+  its lane, ready to push it the moment it becomes the target; with no ball left to push, it watches the last one go
+  from the top. At the opening it waits behind the first ball.
 - cheer: a short glad moment when a ball breaks up (about 1.2 s): arms up or a fist and a nod, then back to work.
 - rest: walks to the sledge, sits (a smooth sit over ≥ 0.8 s), mittens on knees, leans back; small idle life.
 

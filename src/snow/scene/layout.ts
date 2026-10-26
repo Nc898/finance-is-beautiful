@@ -115,7 +115,8 @@ export function planPines(xmin: number, xmax: number): PinePlan[] {
       const cx = x < 500 ? HILL.snowball.crest.x : HILL.avalanche.crest.x;
       const mid = ins ? Math.max(0, 1 - Math.abs(x - cx) / 235) : 0;
       const nearValley = x > 440 && x < 560 ? 0.8 : 1;
-      const base = (52 + 52 * mid ** 0.8) * nearValley;
+      // tall: a person working at the top of the lanes comes to a fraction of their height
+      const base = (84 + 74 * mid ** 0.8) * nearValley;
       // groves of taller trees and lower stretches, so the wood has a skyline and not a fence
       const grove = 0.78 + 0.34 * Math.sin(x / 47 + row * 2.1) + 0.2 * Math.sin(x / 19 + 0.7);
       const H = base * rnd.range(0.7, 1.2) * Math.max(0.55, grove) * (row ? 1 : 0.9) * (rnd.chance(0.08) ? 1.3 : 1);
