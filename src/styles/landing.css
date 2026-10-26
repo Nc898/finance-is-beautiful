@@ -401,6 +401,91 @@ html[data-ready] .hero-sub {
   width: 100%;
 }
 
+/* ---------- The snow's entry: winter blue, a drift with snowflakes for a rule, birds perched on it ---------- */
+
+/* a hand-drawn drift line with a few snowflakes for the rule, and a cool winter wash behind the painting */
+.demo-item[data-theme='snow'] {
+  position: relative;
+  isolation: isolate;
+  border-top: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='14' viewBox='0 0 96 14'%3E%3Cpath d='M0 8c12-3 24-3 36 0s24 3 36 0c8-2 16-2.4 24-.8' fill='none' stroke='%231f5a80' stroke-opacity='.32' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M20 1.4v4.8M17.9 2.6l4.2 2.4M17.9 5l4.2-2.4M62 8.4v3.6M60.4 9.3l3.2 1.8M60.4 11.1l3.2-1.8' fill='none' stroke='%231f5a80' stroke-opacity='.42' stroke-width='.8' stroke-linecap='round'/%3E%3Ccircle cx='83' cy='3.6' r='.9' fill='%231f5a80' fill-opacity='.35'/%3E%3Ccircle cx='44' cy='3' r='.7' fill='%231f5a80' fill-opacity='.3'/%3E%3C/svg%3E")
+    0 0 / 96px 14px repeat-x;
+}
+.demo-item[data-theme='snow']::before {
+  content: '';
+  position: absolute;
+  inset: 4% -6% 0 34%;
+  z-index: -1;
+  background:
+    radial-gradient(48% 52% at 58% 55%, rgba(120, 150, 205, 0.16), transparent 72%),
+    radial-gradient(32% 40% at 30% 34%, rgba(150, 140, 205, 0.1), transparent 70%),
+    radial-gradient(30% 34% at 82% 78%, rgba(110, 160, 190, 0.12), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* words on the left, the painting on the right (the alternation down the page) */
+.demo[data-theme='snow'] {
+  --accent: #1f5a80;
+  --accent-deep: #17435f;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  padding-top: 30px;
+}
+.demo[data-theme='snow'] .demo-art {
+  order: 2;
+}
+.demo[data-theme='snow'] .demo-copy {
+  padding-right: 0;
+  padding-left: 24px;
+}
+
+/* the demo's own winter birds, perched on the rule above the painting (their feet on the drift line) */
+.snow-birds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.snow-bird {
+  position: absolute;
+  user-select: none;
+  transform-origin: 50% 97%;
+}
+.snow-bird.b1 { left: 63%; top: -31px; width: 48px; height: 40px; }
+.snow-bird.b2 { left: 68.5%; top: -40px; width: 60px; height: 50px; }
+.snow-bird.b3 { left: 91%; top: -31px; width: 48px; height: 40px; transform: scaleX(-1); }
+@media (prefers-reduced-motion: no-preference) {
+  /* a hop now and then, as a small bird on a branch does */
+  .snow-bird.b1 { animation: perch-hop 6.5s ease-in-out infinite; }
+  .snow-bird.b2 { animation: perch-hop 9s ease-in-out -3.4s infinite; }
+  .snow-bird.b3 { animation: perch-hop 7.8s ease-in-out -1.6s infinite; }
+}
+@keyframes perch-hop {
+  0%, 86%, 100% { translate: 0 0; }
+  90% { translate: 0 -4px; }
+  94% { translate: 0 0; }
+}
+
+/* a row of small snowballs for an underline: it rolls out under the words while hovered */
+.demo[data-theme='snow'] .demo-cta > span {
+  position: relative;
+  background: none;
+}
+.demo[data-theme='snow'] .demo-cta > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 0;
+  height: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Ccircle cx='3' cy='3' r='1.7' fill='%23fbf6ea' stroke='%2317435f' stroke-width='1.1'/%3E%3C/svg%3E")
+    0 0 / 10px 6px repeat-x;
+  transition: width 0.6s cubic-bezier(0.3, 0.6, 0.2, 1);
+}
+.demo[data-theme='snow']:hover .demo-cta > span::after,
+.demo[data-theme='snow']:focus-visible .demo-cta > span::after {
+  width: 100%;
+}
+
 /* ---------- Closing and footer ---------- */
 
 .closing {

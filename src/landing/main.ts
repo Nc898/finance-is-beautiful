@@ -33,6 +33,16 @@ const WAVE_ARROW =
 const TENDRIL_ARROW =
   '<svg class="demo-arrow" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 7.2c2.6-.2 4.4-1.6 5.6-3.2.9-1.2 2.4-1.1 2.6.2.2 1.1-1 1.7-1.6.9M7.8 6.4c3.6.4 7.4-.1 11.6-.4M14.6 1.3c1.6 2.1 3.2 3.6 5.4 4.9-2.2 1.6-3.9 3.2-5.2 4.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.2 6.2c-.2 1.9.9 3.2 2.6 3.4.2-1.8-.8-3-2.6-3.4z" fill="currentColor" opacity=".55"/></svg>';
 
+/** The snow's arrow: a snowball rolling off along the shaft. */
+const SNOWBALL_ARROW =
+  '<svg class="demo-arrow" viewBox="0 0 22 12" aria-hidden="true"><circle cx="3.2" cy="6.2" r="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7.4 6.2c4-.3 8.2-.3 12 .1M14.6 1.3c1.6 2.1 3.2 3.6 5.4 4.9-2.2 1.6-3.9 3.2-5.2 4.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/**
+ * Winter birds perched on the snow's rule, above its entry (decoration only): the demo's own chickadees and
+ * cardinal, painted by its bird painter and baked to small images (scripts/bake-snow-preview.mjs).
+ */
+const SNOW_BIRDS = [1, 2, 3].map((i) => `<img class="snow-bird b${i}" src="/assets/snow-bird-${i}.webp" alt="" decoding="async" />`).join('');
+
 /**
  * A few autumn leaves drifting around the vine's entry (decoration only), painted by the demo's own leaf painter
  * and baked to small images (scripts/bake-vine-preview.mjs).
@@ -53,9 +63,10 @@ function entry(d: Demo): HTMLLIElement {
     <div class="demo-copy">
       <h3 class="demo-title"></h3>
       <p class="demo-summary"></p>
-      <span class="demo-cta"><span>Open the demonstration</span>${d.theme === 'river' ? WAVE_ARROW : d.theme === 'vine' ? TENDRIL_ARROW : ARROW}</span>
+      <span class="demo-cta"><span>Open the demonstration</span>${d.theme === 'river' ? WAVE_ARROW : d.theme === 'vine' ? TENDRIL_ARROW : d.theme === 'snow' ? SNOWBALL_ARROW : ARROW}</span>
     </div>`;
   if (d.theme === 'vine') li.insertAdjacentHTML('afterbegin', `<div class="vine-leaves" aria-hidden="true">${LEAVES}</div>`);
+  if (d.theme === 'snow') li.insertAdjacentHTML('afterbegin', `<div class="snow-birds" aria-hidden="true">${SNOW_BIRDS}</div>`);
   a.querySelector('.demo-title')!.textContent = d.title;
   a.querySelector('.demo-summary')!.textContent = d.summary;
   li.append(a);

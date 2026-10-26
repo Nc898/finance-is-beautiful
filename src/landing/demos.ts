@@ -9,9 +9,9 @@ export interface Demo {
   /** One sentence. */
   summary: string;
   href: string;
-  /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, or the
-   *  vine's autumn rust, tendrils and falling leaves. */
-  theme: 'grove' | 'river' | 'vine';
+  /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the vine's
+   *  autumn rust, tendrils and falling leaves, or the snow's winter blue, snowflakes and birds on the rule. */
+  theme: 'grove' | 'river' | 'vine' | 'snow';
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -88,6 +88,21 @@ async function paintNipItInTheBud(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
+/**
+ * On a Roll mid-story: a ball rolling down each hill, the rest waiting at the top, both climbers up the hill. Baked
+ * from the real scene (scripts/bake-snow-preview.mjs), as the vine is; with no image the entry shows the paper.
+ */
+async function paintOnARoll(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-snow.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 export const DEMOS: Demo[] = [
   {
     slug: 'time-to-grow',
@@ -112,5 +127,13 @@ export const DEMOS: Demo[] = [
     href: './nip-it-in-the-bud.html',
     theme: 'vine',
     paintPreview: paintNipItInTheBud,
+  },
+  {
+    slug: 'on-a-roll',
+    title: 'On a Roll',
+    summary: 'Three debts, the same budget, and two orders to roll them away.',
+    href: './on-a-roll.html',
+    theme: 'snow',
+    paintPreview: paintOnARoll,
   },
 ];
