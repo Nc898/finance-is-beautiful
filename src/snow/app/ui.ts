@@ -267,7 +267,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   function applyInsets(): void {
     if (!stageW) return;
-    const capTop = $('caption').offsetTop;
+    const capTop = parseFloat(getComputedStyle($('caption')).getPropertyValue('--cap-top-closed')) || $('caption').offsetTop;
     const masthead = (document.querySelector('.masthead') as HTMLElement).offsetHeight;
     const top = Math.ceil(Math.max(masthead + 4, capTop + tallestCaption() + 4));
     const bottom = stageW < 700 ? BOTTOM_BAND_NARROW : BOTTOM_BAND_WIDE;
