@@ -24,23 +24,26 @@ const FRAME_MS = 1000 / 60 - 2;
 /** In reduced motion the scene keeps being drawn for this long after anything changes, so it can settle. */
 const SETTLE_MS = 1500;
 
-const rollCache = new WeakMap<SnowInputs, Record<StrategyId, Record<DebtId, number | null>>>();
+const rollCache = new WeakMap<SnowInputs, Record<StrategyId, Record<DebtId, number>>>();
 
 /**
- * Each debt's balance at the start of the month it first gets more than its minimum (the extra): from then it is
- * rolled down its lane. Null for a debt that never gets the extra (cleared by its minimums alone, at the top).
+ * The balance each debt rolls down its lane from (its place on the lane is 1 − balance / this). A debt that gets the
+ * extra rolls from its balance at the start of the month it first gets it: it waits at the top until then, for the
+ * climber to push it off. A debt its minimums alone pay off (it never gets the extra) rolls slowly down by itself
+ * from the start, from its starting balance, and reaches the foot as it is cleared: no ball vanishes at the top.
  */
-export function rollStarts(inputs: SnowInputs, id: StrategyId): Record<DebtId, number | null> {
+export function rollStarts(inputs: SnowInputs, id: StrategyId): Record<DebtId, number> {
   let hit = rollCache.get(inputs);
   if (!hit) {
-    hit = {} as Record<StrategyId, Record<DebtId, number | null>>;
+    hit = {} as Record<StrategyId, Record<DebtId, number>>;
     rollCache.set(inputs, hit);
   }
   const have = hit[id];
   if (have) return have;
   const rows = strategySchedule(inputs, id).rows;
-  const out = { medical: null, car: null, card: null } as Record<DebtId, number | null>;
+  const out: Record<DebtId, number> = { medical: 0, car: 0, card: 0 };
   for (const d of DEBTS) {
+    out[d] = inputs.debts[d].balance;
     for (let i = 0; i < rows.length; i++) {
       const start = i === 0 ? inputs.debts[d].balance : rows[i - 1]!.debts[d].balance;
       if (start <= 0.005) break;
@@ -71,7 +74,7 @@ export function hillVisual(snap: StrategySnapshot, inputs: SnowInputs): HillVisu
     return {
       id,
       size: Math.max(0, d.balance / scale),
-      progress: from === null ? 0 : Math.max(0, Math.min(1, 1 - d.balance / from)),
+      progress: Math.max(0, Math.min(1, 1 - d.balance / from)),
       queue: queue.indexOf(id),
       snowfall: d.interest / scale,
       rolling: d.payment / scale,

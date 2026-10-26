@@ -487,15 +487,20 @@ describe('scene frame values (hillVisual)', () => {
     // the car started rolling at month 4, from its balance then; the card still waits at the top; medical is done
     expect(rolls.medical).toBe(1000);
     expect(rolls.car).toBeCloseTo(5547.75, 2);
-    expect(v.balls[1].progress).toBeCloseTo(1 - snap.debts.car.balance / rolls.car!, 12);
+    expect(v.balls[1].progress).toBeCloseTo(1 - snap.debts.car.balance / rolls.car, 12);
     expect(v.balls[2].progress).toBe(0);
     expect(v.balls[0].progress).toBe(1);
     // the queue: the car is being rolled, the card is next, the medical bill is cleared
     expect(v.balls.map((b) => b.queue)).toEqual([-1, 0, 1]);
-    // avalanche: the medical bill never gets the extra; its minimums clear it at the top (month 25)
-    expect(rollStarts(D, 'avalanche').medical).toBeNull();
+    // avalanche: the medical bill never gets the extra; its minimums alone pay it off, so it rolls slowly down by
+    // itself from the start (never vanishing at the top) and reaches the foot as it is cleared (month 25)
+    expect(rollStarts(D, 'avalanche').medical).toBe(1000);
+    const a12 = hillVisual(allStrategies(D, 12)[1], D);
+    expect(a12.balls[0].progress).toBeCloseTo(1 - allStrategies(D, 12)[1].debts.medical.balance / 1000, 12);
+    expect(a12.balls[0].progress).toBeGreaterThan(0.4);
+    expect(a12.balls[1].progress).toBe(0);
     const a25 = hillVisual(allStrategies(D, 25)[1], D);
-    expect(a25.balls[0]).toMatchObject({ paidOff: true, progress: 0, queue: -1 });
+    expect(a25.balls[0]).toMatchObject({ paidOff: true, progress: 1, queue: -1 });
     expect(a25.balls.map((b) => b.queue)).toEqual([-1, 1, 0]);
     for (let m = 0; m <= END; m += 0.25) {
       for (const id of [0, 1] as const) {

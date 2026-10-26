@@ -80,10 +80,11 @@ The snowballs (three per hill, the heart of the picture):
   the same track.
 - The balls wait in a row at the top of the hill. Each in turn (the strategy's order) is pushed off the top by the
   climber and rolls down its lane as it is paid off: from the month it first gets the extra, `progress` is 1 − its
-  balance over its balance then. A waiting ball only shrinks (its minimums) and gathers snow (its interest); a debt
-  its minimums clear while it waits (the avalanche's medical bill, month 25) crumbles at the top, under its flag.
+  balance over its balance then. A waiting ball only shrinks (its minimums) and gathers snow (its interest). A debt
+  its minimums alone pay off (it never gets the extra: the avalanche's medical bill, cleared at month 25) rolls
+  slowly down by itself from the start, reaching the snowbank as it is cleared; no ball ever vanishes at the top.
   Place and size come only from the money (BallVisual in types.ts).
-- Cleared (`paidOff`): the last small ball reaches the snowbank (or, waiting, the top) and crumbles into it (a few chunks settle, a puff of
+- Cleared (`paidOff`): the last small ball reaches the snowbank and crumbles into it (a few chunks settle, a puff of
   powder), leaving a small mound and, planted in it, a little flag in the hill's colour. Only once; scrubbing
   back undoes it.
 - Each ball carries a small DOM tag (positioned from ballAnchor): the debt and its rate ("Card 26%") over what is

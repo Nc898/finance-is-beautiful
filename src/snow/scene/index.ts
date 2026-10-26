@@ -162,7 +162,9 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
     if (cheering) return { activity: 'cheer', target: null, dir: null, radius: 0 };
     if (hv.paidOff) return { activity: 'rest', target: null, dir: null, radius: 0 };
     const tb = hv.balls.find((b) => b.queue === 0);
-    const nb = hv.balls.find((b) => b.queue === 1);
+    // the next ball the climber will push: the next in the order still waiting at the top (one its minimums alone
+    // pay off rolls down by itself, and is not waited for)
+    const nb = hv.balls.filter((b) => b.queue >= 1 && b.progress < 0.02).sort((a, b) => a.queue - b.queue)[0];
     if (!tb) return { activity: 'idle', target: null, dir: null, radius: 0 };
     // the opening, before anything rolls: ready behind the first ball
     if (mps === 0 && tb.progress < 0.002) return waitBehind(id, tb.id);

@@ -141,7 +141,8 @@ export interface BallVisual {
   /**
    * How far down its lane (0 = waiting at the top, 1 = at the foot). A ball waits at the top until it first gets the
    * extra (its minimums only shrink it there); from then it rolls: 1 − balance / its balance when it started to get
-   * the extra, clamped 0 … 1. A debt cleared by its minimums alone is cleared at the top (progress 0).
+   * the extra, clamped 0 … 1. A debt its minimums alone pay off (it never gets the extra) rolls slowly down by itself
+   * from the start (1 − balance / its starting balance), reaching the foot as it is cleared.
    */
   progress: number;
   /** Its place in the hill's order among the debts still owed: 0 = the target (being rolled), 1 = next, …; −1 cleared. */
