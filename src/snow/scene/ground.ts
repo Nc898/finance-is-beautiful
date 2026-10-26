@@ -318,6 +318,115 @@ export function paintBank(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): vo
   }
 }
 
+/**
+ * The finish line on each hill: a checkered band painted across the snow through the ends of its three lanes, where
+ * every ball breaks up and its flag goes in. Two rows of squares in a deep indigo wash (each laid twice, a little
+ * deformed, so its edges soak and breathe), a faint shadow along its front edge as if pressed into the snow, a broken
+ * pencil edge, and a small striped post with a checkered pennant at each end.
+ */
+export function paintFinish(ctx: CanvasRenderingContext2D, rnd: Rand): void {
+  const INK = '#25305e';
+  for (const id of STRATEGIES) {
+    const L = LANES[id];
+    const ends = DEBTS.map((d) => L[d].end).sort((a, b) => a.x - b.x);
+    const a = ends[0]!;
+    const b = ends[ends.length - 1]!;
+    const slope = (b.y - a.y) / (b.x - a.x);
+    // from just outside the outer lanes (clear of a ball's crumble), along the line through their ends
+    const x0 = a.x - 46;
+    const x1 = b.x + 42;
+    const yAt = (x: number) => a.y + (x - a.x) * slope;
+    const H = 7.6;
+    const SQ = 9.5;
+    // the pressed groove: a cool shadow along the band's front, a lit lip above it
+    const front: number[] = [];
+    for (let x = x0; x <= x1; x += 4) front.push(x, yAt(x) + H / 2 + 1.2);
+    ctx.fillStyle = rgba('#7c84c4', 0.22);
+    ribbon(ctx, front, 2.6, 0.5);
+    const lipTop: number[] = [];
+    for (let x = x0; x <= x1; x += 4) lipTop.push(x, yAt(x) - H / 2 - 1.1);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ribbon(ctx, lipTop, 1.6, 0.5);
+    // the checks: two rows, alternating, nearer squares a hair larger
+    const n = Math.round((x1 - x0) / SQ);
+    const w = (x1 - x0) / n;
+    for (let i = 0; i < n; i++) {
+      for (let row = 0; row < 2; row++) {
+        if ((i + row) % 2 === 1) continue;
+        const xa = x0 + i * w;
+        const xb = xa + w;
+        const ya = (x: number) => yAt(x) - H / 2 + row * (H / 2);
+        const poly = [xa, ya(xa), xb, ya(xb), xb, ya(xb) + H / 2, xa, ya(xa) + H / 2];
+        ctx.fillStyle = rgba(INK, 0.42);
+        for (let k = 0; k < 2; k++) {
+          tracePoly(ctx, deform(poly, rnd, 2, 0.05));
+          ctx.fill();
+        }
+      }
+    }
+    // the band's edges: broken pencil
+    const top: number[] = [];
+    const bot: number[] = [];
+    for (let x = x0; x <= x1; x += 3) {
+      top.push(x, yAt(x) - H / 2);
+      bot.push(x, yAt(x) + H / 2);
+    }
+    dryBrush(ctx, top, 0.6, INK, 0.5, rnd, 0.25);
+    dryBrush(ctx, bot, 0.7, INK, 0.55, rnd, 0.2);
+    // a post at each end, with a little checkered pennant flying from it
+    for (const [px, dir] of [[x0 - 2, -1], [x1 + 2, 1]] as const) {
+      const py = yAt(px);
+      const s = depthScale(py);
+      const ph = 26 * s;
+      ctx.fillStyle = rgba('#8a90cc', 0.25);
+      ctx.beginPath();
+      ctx.ellipse(px + 3 * s, py + 1, 5 * s, 1.4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // the pole: white and indigo bands
+      const bands = 6;
+      for (let k = 0; k < bands; k++) {
+        ctx.fillStyle = k % 2 ? 'rgba(250,250,253,0.98)' : rgba(INK, 0.9);
+        ctx.fillRect(px - 0.9 * s, py - ph + (k * ph) / bands, 1.8 * s, ph / bands + 0.2);
+      }
+      ctx.strokeStyle = rgba(INK, 0.7);
+      ctx.lineWidth = 0.35;
+      ctx.strokeRect(px - 0.9 * s, py - ph, 1.8 * s, ph);
+      // the pennant: a little checkered flag, waving outward from the line
+      const fx = px + dir * 0.9 * s;
+      const fy = py - ph + 1;
+      const fw = 9 * s;
+      const fh = 6 * s;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.quadraticCurveTo(fx + dir * fw * 0.5, fy - 1 * s, fx + dir * fw, fy + 0.6 * s);
+      ctx.lineTo(fx + dir * fw, fy + fh + 0.6 * s);
+      ctx.quadraticCurveTo(fx + dir * fw * 0.5, fy + fh - 1 * s, fx, fy + fh);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(252,252,255,0.97)';
+      ctx.fill();
+      ctx.clip();
+      ctx.fillStyle = rgba(INK, 0.85);
+      const c = fh / 2;
+      for (let i = 0; i * c < fw + 1; i++) {
+        for (let r = 0; r < 2; r++) {
+          if ((i + r) % 2) continue;
+          ctx.fillRect(fx + dir * i * c - (dir < 0 ? c : 0), fy - 1.5 * s + r * c + (i * 0.4 * s) / 3, c, c);
+        }
+      }
+      ctx.restore();
+      ctx.strokeStyle = rgba(INK, 0.6);
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.quadraticCurveTo(fx + dir * fw * 0.5, fy - 1 * s, fx + dir * fw, fy + 0.6 * s);
+      ctx.lineTo(fx + dir * fw, fy + fh + 0.6 * s);
+      ctx.quadraticCurveTo(fx + dir * fw * 0.5, fy + fh - 1 * s, fx, fy + fh);
+      ctx.stroke();
+    }
+  }
+}
+
 /** a rock poking through the snow: a grey-violet wash, a snow cap, a cast shadow to the lower right */
 function paintRock(ctx: CanvasRenderingContext2D, rnd: Rand, x: number, y: number, r: number): void {
   const n = 9;

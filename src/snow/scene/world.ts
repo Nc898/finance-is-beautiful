@@ -13,7 +13,7 @@ import { HILL } from './geom';
 import { crestLine, planPines, ridgeBack, woodTop, type PinePlan } from './layout';
 import { hazeSprite, layPine, makePine, type PineKind, type PineSprite } from './pines';
 import { paintMountains, type View } from './mountains';
-import { paintBank, paintLanes, paintScatter, paintSnowfield } from './ground';
+import { paintBank, paintFinish, paintLanes, paintScatter, paintSnowfield } from './ground';
 import { paintBridge, paintCreek } from './creek';
 
 export interface WorldLayer {
@@ -149,6 +149,8 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   if (!check()) return null;
   paintBank(ctx, rnd, v);
   paintScatter(ctx, rnd, v);
+  // the finish line over the snow's rocks and grass
+  paintFinish(ctx, rnd);
   lg('bank, rocks');
   await tick();
   if (!check()) return null;
