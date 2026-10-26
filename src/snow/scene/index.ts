@@ -4,8 +4,8 @@
  * Painted once per size: the paper and winter sky with its hazy sun (screen space), then the world layer (mountains,
  * ridge, hillsides with their light and shade, the frozen creek and bridge, the snowbank, rocks and grass, and the
  * pines: a wood along each crest, a stand in the valley, big pines at the edges), the ball bodies, the sledges.
- * Per frame: the pressed tracks and the clumps lying in them, then (sorted by depth) the balls, climbers, sledges and
- * the mounds with their flags, then the falling snow.
+ * Per frame: the pressed tracks and the clumps lying in them, then (sorted by depth) the valley and edge pines, the
+ * birds in them, the balls, climbers, sledges and the mounds with their flags, then the falling snow.
  *
  * The scene decides WHAT each climber does (as the vine's tend()); the climber decides HOW. Balls move only by the
  * frame's data. A jump of the timeline (scrubbing) shows the moment directly: tracks and clumps are functions of
@@ -21,6 +21,8 @@ import { buildWorld, type WorldLayer } from './world';
 import { BallView, buildBallArt, type BallArt } from './balls';
 import { makeSledge } from './snowArt';
 import { Snowfall } from './snowfall';
+import { Birds } from './birds';
+import { makeBirdArt } from './birdArt';
 import { createClimber } from './climber';
 import type { Climber, ClimberIntent } from './climberApi';
 
@@ -41,6 +43,7 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
   let art: BallArt | null = null;
   let sledges: Record<StrategyId, Sledge> | null = null;
   let snow: Snowfall | null = null;
+  let birds: Birds | null = null;
   let lastZ: ZoomXf = { a: 1, bx: 0, by: 0 };
   let lastT = -1;
   let gen = 0;
@@ -72,6 +75,9 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
       const sq = Math.min(5, q * 2.4);
       const sl = { snowball: makeSledge(false, sq), avalanche: makeSledge(true, sq) };
       const fl = new Snowfall(ba.flake, W.puffSpots, W.xmin, W.xmax, W.ymax, -c.oy / c.s);
+      // the birds' sprites, sharp enough for the nearest bird at the opening zoom
+      const bl = Math.round(Math.min(120, Math.max(28, 16 * 1.25 * q * 1.4)));
+      const bd = new Birds(W.perches, { chickadee: makeBirdArt('chickadee', bl), cardinal: makeBirdArt('cardinal', bl) }, ba.flake);
       for (const id of STRATEGIES) if (!climbers[id]) climbers[id] = createClimber(id, Math.min(6, q * 3));
       // swap everything in together: the previous size keeps rendering until the new caches are complete
       cam = c;
@@ -84,6 +90,7 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
       art = ba;
       sledges = sl;
       snow = fl;
+      birds = bd;
       for (const v of views.values()) v.art = ba;
       if (!readyDone) {
         readyDone = true;
@@ -134,7 +141,7 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
     },
     render(frame) {
       last = frame;
-      if (destroyed || !cam || !paper || !world || !art || !sledges || !snow) return;
+      if (destroyed || !cam || !paper || !world || !art || !sledges || !snow || !birds) return;
       const c = cam;
       const z = zoomTransform(c, insets, frame.camera?.zoom ?? 1, frame.camera?.focus ?? 'both');
       lastZ = z;
@@ -204,8 +211,12 @@ export function createSnowScene(canvas: HTMLCanvasElement): SnowSceneAPI {
       }
       // ---- the ground layer: the pressed tracks, the clumps lying in them
       for (const v of views.values()) v.drawGround(ctx);
-      // ---- everything that stands, nearest last
+      // ---- everything that stands, nearest last: the near pines and the birds in them among the rest
       const items: Array<{ y: number; draw: () => void }> = [];
+      for (const p of world.standing) items.push({ y: p.y, draw: () => ctx.drawImage(p.cv, p.x0, p.y0, p.w, p.h) });
+      if (reduced) birds.still();
+      else birds.update(dt);
+      items.push(...birds.items(ctx));
       for (const id of STRATEGIES) {
         const s = sledges[id];
         const r = REST[id];

@@ -483,8 +483,28 @@ export class BallView {
     band(-1, -0.72);
     band(-0.98, -0.84);
     band(-0.97, -0.91);
-    // the lit lip: crumbled snow heaped along both edges in lumps (paper white over a faint violet underside)
+    // the lit lip: crumbled snow heaped along both edges in lumps (paper white over a faint violet underside), built
+    // into two paths only when the track has grown by a lump, so each frame is two fills, not hundreds
     const lumps = Math.floor(P / 0.012);
+    const lipKey = `${lumps}|${this.s0.toFixed(4)}`;
+    if (lipKey !== this.lipN) {
+      this.lipN = lipKey;
+      this.lipShade = new Path2D();
+      this.lipLit = new Path2D();
+      this.buildLip(lumps);
+    }
+    ctx.fillStyle = 'rgba(112,120,196,0.16)';
+    ctx.fill(this.lipShade!);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fill(this.lipLit!);
+    this.drawTrackPencil(ctx, C);
+  }
+
+  private lipN = '';
+  private lipShade: Path2D | null = null;
+  private lipLit: Path2D | null = null;
+
+  private buildLip(lumps: number): void {
     for (let k = 1; k < lumps; k++) {
       const p = k * 0.012;
       const h = Math.sin(k * 12.9898 + this.s0 * 78.233) * 43758.5453;
@@ -495,15 +515,14 @@ export class BallView {
       const side = u < 0.68 ? -1 : 1;
       const x = q.x + side * (w + 0.6 + u * 0.8);
       const r = Math.max(0.6, w * (0.12 + u * 0.1));
-      ctx.fillStyle = 'rgba(112,120,196,0.16)';
-      ctx.beginPath();
-      ctx.ellipse(x + r * 0.25, q.y + r * 0.3, r * 1.25, r * 0.45, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.beginPath();
-      ctx.ellipse(x, q.y, r * 1.1, r * 0.42, 0, 0, Math.PI * 2);
-      ctx.fill();
+      this.lipShade!.moveTo(x + r * 0.25 + r * 1.25, q.y + r * 0.3);
+      this.lipShade!.ellipse(x + r * 0.25, q.y + r * 0.3, r * 1.25, r * 0.45, 0, 0, Math.PI * 2);
+      this.lipLit!.moveTo(x + r * 1.1, q.y);
+      this.lipLit!.ellipse(x, q.y, r * 1.1, r * 0.42, 0, 0, Math.PI * 2);
     }
+  }
+
+  private drawTrackPencil(ctx: CanvasRenderingContext2D, C: number[]): void {
     // a pencil line along the shaded edge that comes and goes (and wavers), never ruled
     ctx.strokeStyle = 'rgba(66,74,150,0.22)';
     ctx.lineWidth = 0.45;
