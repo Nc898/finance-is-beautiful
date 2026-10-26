@@ -6,7 +6,6 @@ import { DEBTS, allStrategies, largestStart, strategySchedule } from '../engine'
 import type { DebtId, SnowInputs, StrategyId, StrategySnapshot } from '../engine';
 import type { BallVisual, HillVisual, SnowFrame, SnowSceneAPI } from '../types';
 import type { Store } from './store';
-import { CAMERA_ZOOM, storyCamera } from './story';
 import type { UI } from './ui';
 
 export interface Loop {
@@ -92,19 +91,14 @@ export function startLoop(store: Store, scene: SnowSceneAPI, ui: UI): Loop {
   let dirty = true;
   let lastMonths = NaN;
   let lastInputs: unknown = null;
-  let lastCamKey = '';
   let running = true;
-  let camZoom = 1;
-  let camInit = false;
-  let camFocus: 'both' = 'both';
-  let lastFade = -1;
   let settleUntil = 0;
 
   const frame = (now: number) => {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // Motion is capped at 60 fps: skip display refreshes until a 60 fps frame is due. The clock advances by
-    // the real elapsed time, so playback speed and story length are unchanged.
+    // the real elapsed time, so playback speed is unchanged.
     if (now - last < FRAME_MS) return;
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
@@ -116,33 +110,14 @@ export function startLoop(store: Store, scene: SnowSceneAPI, ui: UI): Loop {
     // Numbers and text (DOM touched only when displayed values change).
     ui.update(snaps);
 
-    const motion = !state.reducedMotion;
-
-    // Opening camera move (story only). Eased, so leaving the story mid-zoom glides back to the full view;
-    // the first frame starts already close in.
-    const camTarget = state.mode === 'story' ? storyCamera(state.storyTime, inputs, state.reducedMotion) : undefined;
-    const tz = camTarget?.zoom ?? 1;
-    if (camTarget) camFocus = camTarget.focus;
-    camZoom = camInit && motion ? camZoom + (tz - camZoom) * (1 - Math.exp(-dt / 0.35)) : tz;
-    camInit = true;
-    if (Math.abs(camZoom - 1) < 0.002) camZoom = 1;
-    const camKey = camZoom.toFixed(3);
-    if (!motion) {
-      const changed = dirty || months !== lastMonths || inputs !== lastInputs || camKey !== lastCamKey;
+    if (state.reducedMotion) {
+      const changed = dirty || months !== lastMonths || inputs !== lastInputs;
       if (changed) settleUntil = now + SETTLE_MS;
       if (!changed && now > settleUntil) return;
     }
-    lastCamKey = camKey;
     lastMonths = months;
     lastInputs = inputs;
     dirty = false;
-
-    // The hill labels wait out the close-up and fade back in over the last part of the ease out.
-    const fade = Math.max(0, Math.min(1, 1 - (camZoom - 1) / ((CAMERA_ZOOM - 1) * 0.6)));
-    if (Math.abs(fade - lastFade) > 0.01 || (fade === 1 && lastFade !== 1)) {
-      document.documentElement.style.setProperty('--label-fade', fade.toFixed(3));
-      lastFade = fade;
-    }
 
     const f: SnowFrame = {
       timeMs: now,
@@ -150,7 +125,6 @@ export function startLoop(store: Store, scene: SnowSceneAPI, ui: UI): Loop {
       speed: state.playing ? state.speed : 1,
       hills: [hillVisual(snaps[0], inputs), hillVisual(snaps[1], inputs)],
       reducedMotion: state.reducedMotion,
-      camera: camZoom > 1 ? { zoom: camZoom, focus: camFocus } : undefined,
     };
     scene.render(f);
     ui.place();

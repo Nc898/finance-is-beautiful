@@ -2,22 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SNOW_INPUTS, SNOW_FIELDS, SNOW_LIMITS, allStrategies, horizonMonths, strategySchedule } from '../../src/snow/engine';
 import type { SnowInputs } from '../../src/snow/engine';
 import {
-  EXPLORE_MONTHS_PER_SECOND,
   FIELDS,
   FIELD_RANGE,
   MAX_DT,
   createStore,
   draftToInputs,
-  exploreRate,
+  PLAY_SECONDS,
   fieldStep,
   inputsToDraft,
   parseNumber,
+  playRate,
   rateToDraft,
   splitField,
 } from '../../src/snow/app/store';
 import type { Reason } from '../../src/snow/app/store';
 import { hillVisual, rollStarts } from '../../src/snow/app/loop';
-import { STORY_DURATION } from '../../src/snow/app/story';
 import { resultsSentence, scrubSentence } from '../../src/snow/app/text';
 
 const D = DEFAULT_SNOW_INPUTS;
@@ -77,7 +76,7 @@ describe('drafts', () => {
 });
 
 describe('commitInputs', () => {
-  it('applies valid drafts, changes the timeline and leaves the story', () => {
+  it('applies valid drafts and changes the timeline, paused', () => {
     const s = createStore();
     expect(s.horizon()).toBe(END);
     s.actions.setDraftField('card.apr', '30');
@@ -85,7 +84,6 @@ describe('commitInputs', () => {
     expect(s.state.inputs.debts.card.apr).toBeCloseTo(0.3, 12);
     expect(s.horizon()).toBe(horizonMonths(s.state.inputs));
     expect(s.horizon()).toBeGreaterThan(END);
-    expect(s.state.mode).toBe('explore');
     expect(s.state.playing).toBe(false);
   });
 
@@ -99,7 +97,6 @@ describe('commitInputs', () => {
     expect(s.state.inputs).toEqual(D);
     expect(s.state.errors['car.balance']).toMatch(/between \$100 and \$100,000/);
     expect(s.state.errors['card.minPayment']).toMatch(/must be a number/);
-    expect(s.state.mode).toBe('story'); // an invalid edit does not leave the story
     expect(reasons).toContain('errors');
     s.actions.setDraftField('car.balance', '7,000');
     s.actions.setDraftField('card.minPayment', '320');
@@ -155,16 +152,18 @@ describe('commitInputs', () => {
     expect(s.state.inputs.debts.car.apr).toBe(0);
   });
 
-  it('a no-op commit does not leave the story', () => {
+  it('a no-op commit changes nothing and tells no one', () => {
     const s = createStore();
+    const reasons: Reason[] = [];
+    s.subscribe((r) => reasons.push(r));
     s.actions.setDraftField('card.apr', '26');
     s.actions.commitInputs();
-    expect(s.state.mode).toBe('story');
+    expect(s.state.inputs).toEqual(D);
+    expect(reasons).not.toContain('inputs');
   });
 
   it('shortening the timeline clamps the clock to the new end and pauses', () => {
     const s = createStore();
-    s.actions.skipToExplore();
     s.actions.scrubTo(31);
     s.actions.setDraftField('budget', '3,000');
     s.actions.commitInputs();
@@ -286,21 +285,29 @@ describe('stepField', () => {
 });
 
 describe('playback', () => {
-  it('story plays at 1x and ends in explore at the later payoff, paused', () => {
+  it('starts at month 0, paused, and does not move until played', () => {
+    const s = createStore();
+    expect(s.state.months).toBe(0);
+    expect(s.state.playing).toBe(false);
+    run(s, 3);
+    expect(s.state.months).toBe(0);
+    expect(s.state.monthsPerSecond).toBe(0);
+  });
+
+  it('plays the whole timeline in PLAY_SECONDS at 1x, then stops at the end, paused', () => {
     const s = createStore();
     const reasons: Reason[] = [];
     s.subscribe((r) => reasons.push(r));
     s.actions.play();
     expect(s.state.playing).toBe(true);
-    run(s, 20);
-    expect(s.state.storyTime).toBeGreaterThan(19);
-    expect(s.state.storyTime).toBeLessThan(21);
-    run(s, STORY_DURATION);
-    expect(s.state.mode).toBe('explore');
-    expect(s.state.playing).toBe(false);
+    run(s, PLAY_SECONDS / 2);
+    expect(s.state.months).toBeCloseTo(END / 2, 0);
+    expect(s.state.monthsPerSecond).toBeCloseTo(END / PLAY_SECONDS, 5);
+    run(s, PLAY_SECONDS);
     expect(s.state.months).toBe(END);
-    expect(s.state.exploreHint).toBe(true);
-    expect(reasons).toContain('story-end');
+    expect(s.state.playing).toBe(false);
+    expect(s.state.monthsPerSecond).toBe(0);
+    expect(reasons).toContain('play-end');
   });
 
   it('speed runs from 0.1x to 5x, in tenths', () => {
@@ -315,20 +322,19 @@ describe('playback', () => {
     expect(s.state.speed).toBe(1);
   });
 
-  it('speed scales the story clock', () => {
+  it('speed scales the pace', () => {
     const s = createStore();
     s.actions.setSpeed(4);
     s.actions.play();
-    run(s, 5);
-    expect(s.state.storyTime).toBeGreaterThan(19);
-    expect(s.state.storyTime).toBeLessThan(21);
+    run(s, 3);
+    expect(s.state.months).toBeCloseTo(4 * 3 * playRate(END), 0);
   });
 
-  it('months advance with the story, never backwards', () => {
+  it('months advance while playing, never backwards', () => {
     const s = createStore();
     s.actions.play();
     let prev = 0;
-    for (let i = 0; i < 30 * 60; i++) {
+    for (let i = 0; i < 30 * 30; i++) {
       s.tick(1 / 30);
       expect(s.state.months).toBeGreaterThanOrEqual(prev - 1e-12);
       prev = s.state.months;
@@ -336,117 +342,63 @@ describe('playback', () => {
     expect(s.state.months).toBe(END);
   });
 
-  it('monthsPerSecond is the live clock rate: 0 in the intro, moving through the long stretch, 0 when paused', () => {
-    const s = createStore();
-    s.actions.play();
-    run(s, 3);
-    expect(s.state.monthsPerSecond).toBe(0); // the intro holds still
-    run(s, 20); // t = 23
-    expect(s.state.monthsPerSecond).toBeGreaterThan(1);
-    s.actions.pause();
-    expect(s.state.monthsPerSecond).toBe(0);
-    s.tick(1 / 30);
-    expect(s.state.monthsPerSecond).toBe(0);
+  it('every timeline takes about the same time to play; never slower than half a month a second', () => {
+    expect(playRate(32)).toBeCloseTo(32 / PLAY_SECONDS, 12);
+    expect(playRate(720)).toBeCloseTo(720 / PLAY_SECONDS, 12);
+    expect(playRate(4)).toBe(0.5);
   });
 
-  it('explore advances 3 months per second at 1x and stops at the end', () => {
+  it('pressing play at the end starts over from month 0', () => {
     const s = createStore();
-    s.actions.skipToExplore();
-    s.actions.scrubTo(0);
-    s.actions.play();
-    run(s, 4);
-    expect(s.state.months).toBeCloseTo(4 * EXPLORE_MONTHS_PER_SECOND, 0);
-    expect(s.state.monthsPerSecond).toBeCloseTo(EXPLORE_MONTHS_PER_SECOND, 5);
-    s.actions.setSpeed(2);
-    run(s, 2);
-    expect(s.state.months).toBeCloseTo(24, 0);
-    expect(s.state.monthsPerSecond).toBeCloseTo(2 * EXPLORE_MONTHS_PER_SECOND, 5);
-    run(s, 20);
-    expect(s.state.months).toBe(END);
-    expect(s.state.playing).toBe(false);
-    expect(s.state.monthsPerSecond).toBe(0);
-  });
-
-  it('very long timelines play faster so they still take about 30 seconds', () => {
-    expect(exploreRate(32)).toBe(EXPLORE_MONTHS_PER_SECOND);
-    expect(exploreRate(720)).toBe(24);
-  });
-
-  it('pressing play at the end restarts from month 0', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
+    s.actions.scrubTo(END);
     s.actions.play();
     expect(s.state.months).toBe(0);
     expect(s.state.playing).toBe(true);
   });
 
-  it('clamps huge frame gaps (tab switches) to MAX_DT', () => {
+  it('pause stops the clock', () => {
     const s = createStore();
-    s.actions.skipToExplore();
-    s.actions.scrubTo(0);
     s.actions.play();
-    s.tick(30);
-    expect(s.state.months).toBeCloseTo(EXPLORE_MONTHS_PER_SECOND * MAX_DT, 12);
+    run(s, 2);
+    s.actions.pause();
+    const at = s.state.months;
+    run(s, 2);
+    expect(s.state.months).toBe(at);
+    expect(s.state.monthsPerSecond).toBe(0);
   });
 
-  it('scrubbing leaves the story, pauses, clamps and clears the hint', () => {
+  it('clamps huge frame gaps (tab switches) to MAX_DT', () => {
+    const s = createStore();
+    s.actions.play();
+    s.tick(30);
+    expect(s.state.months).toBeCloseTo(playRate(END) * MAX_DT, 12);
+  });
+
+  it('scrubbing pauses and clamps', () => {
     const s = createStore();
     s.actions.play();
     s.actions.scrubTo(13);
-    expect(s.state.mode).toBe('explore');
     expect(s.state.playing).toBe(false);
     expect(s.state.months).toBe(13);
     s.actions.scrubTo(9999);
     expect(s.state.months).toBe(END);
     s.actions.scrubTo(-4);
     expect(s.state.months).toBe(0);
-    expect(s.state.exploreHint).toBe(false);
-  });
-
-  it('skip jumps to the end with the hint; replay starts over and plays', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
-    expect(s.state.months).toBe(END);
-    expect(s.state.exploreHint).toBe(true);
-    s.actions.replayStory();
-    expect(s.state.mode).toBe('story');
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.months).toBe(0);
-    expect(s.state.playing).toBe(true);
-    expect(s.state.exploreHint).toBe(false);
-  });
-
-  it('seekStory moves the shared clock with the story', () => {
-    const s = createStore();
-    s.actions.seekStory(17.5);
-    expect(s.state.mode).toBe('story');
-    expect(s.state.months).toBeCloseTo(4, 12);
-    s.actions.seekStory(1e6);
-    expect(s.state.storyTime).toBe(s.storyLength());
-    expect(s.state.months).toBe(END);
   });
 });
 
 describe('reduced motion', () => {
-  it('starts at the first hold, paused, and does not move until played', () => {
+  it('changes no time: the clock stays where it is, and still plays when asked', () => {
     const s = createStore({ reducedMotion: true });
     expect(s.state.reducedMotion).toBe(true);
     expect(s.state.playing).toBe(false);
-    run(s, 3);
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.months).toBe(0);
-  });
-
-  it('switching restarts the story paused with the matching timeline', () => {
-    const s = createStore();
-    s.actions.play();
-    run(s, 15);
-    s.actions.setReducedMotion(true);
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.playing).toBe(false);
-    expect(s.storyLength()).not.toBe(STORY_DURATION);
+    s.actions.scrubTo(10);
     s.actions.setReducedMotion(false);
-    expect(s.storyLength()).toBe(STORY_DURATION);
+    expect(s.state.months).toBe(10);
+    s.actions.setReducedMotion(true);
+    s.actions.play();
+    run(s, 1);
+    expect(s.state.months).toBeGreaterThan(10);
   });
 });
 

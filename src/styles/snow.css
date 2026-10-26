@@ -18,6 +18,9 @@
   /* text over the painted sky: a softer ink than --ink (never the panel's --muted), on a pale lifted wash */
   --ink-soft: #4a4236;
   --lift: rgba(251, 246, 234, 0.74);
+  /* the introduction card's ink (src/styles/intro.css) */
+  --intro-accent: var(--snow-ink);
+  --intro-accent-deep: #17435f;
   --rule: rgba(47, 42, 34, 0.18);
   --rule-strong: rgba(47, 42, 34, 0.55);
   --wash: rgba(47, 42, 34, 0.07);
@@ -112,11 +115,6 @@ input {
   pointer-events: none;
 }
 
-/* during the opening close-up the labels wait; they fade in as the camera settles */
-.overlay .hill-label {
-  /* filter: opacity() composes with each label's own show/hide opacity */
-  filter: opacity(var(--label-fade, 1));
-}
 
 .masthead {
   position: absolute;

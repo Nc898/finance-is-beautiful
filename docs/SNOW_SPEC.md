@@ -3,7 +3,7 @@
 Fourth demonstration in the "Finance is beautiful" collection, the second of three about debt. Same world as
 Time to Grow, Against the Current and Nip It in the Bud: warm ivory paper, **ink drawing under watercolor washes**,
 light from the upper left, quiet type (Libre Caslon Display / Text italic, Figtree), collapsible right-hand
-controls panel, guided story that hands off to exploration, 60 fps. The art must hold up beside the other three
+controls panel, an introduction then free exploration (no scripted story), 60 fps. The art must hold up beside the other three
 at 2× (the user's standing rule: never present art below the sister demos).
 
 Season: **winter**, with **pine trees**. Sky: **gentle snowfall** from a soft pale sky. Working title "On a Roll"
@@ -90,8 +90,7 @@ The snowballs (three per hill, the heart of the picture):
 - Each ball carries a small DOM tag (positioned from ballAnchor): the debt and its rate ("Card 26%") over what is
   owed on it now ("$11,458", the statement figure: up with the month's interest, down with the payment).
 
-Camera (story only): starts close on the tops of the lanes (focus 'both', zoom ~1.22), all six balls in view,
-and eases out to the whole valley as the first months pass (labels fade during the zoom, as in the vine).
+Camera: always the whole valley (no zoom).
 
 Performance: sky, mountains, pines, hills, creek and bank pre-rendered once per size into cached layers; per frame
 only snowfall, the balls (cached textures, rotated), tracks and clumps, climbers, and the occasional puff. Target ≤
@@ -119,21 +118,26 @@ at least 0.25 s; a proper gait with no foot sliding (stride matches ground speed
 through a three-quarter view; mittens stay on the ball while pushing; nothing passes through the body, a ball, a
 tree or the sledge.
 
-## Story (~52 s at 1×), driven by story time → months (marks from the engine, so they follow the inputs)
-| t (s) | months | caption (primary / secondary) | notes |
-|---|---|---|---|
-| 0–6 | 0 | "Three debts. The same $800 a month." / "Snowball rolls the smallest away first. Avalanche, the highest rate." | camera close on the tops of the lanes; climbers idle |
-| 6–12 | 0 → 3 | "Interest settles on them every month." / "Most on the card at 26%. None on the 0% medical bill." | camera eases out; both start pushing |
-| 12–18 | 3 → 4 (snowball's first win) | "Snowball clears the medical bill in 4 months." / "A quick win. Its $40 rolls on to the car loan." | left medical ball breaks up; left climber cheers |
-| 18–30 | 4 → 25 | "Avalanche keeps pushing the card at 26%." / live: "Interest so far: snowball $3,311, avalanche $2,937." (month 12; follows the clock) | months speed up smoothly |
-| 30–36 | 25 → 28 | "Avalanche clears the card in 2 years, 4 months." / "The costliest debt is gone, so every dollar goes further." | |
-| 36–42 | 28 → 32 | "Both hills are clear." / "Avalanche in 2 years, 6 months. Snowball, 2 months later." | climbers rest as each finishes |
-| 42–48 | 32 | "Avalanche: $4,642 in interest. Snowball: $6,295." / "Snowball's first win came 21 months sooner." | results |
-| 48–52 | 32 | "Explore your own debts" | hand off to explore, paused at the end |
-Copy is live (every number from the engine), hopeful and plain. No em-dashes. Month marks adapt to the inputs (the
-first clear on either hill, the avalanche's top-rate clear, each payoff); when the two schedules match
-(`hillsMatch`), the story says so ("With these debts both orders are the same.") and runs on.
-Reduced motion: discrete holds with short eased tweens, no autoplay, as the vine.
+## Introduction and notes (no scripted story)
+The demonstration opens with an introduction (src/shared/intro.ts, src/styles/intro.css; content in on-a-roll.html):
+a paper card over the scene, blurred behind it, saying what it shows ("Three debts and one monthly budget. Which should
+you pay off first?"), how to read the picture (a snowball is a debt, falling snow is interest, the target is rolled
+down to the finish line), the two orders, and how to use it, with a "Start exploring" button (Escape, or a click on the
+scene, closes it too). It shows the first time per browser session; "About this demo" in the header opens it again.
+The timeline then waits at month 0, paused. Play runs it at a steady pace: the whole timeline in 24 s at 1x
+(PLAY_SECONDS in app/store.ts), scaled by the speed slider.
+
+Short notes in the caption spot follow the MONTH (played or dragged), from src/snow/app/notes.ts, every number from
+the engine:
+| months | note (primary / secondary) |
+|---|---|
+| before the first interest | "Three debts. The same $800 a month." / "Snowball rolls the smallest away first. Avalanche, the highest rate." |
+| until the first clear | "Interest settles on them every month." / "Most on the card at 26%. None on the 0% medical bill." |
+| 3 months from the first clear | "Snowball clears the medical bill in 4 months." / "A quick win. Its $40 rolls on to the car loan." |
+| until the top-rate clear | "Avalanche keeps pushing the card at 26%." / live: "Interest so far: snowball $3,311, avalanche $2,937." |
+| until the end | "Avalanche clears the card in 2 years, 4 months." / "The costliest debt is gone, so every dollar goes further." |
+| the end | "Avalanche: $4,642 in interest. Snowball: $6,295." / "Snowball's first win came 21 months sooner." |
+When the two schedules match (`hillsMatch`), the notes say so ("With these debts both orders are the same.").
 
 ## Controls (right panel, same look as the vine)
 Play/Pause, speed slider (0.1×–5×, log scale, as the vine), timeline (months, year ticks), Monthly budget, then one

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { frames, usd } from './helpers';
 
 type Debt = { balance: number; apr: number; minPayment: number };
@@ -16,20 +16,18 @@ interface SnowState {
   errors: Record<string, string>;
   months: number;
   horizon: number;
-  mode: 'story' | 'explore';
-  storyTime: number;
-  storyLength: number;
   playing: boolean;
   speed: number;
   reducedMotion: boolean;
-  exploreHint: boolean;
   monthsPerSecond: number;
 }
 
 const state = async (page: Page) => (await page.evaluate(() => window.__snow.getState())) as SnowState;
 
-async function gotoSnow(page: Page, opts: { pause?: boolean } = {}): Promise<string[]> {
-  const { pause = true } = opts;
+async function gotoSnow(page: Page, opts: { pause?: boolean; intro?: boolean } = {}): Promise<string[]> {
+  const { pause = true, intro = false } = opts;
+  // the introduction shows the first time a demonstration is opened in a session: most tests start past it
+  if (!intro) await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:on-a-roll', '1'));
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -47,14 +45,19 @@ async function gotoSnow(page: Page, opts: { pause?: boolean } = {}): Promise<str
     await page.evaluate(() => window.__snow.actions.pause());
     await frames(page, 2);
   }
-  // phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would
+  // (with the introduction open, the page waits behind it: the panel is opened once it is closed)
+  if (!intro) await openPanel(page);
+  return errors;
+}
+
+/** Phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would. */
+async function openPanel(page: Page): Promise<void> {
   const toggle = page.locator('#panel-toggle');
   if ((await toggle.getAttribute('aria-expanded')) === 'false') {
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
     await frames(page, 2);
   }
-  return errors;
 }
 
 /** On a phone the open panel covers the whole stage: fold it to reach the stage's own buttons, then open it again. */
@@ -72,15 +75,9 @@ async function onStage(page: Page, act: () => Promise<void>): Promise<void> {
   }
 }
 
-const clickSkip = (page: Page) => onStage(page, () => page.locator('#btn-skip').click());
-
-/** Tests that follow the normal-motion story (autoplay, the close-up, beat timings) do not apply under reduced motion,
- * which holds each beat still instead; the reduced-motion test below covers that story. */
-const normalMotionOnly = (info: TestInfo) =>
-  test.skip(info.project.use.reducedMotion === 'reduce', 'the reduced-motion story has its own timing (see the reduced-motion test)');
-
-const seek = async (page: Page, seconds: number) => {
-  await page.evaluate((s) => window.__snow.actions.seekStory(s), seconds);
+/** Drag the clock to the last month (the result), as a visitor would with the timeline. */
+const toEnd = async (page: Page) => {
+  await page.evaluate(() => window.__snow.actions.scrubTo(1e6));
   await frames(page, 3);
 };
 
@@ -173,38 +170,40 @@ test.describe('On a Roll', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the story autoplays from the start and hands off to explore', async ({ page }, info) => {
-    normalMotionOnly(info);
-    await gotoSnow(page, { pause: false });
-    // autoplay: the story clock runs by itself
-    await expect.poll(async () => (await state(page)).storyTime, { timeout: 10_000 }).toBeGreaterThan(0.3);
-    expect((await state(page)).mode).toBe('story');
-    await expect(cap(page).locator('.cap-1')).toContainText('Three debts. The same $800 a month.');
-    // run it to the end at 4x so the whole hand-off happens naturally
-    await page.evaluate(() => window.__snow.actions.setSpeed(4));
-    await expect.poll(async () => (await state(page)).mode, { timeout: 40_000 }).toBe('explore');
-    const s = await state(page);
+  test('opens with the introduction over the blurred scene; it closes to month 0, paused, and stays closed', async ({ page }) => {
+    const errors = await gotoSnow(page, { intro: true, pause: false });
+    const intro = page.locator('#intro');
+    await expect(intro).toBeVisible();
+    await expect(intro.getByRole('heading', { name: 'On a Roll' })).toBeVisible();
+    await expect(intro).toContainText('Each snowball is a debt.');
+    // the button to proceed has the focus: Enter starts exploring
+    await expect(page.locator('[data-intro-close]')).toBeFocused();
+    let s = await state(page);
+    expect(s.months).toBe(0);
     expect(s.playing).toBe(false);
-    expect(s.months).toBe(32);
-    expect(s.exploreHint).toBe(true);
-    await expect(cap(page).locator('.cap-1')).toHaveText('Explore your own debts');
-  });
-
-  test('skip goes straight to explore at the last month', async ({ page }) => {
-    await gotoSnow(page, { pause: false });
-    await clickSkip(page);
+    await page.keyboard.press('Enter');
+    await expect(intro).toBeHidden();
     await frames(page, 3);
-    const s = await state(page);
-    expect(s.mode).toBe('explore');
-    expect(s.months).toBe(32);
-    await expect(page.locator('#btn-skip')).toBeHidden();
-    await expect(page.locator('#btn-play')).toContainText('Play');
+    s = await state(page);
+    expect(s.months).toBe(0);
+    expect(s.playing).toBe(false);
+    await expect(page.locator('#btn-play')).toHaveText(/Play/);
+    // the first time per session only
+    await page.reload();
+    await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 45_000 });
+    await frames(page, 3);
+    await expect(intro).toBeHidden();
+    // "About this demo" opens it again; Escape closes it
+    await onStage(page, () => page.locator('#btn-about').click());
+    await expect(intro).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(intro).toBeHidden();
+    expect(errors).toEqual([]);
   });
 
   test('the numbers at the end match the engine (labels, readouts and tables)', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
-    await frames(page, 3);
+    await toEnd(page);
     expect(await labelTexts(page, 'snowball')).toEqual({ name: 'Snowball: smallest first', owed: 'Debt-free in 2 years, 8 months', tag: '$6,295 in interest' });
     expect(await labelTexts(page, 'avalanche')).toEqual({ name: 'Avalanche: highest rate first', owed: 'Debt-free in 2 years, 6 months', tag: '$4,642 in interest' });
     await expect(page.locator('#year-readout')).toHaveText('Year 2, month 8');
@@ -265,59 +264,53 @@ test.describe('On a Roll', () => {
     await expect(page.locator('#year-readout')).toHaveText('Year 1, month 3');
   });
 
-  test('story captions carry the live numbers, and the push beat follows the clock in place', async ({ page }, info) => {
-    normalMotionOnly(info);
+  test('the notes follow the month (played or dragged), with live numbers; the push note updates in place', async ({ page }) => {
     await gotoSnow(page);
-    await seek(page, 0.5);
-    await page.waitForTimeout(800);
+    const at = async (m: number) => {
+      await scrub(page, m);
+      await page.waitForTimeout(700);
+    };
+    await at(0);
     await expect(cap(page).locator('.cap-1')).toHaveText('Three debts. The same $800 a month.');
     await expect(cap(page).locator('.cap-2')).toHaveText('Snowball rolls the smallest away first. Avalanche, the highest rate.');
-    await seek(page, 8);
-    await page.waitForTimeout(800);
+    await at(2);
     await expect(cap(page).locator('.cap-1')).toHaveText('Interest settles on them every month.');
     await expect(cap(page).locator('.cap-2')).toHaveText('Most on the card at 26%. None on the 0% medical bill.');
-    await seek(page, 15);
-    await page.waitForTimeout(800);
+    await at(5);
     await expect(cap(page).locator('.cap-1')).toHaveText('Snowball clears the medical bill in 4 months.');
     await expect(cap(page).locator('.cap-2')).toHaveText('A quick win. Its $40 rolls on to the car loan.');
-    await seek(page, 24);
-    await page.waitForTimeout(800);
+    await at(15);
     await expect(cap(page).locator('.cap-1')).toHaveText('Avalanche keeps pushing the card at 26%.');
-    const s = await state(page);
-    // the live line reads as a statement does: the interest charged so far steps in as each month's interest is charged
-    const whole = Math.floor(s.months);
-    const shown = s.months - whole < 0.2 ? whole : whole + 1;
     await expect(cap(page).locator('.cap-2')).toHaveText(
-      `Interest so far: snowball ${usd(simulate(D, 'snowball', shown).interest)}, avalanche ${usd(simulate(D, 'avalanche', shown).interest)}.`,
+      `Interest so far: snowball ${usd(simulate(D, 'snowball', 15).interest)}, avalanche ${usd(simulate(D, 'avalanche', 15).interest)}.`,
     );
     // the line updates without the caption swapping layers
     const layerBefore = await cap(page).getAttribute('data-layer');
-    await seek(page, 27);
-    await frames(page, 2);
+    await at(20);
     expect(await cap(page).getAttribute('data-layer')).toBe(layerBefore);
-    await seek(page, 33);
-    await page.waitForTimeout(800);
+    await expect(cap(page).locator('.cap-2')).toHaveText(
+      `Interest so far: snowball ${usd(simulate(D, 'snowball', 20).interest)}, avalanche ${usd(simulate(D, 'avalanche', 20).interest)}.`,
+    );
+    await at(29);
     await expect(cap(page).locator('.cap-1')).toHaveText('Avalanche clears the card in 2 years, 4 months.');
     await expect(cap(page).locator('.cap-2')).toHaveText('The costliest debt is gone, so every dollar goes further.');
-    await seek(page, 39);
-    await page.waitForTimeout(800);
-    await expect(cap(page).locator('.cap-1')).toHaveText('Both hills are clear.');
-    await expect(cap(page).locator('.cap-2')).toHaveText('Avalanche in 2 years, 6 months. Snowball, 2 months later.');
-    await seek(page, 45);
-    await page.waitForTimeout(800);
+    await at(32);
     await expect(cap(page).locator('.cap-1')).toHaveText('Avalanche: $4,642 in interest. Snowball: $6,295.');
     await expect(cap(page).locator('.cap-2')).toHaveText("Snowball's first win came 21 months sooner.");
+    // played, the notes change on their own as the months pass
+    await at(3);
+    await page.evaluate(() => window.__snow.actions.play());
+    await expect(cap(page).locator('.cap-1')).toHaveText('Snowball clears the medical bill in 4 months.', { timeout: 10_000 });
   });
 
   test('changing a rate re-renders the numbers and the timeline', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
+    await toEnd(page);
     const before = await state(page);
     await page.locator('#f-card-apr').fill('30');
     await page.locator('#f-card-apr').press('Enter');
     await frames(page, 3);
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.inputs.debts.card.apr).toBeCloseTo(0.3, 12);
     expect(s.horizon).toBeGreaterThan(before.horizon);
     await expect(page.locator('#timeline')).toHaveAttribute('max', String(s.horizon));
@@ -333,7 +326,7 @@ test.describe('On a Roll', () => {
 
   test('the budget names what is left to roll, and the rules explain themselves', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
+    await toEnd(page);
     await expect(page.locator('#note-budget')).toHaveText('The three minimums are $520, so $280 a month is left to roll toward the target.');
     // a budget under the minimums is refused with the reason
     await page.locator('#f-budget').fill('500');
@@ -379,9 +372,8 @@ test.describe('On a Roll', () => {
     await frames(page, 2);
     expect((await state(page)).months).toBe(20);
     await expect(page.locator('#year-readout')).toHaveText('Year 1, month 8');
-    // scrubbing leaves the story and pauses
+    // scrubbing pauses
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.playing).toBe(false);
     // the labels follow the clock
     const e = simulate(D, 'snowball', 20);
@@ -406,7 +398,7 @@ test.describe('On a Roll', () => {
 
   test('an invalid input shows an inline error and keeps the last valid numbers', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
+    await toEnd(page);
     const input = page.locator('#f-car-balance');
     await input.fill('50');
     await input.press('Enter');
@@ -443,7 +435,7 @@ test.describe('On a Roll', () => {
 
   test('an interest rate of 0 is accepted: nothing settles on that ball', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
+    await toEnd(page);
     await page.locator('#f-card-apr').fill('0');
     await page.locator('#f-card-apr').press('Enter');
     await page.locator('#f-car-apr').fill('0');
@@ -475,9 +467,8 @@ test.describe('On a Roll', () => {
     await expect(page.locator('#f-medical-minPayment')).toHaveValue('45');
   });
 
-  test('play, pause and speed work in explore', async ({ page }) => {
+  test('play, pause and speed work', async ({ page }) => {
     await gotoSnow(page);
-    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('#btn-play').click();
     await expect(page.locator('#btn-play')).toContainText('Pause');
@@ -485,7 +476,8 @@ test.describe('On a Roll', () => {
     await page.locator('#speed').fill(String(Math.round((100 * Math.log(40)) / Math.log(50)) * 10));
     await expect(page.locator('#speed-readout')).toHaveText('4×');
     await expect.poll(async () => (await state(page)).months, { timeout: 8000 }).toBeGreaterThan(10);
-    expect((await state(page)).monthsPerSecond).toBeGreaterThan(8);
+    // 4x: the 32 months in a quarter of the 24 seconds a whole run takes at 1x
+    expect((await state(page)).monthsPerSecond).toBeGreaterThan(4);
     await page.locator('#btn-play').click();
     const m = (await state(page)).months;
     await page.waitForTimeout(300);
@@ -504,7 +496,6 @@ test.describe('On a Roll', () => {
     await expect(page.locator('#dock')).toBeHidden({ timeout: 2000 });
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
-    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('body').click({ position: { x: 5, y: 400 } });
     await page.keyboard.press('Space');
@@ -515,8 +506,8 @@ test.describe('On a Roll', () => {
     await gotoSnow(page);
     // (a phone's panel covers the hills: the labels are seen with it folded away)
     if ((page.viewportSize()?.width ?? 1440) < 700) await page.locator('#panel-toggle').click();
-    for (const t of [14, 20, 30, 44]) {
-      await seek(page, t);
+    for (const t of [3, 12, 26, 32]) {
+      await scrub(page, t);
       await page.waitForTimeout(500);
       const boxes = await page.evaluate(() =>
         ['lab-snowball', 'lab-avalanche', 'tag-snowball', 'tag-avalanche'].map((id) => {
@@ -528,20 +519,20 @@ test.describe('On a Roll', () => {
       const dock = page.locator('#dock');
       const limit = (await dock.isVisible()) ? (await dock.boundingBox())!.x : page.viewportSize()!.width;
       for (const b of boxes) {
-        expect(b.x, `${b.id} at t=${t}`).toBeGreaterThanOrEqual(-1);
-        expect(b.x + b.w, `${b.id} at t=${t}`).toBeLessThanOrEqual(limit + 1);
+        expect(b.x, `${b.id} at month ${t}`).toBeGreaterThanOrEqual(-1);
+        expect(b.x + b.w, `${b.id} at month ${t}`).toBeLessThanOrEqual(limit + 1);
         expect(b.w).toBeGreaterThan(0);
       }
       // the two hills' labels never touch
       const [ls, la, ts, ta] = boxes;
       const overlap = ls.x < la.x + la.w && la.x < ls.x + ls.w && ls.y < la.y + la.h && la.y < ls.y + ls.h;
-      expect(overlap, `labels overlap at t=${t}`).toBe(false);
+      expect(overlap, `labels overlap at month ${t}`).toBe(false);
       // each label carries its interest line, under what is owed
       for (const [lab, tag] of [[ls, ts], [la, ta]]) {
-        expect(tag.x, `${tag.id} at t=${t}`).toBeGreaterThanOrEqual(lab.x - 1);
-        expect(tag.x + tag.w, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.x + lab.w + 1);
-        expect(tag.y + tag.h, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.y + lab.h + 1);
-        expect(tag.y, `${tag.id} at t=${t}`).toBeGreaterThan(lab.y + lab.h / 2);
+        expect(tag.x, `${tag.id} at month ${t}`).toBeGreaterThanOrEqual(lab.x - 1);
+        expect(tag.x + tag.w, `${tag.id} at month ${t}`).toBeLessThanOrEqual(lab.x + lab.w + 1);
+        expect(tag.y + tag.h, `${tag.id} at month ${t}`).toBeLessThanOrEqual(lab.y + lab.h + 1);
+        expect(tag.y, `${tag.id} at month ${t}`).toBeGreaterThan(lab.y + lab.h / 2);
       }
     }
   });
@@ -582,22 +573,10 @@ test.describe('On a Roll', () => {
     }
   });
 
-  test('the labels wait out the opening close-up and appear as the camera settles', async ({ page }, info) => {
-    normalMotionOnly(info);
-    await gotoSnow(page);
-    await seek(page, 2);
-    await page.waitForTimeout(900);
-    const fade = () => page.evaluate(() => Number(document.documentElement.style.getPropertyValue('--label-fade') || '1'));
-    expect(await fade()).toBe(0);
-    await seek(page, 20);
-    await expect.poll(fade, { timeout: 8000 }).toBeGreaterThan(0.95);
-  });
-
   test('announcements are discrete: the live region only changes on events', async ({ page }) => {
     await gotoSnow(page, { pause: false });
     const region = page.locator('#announcer');
     await expect(region).toHaveAttribute('aria-live', 'polite');
-    // (reduced motion does not autoplay: start the story so there is something to pause)
     await page.evaluate(() => window.__snow.actions.play());
     await frames(page, 2);
     await page.evaluate(() => window.__snow.actions.pause());
@@ -610,7 +589,7 @@ test.describe('On a Roll', () => {
     await expect(region).toContainText('Updated. Snowball: smallest first:', { timeout: 3000 });
   });
 
-  test('reduced motion: no autoplay, labels still show, story still reaches the numbers', async ({ browser }) => {
+  test('reduced motion: still at the start, labels showing, and the numbers at the end', async ({ browser }) => {
     const ctx = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     const errors = await gotoSnow(page, { pause: false });
@@ -618,13 +597,10 @@ test.describe('On a Roll', () => {
     const s = await state(page);
     expect(s.reducedMotion).toBe(true);
     expect(s.playing).toBe(false);
-    expect(s.storyTime).toBe(0);
+    expect(s.months).toBe(0);
     await expect(page.locator('#reduce-motion')).toBeChecked();
     for (const id of ['snowball', 'avalanche']) await expect(page.locator(`#lab-${id}`)).toBeVisible();
-    // the opening is not zoomed, so the labels are there from the start
-    expect(await page.evaluate(() => Number(document.documentElement.style.getPropertyValue('--label-fade') || '1'))).toBe(1);
-    await clickSkip(page);
-    await frames(page, 3);
+    await toEnd(page);
     expect((await labelTexts(page, 'snowball')).tag).toBe('$6,295 in interest');
     expect(errors).toEqual([]);
     await ctx.close();
@@ -647,19 +623,20 @@ function describeViolations(results: Awaited<ReturnType<AxeBuilder['analyze']>>)
 }
 
 test.describe('On a Roll: accessibility', () => {
-  test('axe: no violations in explore, with details open, with an error showing, and during the story', async ({ page }) => {
-    await gotoSnow(page);
+  test('axe: no violations with the introduction open, at each note, with details open and with an error showing', async ({ page }) => {
+    await gotoSnow(page, { intro: true });
     await page.evaluate(() => document.fonts.ready);
-    for (const t of [3, 15, 24, 45]) {
-      await seek(page, t);
-      await page.waitForTimeout(1200);
-      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-      expect(r.violations, `story t=${t}\n` + describeViolations(r)).toEqual([]);
-    }
-    await clickSkip(page);
-    await page.waitForTimeout(1800);
+    await expect(page.locator('#intro')).toBeVisible();
     let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-    expect(results.violations, 'explore\n' + describeViolations(results)).toEqual([]);
+    expect(results.violations, 'introduction\n' + describeViolations(results)).toEqual([]);
+    await page.keyboard.press('Escape');
+    await openPanel(page);
+    for (const m of [0, 2, 5, 15, 29, 32]) {
+      await scrub(page, m);
+      await page.waitForTimeout(900);
+      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      expect(r.violations, `month ${m}\n` + describeViolations(r)).toEqual([]);
+    }
 
     await page.locator('#how > summary').click();
     await page.evaluate(() => window.__snow.actions.scrubTo(14));

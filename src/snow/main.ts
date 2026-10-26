@@ -3,12 +3,14 @@ import '@fontsource/libre-caslon-text/400.css';
 import '@fontsource/libre-caslon-text/400-italic.css';
 import '@fontsource-variable/figtree';
 import '../styles/snow.css';
+import '../styles/intro.css';
 
 import { createSnowScene } from './scene';
 import { createStore } from './app/store';
 import { createUI } from './app/ui';
 import { startLoop } from './app/loop';
 import { allStrategies } from './engine';
+import { setupIntro } from '../shared/intro';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const stage = document.getElementById('stage') as HTMLElement;
@@ -67,11 +69,16 @@ const whenSmooth = (): Promise<void> =>
     requestAnimationFrame(step);
   });
 
-// Story autoplays once the scene is ready (never in reduced motion, and never over a user's first touch).
+// The scene waits at its start, paused. The introduction (the first time this session) explains it over the
+// blurred scene; closing it points the eye at the controls.
 scene.ready.then(whenSmooth).then(() => {
   document.body.dataset.ready = '1';
-  const { state, actions } = store;
-  if (!state.reducedMotion && state.mode === 'story' && state.storyTime === 0 && !state.playing) actions.play();
+  setupIntro({
+    slug: 'on-a-roll',
+    dialog: document.getElementById('intro') as HTMLDialogElement,
+    openButton: document.getElementById('btn-about'),
+    onClose: () => ui.highlight(),
+  });
 });
 
 // Test hook: a read-only snapshot plus the action functions.
@@ -95,14 +102,10 @@ window.__snow = {
         errors: state.errors,
         months: state.months,
         horizon: store.horizon(),
-        mode: state.mode,
-        storyTime: state.storyTime,
         playing: state.playing,
         speed: state.speed,
         reducedMotion: state.reducedMotion,
-        exploreHint: state.exploreHint,
         monthsPerSecond: state.monthsPerSecond,
-        storyLength: store.storyLength(),
       }),
     );
   },
