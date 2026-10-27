@@ -14,23 +14,21 @@ export interface TtgState {
   targetScale: number;
   displayScale: number;
   ageMonths: number;
-  mode: 'story' | 'explore';
-  storyTime: number;
   playing: boolean;
   speed: number;
   reducedMotion: boolean;
-  exploreHint: boolean;
   timelineStartMonths: number;
   timelineEndMonths: number;
   monthlyRate: number;
 }
 
-/** Story length at 1x in normal motion (docs/APP_SPEC.md). */
-export const STORY_DURATION = 54;
-
-/** Load the app and wait for the scene to be ready. By default the autoplaying story is paused so tests are deterministic. */
-export async function gotoReady(page: Page, opts: { pause?: boolean; query?: string; panel?: boolean } = {}): Promise<void> {
-  const { pause = true, query = '', panel = true } = opts;
+/**
+ * Load the app and wait for the scene to be ready. The introduction (shown the first time per session) is skipped
+ * unless `intro` is set; with it open the panel is left as it is (the page waits behind the introduction).
+ */
+export async function gotoReady(page: Page, opts: { pause?: boolean; query?: string; panel?: boolean; intro?: boolean } = {}): Promise<void> {
+  const { pause = true, query = '', panel = true, intro = false } = opts;
+  if (!intro) await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:time-to-grow', '1'));
   // Swallow Vite's HMR websocket: if source files are edited while the suite runs (other workers, editors), the dev
   // server would push a full-reload and wipe the in-memory app state mid-test. The app itself does not use websockets.
   await page.routeWebSocket(/.*/, () => {});
@@ -44,7 +42,7 @@ export async function gotoReady(page: Page, opts: { pause?: boolean; query?: str
     await frames(page, 2);
   }
   // The controls live in a collapsible side panel (closed by default on phones).
-  await setPanel(page, panel);
+  if (!intro) await setPanel(page, panel);
 }
 
 /** Open or close the controls side panel and wait for its slide transition to settle. */
@@ -77,35 +75,43 @@ export async function state(page: Page): Promise<TtgState> {
   return (await page.evaluate(() => window.__ttg.getState())) as TtgState;
 }
 
-/** Jump the guided story clock (story mode) and let the DOM catch up. */
-export async function seek(page: Page, seconds: number): Promise<void> {
-  await page.evaluate((s) => window.__ttg.actions.seekStory(s), seconds);
+/**
+ * The moments these tests look at, named by the second the old guided story showed them at (default inputs):
+ * 0 s the first planting, 7 s three months in, 15 s the later planting, 18 s its first months, 37 s and on the end.
+ * Moves the clock (paused) to the age of that moment for the current inputs, linearly between them.
+ */
+export async function atMoment(page: Page, seconds: number): Promise<void> {
+  await page.evaluate((t) => {
+    const s = window.__ttg.getState() as { inputs: { startAgeA: number; startAgeB: number; endAge: number } };
+    const t0 = Math.min(s.inputs.startAgeA, s.inputs.startAgeB) * 12;
+    const t1 = Math.max(s.inputs.startAgeA, s.inputs.startAgeB) * 12;
+    const end = s.inputs.endAge * 12;
+    const knots: Array<[number, number]> = [[0, t0], [7, Math.min(end, t0 + 3)]];
+    if (t1 > t0) knots.push([15, t1], [18, Math.min(end, t1 + 4.8)]);
+    knots.push([37, end]);
+    let age = end;
+    for (let k = 0; k < knots.length - 1; k++) {
+      const [ta, aa] = knots[k];
+      const [tb, ab] = knots[k + 1];
+      if (t <= tb) {
+        age = aa + ((ab - aa) * Math.max(0, t - ta)) / (tb - ta);
+        break;
+      }
+    }
+    window.__ttg.actions.scrubTo(Math.min(end, Math.max(t0, age)));
+  }, seconds);
   await frames(page, 3);
 }
 
-/** Story length in seconds for the current inputs and motion preference (54 s normally, ~34.5 s in reduced motion). */
-export async function storyLength(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    window.__ttg.actions.seekStory(1e6);
-    return (window.__ttg.getState() as { storyTime: number }).storyTime;
-  });
-}
-
-/** Seek to a fraction of the story, so beat-based assertions hold for both the normal and reduced-motion timelines. */
-export async function seekFrac(page: Page, fraction: number): Promise<void> {
-  const len = await storyLength(page);
-  await seek(page, fraction * len);
-}
-
-/** Scrub the shared clock (enters explore mode, paused). */
+/** Scrub the shared clock (paused). */
 export async function scrub(page: Page, ageMonths: number): Promise<void> {
   await page.evaluate((m) => window.__ttg.actions.scrubTo(m), ageMonths);
   await frames(page, 3);
 }
 
-/** Jump to the explore state at the timeline end (the "Skip to explore" result). */
+/** Drag the clock to the timeline end (the result), as a visitor would with the timeline. */
 export async function skipToExplore(page: Page): Promise<void> {
-  await page.evaluate(() => window.__ttg.actions.skipToExplore());
+  await page.evaluate(() => window.__ttg.actions.scrubTo(1e6));
   await frames(page, 3);
 }
 

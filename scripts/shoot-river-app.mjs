@@ -21,14 +21,14 @@ async function open(viewport, extra = {}) {
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[console]', m.type(), m.text()); });
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await page.routeWebSocket(/.*/, () => {}); // no HMR reloads mid-shoot
+  await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:against-the-current', '1'));
   await page.goto(url);
   await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 120000 });
-  await page.evaluate(() => window.__river.actions.pause()); // take over the story clock
   return page;
 }
 
-const seek = async (page, t, wait = 1500) => {
-  await page.evaluate((t) => window.__river.actions.seekStory(t), t);
+const seek = async (page, years, wait = 1500) => {
+  await page.evaluate((y) => window.__river.actions.scrubTo(y), years);
   await page.waitForTimeout(wait);
 };
 const shot = async (page, name, full = false) => {
@@ -45,11 +45,10 @@ for (const tag of only) {
   const [width, height] = sizes[tag];
   const page = await open({ width, height }, tag === 'mobile' ? { isMobile: true, hasTouch: true } : {});
   const pre = tag === 'desktop' ? '' : `${tag}-`;
-  for (const t of [3, 15, 30, 42]) {
-    await seek(page, t, t === 3 ? 2000 : 1500);
-    await shot(page, `${pre}story-t${String(t).padStart(2, '0')}`);
+  for (const y of [0, 6, 14, 30]) {
+    await seek(page, y, y === 0 ? 2000 : 1500);
+    await shot(page, `${pre}year-${String(y).padStart(2, '0')}`);
   }
-  await page.evaluate(() => window.__river.actions.skipToExplore());
   const toggle = page.locator('#panel-toggle');
   const wasOpen = (await toggle.getAttribute('aria-expanded')) === 'true';
   if (!wasOpen) { await toggle.click(); await page.waitForTimeout(400); }

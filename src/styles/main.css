@@ -10,6 +10,12 @@
   --golden: #f0b429;
   --coral: #ec7357;
   --error: #b8452b;
+  /* text over the painted sky: a softer ink than --ink, on a pale lifted wash (as the vine and the snow) */
+  --ink-soft: #4a4236;
+  --lift: rgba(251, 246, 234, 0.74);
+  /* the introduction card's ink (src/styles/intro.css): the grove's emerald */
+  --intro-accent: var(--emerald);
+  --intro-accent-deep: var(--emerald-deep);
   --rule: rgba(47, 42, 34, 0.18);
   --rule-strong: rgba(47, 42, 34, 0.55);
   --wash: rgba(47, 42, 34, 0.07);
@@ -166,28 +172,47 @@ input {
 
 /* ---------- Caption ---------- */
 
+/* the milestone note: a quiet line in the upper left corner, under the demonstration's name */
 .caption {
+  /* (the scene keeps clear of the note at its lower place, so opening the panel never moves the scene) */
+  --cap-top-open: 48px;
+  --cap-top-closed: 48px;
   position: absolute;
-  top: 58px;
-  left: 50%;
-  width: min(680px, calc(100% - 2 * var(--gutter)));
-  transform: translateX(-50%);
+  top: var(--cap-top-open);
+  left: var(--gutter);
+  width: min(340px, calc(100% - 2 * var(--gutter)));
   display: grid;
-  justify-items: center;
-  text-align: center;
+  justify-items: start;
+  text-align: left;
   pointer-events: none;
+  transition: top 0.35s ease;
+}
+
+.app:not(.panel-open) .caption {
+  top: var(--cap-top-closed);
 }
 
 .cap {
+  position: relative;
+  isolation: isolate;
   grid-area: 1 / 1;
-  /* a soft glow hugging the letters (no paper-coloured oval over the sky) */
-  text-shadow: 0 0 10px rgba(251, 246, 234, 0.95), 0 0 4px rgba(251, 246, 234, 0.9), 0 0 2px rgba(251, 246, 234, 0.9);
   opacity: 0;
   transition: opacity 0.6s ease;
-  padding: 4px 36px;
+  padding: 2px 0;
   font-family: var(--serif);
   font-style: italic;
   text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+}
+
+/* the words sit on a pale wash, like a lifted cloud with soft edges */
+.cap::before {
+  content: '';
+  position: absolute;
+  inset: -10px -18px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--lift);
+  filter: blur(16px);
 }
 
 .cap-ghost {
@@ -204,16 +229,16 @@ input {
 }
 
 .cap-1 {
-  font-size: 22px;
+  font-size: 14px;
   line-height: 1.3;
   color: var(--ink);
 }
 
 .cap-2 {
-  margin-top: 4px;
-  font-size: 16px;
+  margin-top: 1px;
+  font-size: 12.5px;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 
 .cap-2:empty {
@@ -460,11 +485,6 @@ input {
     transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 
-  .caption {
-    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 340px));
-    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
-  }
-
   .story-actions {
     transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
@@ -472,10 +492,6 @@ input {
   .app.panel-open #scene,
   .app.panel-open .overlay {
     transform: translateX(calc(var(--panel-w) / -2));
-  }
-
-  .app.panel-open .caption {
-    transform: translateX(calc(-50% - var(--panel-w) / 2));
   }
 
   .app.panel-open .story-actions {
@@ -1001,34 +1017,6 @@ input {
   margin-top: 4px;
 }
 
-/* Mid-width desktops: shorter header buttons so the caption keeps one line per paragraph. */
-@container stage (min-width: 1000px) and (max-width: 1520px) {
-  .story-actions .long {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .caption {
-    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 340px));
-  }
-}
-
-/* Wide screens: the caption shares the masthead row, clear of the canopy. */
-@container stage (min-width: 1000px) {
-  .caption {
-    top: 10px;
-  }
-}
-
-@container stage (min-width: 1521px) {
-  .caption {
-    width: min(880px, calc(100% - var(--panel-w) - 2 * var(--gutter) - 400px));
-  }
-}
-
 /* ---------- Narrow screens ---------- */
 
 @container dock (max-width: 699px) {
@@ -1115,20 +1103,17 @@ input {
   }
 
   .caption {
-    top: 58px;
+    --cap-top-open: 44px;
+    --cap-top-closed: 44px;
   }
 
   .cap-1 {
-    font-size: 17px;
+    font-size: 13.5px;
   }
 
   .cap-2 {
-    font-size: 13.5px;
+    font-size: 12px;
     line-height: 1.35;
-  }
-
-  .cap {
-    padding: 2px 10px;
   }
 
   .dock {

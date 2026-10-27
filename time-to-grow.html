@@ -48,13 +48,9 @@
       <header class="masthead">
         <h1 class="title"><a class="title-link" href="./" aria-label="Time to Grow, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Time to Grow</a></h1>
         <div class="story-actions">
-          <button type="button" class="btn quiet" id="btn-replay">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Replay<span class="long"> story</span></span>
-          </button>
-          <button type="button" class="btn quiet" id="btn-skip">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Skip<span class="long"> to explore</span></span>
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
           </button>
         </div>
       </header>
@@ -71,7 +67,7 @@
           <button type="button" class="btn play" id="btn-play">
             <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
             <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
-            <span id="play-label">Play story</span>
+            <span id="play-label">Play</span>
           </button>
 
           <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
@@ -179,6 +175,30 @@
     </aside>
 
   </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Saving and investing</p>
+      <h2 class="intro-title" id="intro-title">Time to Grow</h2>
+      <p class="intro-lede" id="intro-lede">The same monthly contribution, started at different ages. How much does starting early matter?</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>Each <strong>tree</strong> is an investment account. The bigger the tree, the more it is worth.</li>
+        <li>Each month's <strong>contribution</strong> goes in at the roots and rises into the canopy.</li>
+        <li>Growth is <strong>reinvested</strong>, so branches grow new branches: the longer a tree has, the faster it grows.</li>
+      </ul>
+      <h3 class="intro-h">Two trees</h3>
+      <ul class="intro-list">
+        <li><strong>Tree A</strong> and <strong>Tree B</strong> get the same amount each month, but start at different ages.</li>
+        <li>The <strong>difference</strong> between them shows how much of the gap is extra contributions, and how much is growth.</li>
+        <li>Both trees share one scale, so their sizes compare directly.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change the ages and the amounts in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
   <p class="sr-only" id="summary"></p>
   <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>

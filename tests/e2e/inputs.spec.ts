@@ -9,8 +9,7 @@ import {
   gotoReady,
   plate,
   scrub,
-  seek,
-  seekFrac,
+  atMoment,
   setField,
   skipToExplore,
   state,
@@ -62,7 +61,6 @@ test.describe('inputs: valid changes', () => {
     await skipToExplore(page);
     const s = await state(page);
     expect(s.inputs.monthlyContribution).toBe(300);
-    expect(s.mode).toBe('explore');
     const a = (300 / 200) * 381535.55;
     // 381,535.55 is the rounded annuity; use the exact closed form for the assertion and the spec's shortcut as a cross-check.
     expect((await plate(page, 'A')).balance).toBe(usd(annuityFV(300, 0.06, 480)));
@@ -157,13 +155,14 @@ test.describe('inputs: validation', () => {
     expect((await state(page)).errors).toEqual({});
   });
 
-  test('invalid text does not leave the story playing in a broken state', async ({ page }) => {
-    await gotoReady(page, { pause: false });
+  test('invalid text while playing changes nothing and keeps playing', async ({ page }) => {
+    await gotoReady(page);
+    await page.evaluate(() => window.__ttg.actions.play());
     await setField(page, 'monthlyContribution', 'abc');
     const s = await state(page);
-    // An invalid draft is not a scenario change: the story keeps its mode.
+    // An invalid draft is not a scenario change
     expect(s.inputs.monthlyContribution).toBe(200);
-    expect(s.mode).toBe('story');
+    expect(s.playing).toBe(true);
   });
 });
 
@@ -178,16 +177,16 @@ test.describe('inputs: edge scenarios', () => {
     expect(b.balance).toBe('$381,536');
     expect(b.split).toBe(a.split);
     expect(await diffText(page)).toBe('$0');
-    // No beat in the whole story mentions Tree B beginning.
+    // No note anywhere on the timeline mentions Tree B beginning.
     for (const t of [0.03, 0.15, 0.22, 0.3, 0.37, 0.55, 0.74, 0.81, 0.96]) {
-      await seekFrac(page, t);
+      await atMoment(page, t * 54);
       const cap = await caption(page);
       expect(cap.primary, `caption at ${t}`).not.toMatch(/begins/i);
       expect(cap.secondary, `caption at ${t}`).not.toMatch(/waits until/i);
     }
-    await seekFrac(page, 0.03);
+    await atMoment(page, 0.03 * 54);
     expect((await caption(page)).primary).toBe('Same monthly contribution. Same starting age.');
-    await seekFrac(page, 0.81);
+    await atMoment(page, 0.81 * 54);
     expect((await caption(page)).primary).toBe('Starting together, the two trees grow together.');
   });
 
@@ -237,9 +236,9 @@ test.describe('inputs: edge scenarios', () => {
     expect((await plate(page, 'A')).balance).toBe('$0');
     expect((await plate(page, 'B')).balance).toBe('$0');
     expect(await diffText(page)).toBe('$0');
-    await seekFrac(page, 0.81);
+    await atMoment(page, 0.81 * 54);
     expect((await caption(page)).primary).toBe('Time gives growth room to branch.');
-    await seekFrac(page, 0.19);
+    await atMoment(page, 0.19 * 54);
     expect((await caption(page)).primary).toBe('In this scenario, nothing goes in each month.');
   });
 
@@ -280,13 +279,12 @@ test.describe('inputs during playback and clamping', () => {
     const r = await page.evaluate(() => {
       const a = window.__ttg.actions;
       a.play();
-      const before = window.__ttg.getState() as { ageMonths: number; playing: boolean; mode: string };
+      const before = window.__ttg.getState() as { ageMonths: number; playing: boolean };
       a.setDraftField('monthlyContribution', '250');
       a.commitInputs();
-      const after = window.__ttg.getState() as { ageMonths: number; playing: boolean; mode: string; inputs: { monthlyContribution: number } };
+      const after = window.__ttg.getState() as { ageMonths: number; playing: boolean; inputs: { monthlyContribution: number } };
       return { before, after };
     });
-    expect(r.before.mode).toBe('explore');
     expect(r.before.playing).toBe(true);
     expect(r.after.inputs.monthlyContribution).toBe(250);
     expect(r.after.ageMonths).toBe(r.before.ageMonths);
@@ -301,7 +299,6 @@ test.describe('inputs during playback and clamping', () => {
     await setField(page, 'monthlyContribution', '300');
     const s = await state(page);
     expect(s.ageMonths).toBe(50 * 12 + 5);
-    expect(s.mode).toBe('explore');
   });
 
   test('end age lowered below the current age clamps to the new end and pauses', async ({ page }) => {
@@ -345,24 +342,25 @@ test.describe('inputs during playback and clamping', () => {
     await expect(page.locator('#timeline')).toHaveAttribute('min', '480');
   });
 
-  test('changing inputs during the story exits to explore at the current age', async ({ page }) => {
+  test('changing inputs while paused keeps the current age, paused', async ({ page }) => {
     await gotoReady(page);
-    await seek(page, 26);
+    await atMoment(page, 26);
     const before = await state(page);
     await setField(page, 'monthlyContribution', '250');
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.playing).toBe(false);
     expect(s.ageMonths).toBe(before.ageMonths);
   });
 
-  test('"Replay story" after edits uses the edited ages', async ({ page }) => {
+  test('Play from the end after edits starts again from the edited start', async ({ page }) => {
     await gotoReady(page);
     await setField(page, 'startAgeA', '30');
-    await page.locator('#btn-replay').click();
+    await skipToExplore(page);
+    await page.locator('#btn-play').click();
     await frames(page, 2);
     const s = await state(page);
-    expect(s.mode).toBe('story');
-    expect(s.ageMonths).toBeCloseTo(360, 0);
+    expect(s.playing).toBe(true);
+    expect(s.ageMonths).toBeGreaterThanOrEqual(360);
+    expect(s.ageMonths).toBeLessThan(372);
   });
 });

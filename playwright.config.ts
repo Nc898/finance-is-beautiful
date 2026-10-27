@@ -6,8 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const PORT = 5190;
 
-/** Story autoplay assumptions do not hold under reduced motion, so story.spec is excluded there. */
-const NOT_STORY = /story\.spec\.ts$/;
+/** Playback timing in notes.spec is checked in the motion projects; reduced-motion.spec covers that project. */
+const NOT_NOTES = /notes\.spec\.ts$/;
 const ONLY_REDUCED = /reduced-motion\.spec\.ts$/;
 
 export default defineConfig({
@@ -55,7 +55,7 @@ export default defineConfig({
     },
     {
       name: 'reduced-motion',
-      testIgnore: NOT_STORY,
+      testIgnore: NOT_NOTES,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },

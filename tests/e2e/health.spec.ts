@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { frames, gotoReady, scrub, seek, setField, skipToExplore } from './helpers';
+import { frames, gotoReady, scrub, atMoment, setField, skipToExplore } from './helpers';
 
 test.describe('page health', () => {
   test('no uncaught errors, console errors or failed requests during a normal session', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('page health', () => {
     });
     await gotoReady(page, { pause: false });
     await page.waitForTimeout(1500);
-    await seek(page, 20);
+    await atMoment(page, 20);
     await skipToExplore(page);
     await scrub(page, 40 * 12);
     await setField(page, 'monthlyContribution', '350');

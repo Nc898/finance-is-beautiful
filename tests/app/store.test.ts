@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_INPUTS } from '../../src/engine';
-import { createStore } from '../../src/app/store';
+import { PLAY_SECONDS, createStore, playRate } from '../../src/app/store';
 import { ageSpoken, sceneSummary, splitAge } from '../../src/app/text';
 
 describe('store input rules', () => {
   it('keeps the age when inside the new range', () => {
     const s = createStore();
-    s.actions.skipToExplore();
     s.actions.scrubTo(400);
     s.actions.setDraftField('monthlyContribution', '300');
     s.actions.commitInputs();
@@ -24,7 +23,6 @@ describe('store input rules', () => {
   });
   it('clamps to the end and pauses when the new end is earlier', () => {
     const s = createStore();
-    s.actions.skipToExplore();
     s.actions.scrubTo(700);
     s.actions.play();
     expect(s.state.playing).toBe(true);
@@ -64,17 +62,15 @@ describe('store input rules', () => {
     s.actions.commitInputs();
     expect(s.state.inputs.annualReturn).toBeCloseTo(-0.02, 12);
   });
-  it('an edit during the story switches to explore at the current age', () => {
+  it('an edit while playing keeps the current age', () => {
     const s = createStore();
     s.actions.play();
-    for (let i = 0; i < 100; i++) s.tick(0.1);
+    for (let i = 0; i < 30; i++) s.tick(0.1);
     const age = s.state.ageMonths;
     expect(age).toBeGreaterThan(300);
     s.actions.setDraftField('monthlyContribution', '300');
     s.actions.commitInputs();
-    expect(s.state.mode).toBe('explore');
     expect(s.state.ageMonths).toBe(age);
-    expect(s.state.playing).toBe(false);
   });
   it('steppers move one step and clamp', () => {
     const s = createStore();
@@ -88,32 +84,23 @@ describe('store input rules', () => {
 });
 
 describe('store clocks', () => {
-  it('story plays to the end, then explore paused at endAge', () => {
+  it('starts at the earlier planting, paused, and does not move until played', () => {
     const s = createStore();
-    s.actions.play();
-    let guard = 0;
-    while (s.state.mode === 'story' && guard++ < 10000) s.tick(0.1);
-    expect(s.state.mode).toBe('explore');
-    expect(s.state.ageMonths).toBe(780);
+    expect(s.state.ageMonths).toBe(300);
     expect(s.state.playing).toBe(false);
-    expect(s.state.exploreHint).toBe(true);
+    for (let i = 0; i < 30; i++) s.tick(0.1);
+    expect(s.state.ageMonths).toBe(300);
   });
-  it('story speed scales storyTime; dt is clamped to 100 ms', () => {
+  it('plays the whole timeline in PLAY_SECONDS at 1x, times speed, stops at the end, restarts from the start', () => {
     const s = createStore();
-    s.actions.setSpeed(2);
-    s.actions.play();
-    s.tick(5);
-    expect(s.state.storyTime).toBeCloseTo(0.2, 9);
-  });
-  it('explore plays at 2 years per second times speed, stops at the end, restarts from the start', () => {
-    const s = createStore();
-    s.actions.scrubTo(300);
+    const rate = playRate(780 - 300);
+    expect(rate).toBeCloseTo(480 / PLAY_SECONDS, 12);
     s.actions.play();
     s.tick(0.1);
-    expect(s.state.ageMonths).toBeCloseTo(302.4, 9);
+    expect(s.state.ageMonths).toBeCloseTo(300 + rate * 0.1, 9);
     s.actions.setSpeed(4);
     s.tick(0.1);
-    expect(s.state.ageMonths).toBeCloseTo(312, 9);
+    expect(s.state.ageMonths).toBeCloseTo(300 + rate * 0.5, 9);
     s.actions.scrubTo(779);
     s.actions.play();
     s.tick(0.1);
@@ -123,27 +110,23 @@ describe('store clocks', () => {
     expect(s.state.ageMonths).toBe(300);
     expect(s.state.playing).toBe(true);
   });
-  it('scrubbing exits the story and pauses', () => {
+  it('dt is clamped to 100 ms', () => {
+    const s = createStore();
+    s.actions.play();
+    s.tick(5);
+    expect(s.state.ageMonths).toBeCloseTo(300 + playRate(480) * 0.1, 9);
+  });
+  it('scrubbing pauses and clamps', () => {
     const s = createStore();
     s.actions.play();
     s.tick(0.1);
     s.actions.scrubTo(500);
-    expect(s.state.mode).toBe('explore');
     expect(s.state.playing).toBe(false);
     expect(s.state.ageMonths).toBe(500);
     s.actions.scrubTo(99999);
     expect(s.state.ageMonths).toBe(780);
-  });
-  it('skip jumps to the end, replay restarts', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
-    expect(s.state.ageMonths).toBe(780);
-    expect(s.state.mode).toBe('explore');
-    s.actions.replayStory();
-    expect(s.state.mode).toBe('story');
-    expect(s.state.storyTime).toBe(0);
+    s.actions.scrubTo(0);
     expect(s.state.ageMonths).toBe(300);
-    expect(s.state.playing).toBe(true);
   });
   it('display scale eases toward the target', () => {
     const s = createStore();
@@ -158,14 +141,12 @@ describe('store clocks', () => {
     for (let i = 0; i < 100; i++) s.tick(0.1);
     expect(s.state.displayScale).toBeCloseTo(target, 3);
   });
-  it('reduced motion resets the story paused', () => {
+  it('reduced motion changes no time: the clock stays where it is', () => {
     const s = createStore();
-    s.actions.play();
-    s.tick(0.1);
+    s.actions.scrubTo(500);
     s.actions.setReducedMotion(true);
+    expect(s.state.ageMonths).toBe(500);
     expect(s.state.playing).toBe(false);
-    expect(s.state.storyTime).toBe(0);
-    expect(s.storyLength()).toBeGreaterThan(30);
   });
 });
 

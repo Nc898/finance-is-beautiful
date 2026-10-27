@@ -3,11 +3,13 @@ import '@fontsource/libre-caslon-text/400.css';
 import '@fontsource/libre-caslon-text/400-italic.css';
 import '@fontsource-variable/figtree';
 import './styles/main.css';
+import './styles/intro.css';
 
 import { createScene } from './scene';
 import { createStore } from './app/store';
 import { createUI } from './app/ui';
 import { startLoop } from './app/loop';
+import { setupIntro } from './shared/intro';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const stage = document.getElementById('stage') as HTMLElement;
@@ -70,10 +72,16 @@ const whenSmooth = (): Promise<void> =>
     requestAnimationFrame(step);
   });
 
+// The scene waits at its start (close on the first seedling), paused. The introduction (the first time this session)
+// explains it over the blurred scene; closing it points the eye at the controls.
 scene.ready.then(whenSmooth).then(() => {
   document.body.dataset.ready = '1';
-  const { state, actions } = store;
-  if (!state.reducedMotion && state.mode === 'story' && state.storyTime === 0 && !state.playing) actions.play();
+  setupIntro({
+    slug: 'time-to-grow',
+    dialog: document.getElementById('intro') as HTMLDialogElement,
+    openButton: document.getElementById('btn-about'),
+    onClose: () => ui.highlight(),
+  });
 });
 
 // Test hook: a read-only snapshot plus the action functions.
@@ -97,12 +105,9 @@ window.__ttg = {
         targetScale: state.targetScale,
         displayScale: state.displayScale,
         ageMonths: state.ageMonths,
-        mode: state.mode,
-        storyTime: state.storyTime,
         playing: state.playing,
         speed: state.speed,
         reducedMotion: state.reducedMotion,
-        exploreHint: state.exploreHint,
         timelineStartMonths: state.scenario.timelineStartMonths,
         timelineEndMonths: state.scenario.timelineEndMonths,
         monthlyRate: state.scenario.monthlyRate,

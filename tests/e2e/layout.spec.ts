@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { annuityFV, frames, gotoReady, intersects, scrub, seek, setField, setPanel, skipToExplore, state } from './helpers';
+import { annuityFV, frames, gotoReady, intersects, scrub, atMoment, setField, setPanel, skipToExplore, state } from './helpers';
 import type { Box } from './helpers';
 
 const SCREEN_DIR = 'docs/screens/e2e';
@@ -103,7 +103,7 @@ test.describe('layout', () => {
     await gotoReady(page);
     await expectNoHorizontalOverflow(page, 'initial');
     for (const t of [3, 16, 26, 44, 52]) {
-      await seek(page, t);
+      await atMoment(page, t);
       await expectNoHorizontalOverflow(page, `story t=${t}`);
     }
     await skipToExplore(page);
@@ -150,7 +150,7 @@ test.describe('layout', () => {
 
   test('the caption never intersects a crown at the difference moment', async ({ page }) => {
     await gotoReady(page);
-    await seek(page, 44);
+    await atMoment(page, 44);
     await page.waitForTimeout(700); // let the caption crossfade finish
     const r = await measure(page);
     expect(r.caption).not.toBeNull();
@@ -175,7 +175,7 @@ test.describe('layout', () => {
   test('captions clear the crowns through the growing chapter', async ({ page }) => {
     await gotoReady(page);
     for (const t of [3, 10, 20, 26, 37, 44, 52]) {
-      await seek(page, t);
+      await atMoment(page, t);
       await page.waitForTimeout(500);
       const r = await measure(page);
       const cs = await crowns(page);
@@ -199,9 +199,9 @@ test.describe('layout', () => {
     // On phones the panel overlays the scene by design, so measure with it closed.
     await gotoReady(page, { panel: (page.viewportSize()?.width ?? 0) >= 900 });
     const moments: Array<[string, () => Promise<void>]> = [
-      ['planting t=3', () => seek(page, 3)],
-      ['growing t=26', () => seek(page, 26)],
-      ['difference t=44', () => seek(page, 44)],
+      ['planting t=3', () => atMoment(page, 3)],
+      ['growing t=26', () => atMoment(page, 26)],
+      ['difference t=44', () => atMoment(page, 44)],
       ['explore end', () => skipToExplore(page)],
       ['explore age 30 (B not planted)', () => scrub(page, 30 * 12)],
       ['explore age 45', () => scrub(page, 45 * 12)],
@@ -210,7 +210,11 @@ test.describe('layout', () => {
       await go();
       await page.waitForTimeout(300);
       const r = await measure(page);
-      expect(intersects(r.plateA, r.plateB), `${name}: plate A vs plate B`).toBe(false);
+      // during the opening close-up the other tree's label waits, faded out, under the one riding with the camera
+      const faded = await page.evaluate(() =>
+        ['A', 'B'].filter((id) => getComputedStyle(document.getElementById(`plate-${id}`)!).filter === 'opacity(0)'),
+      );
+      if (!faded.length) expect(intersects(r.plateA, r.plateB), `${name}: plate A vs plate B`).toBe(false);
       if (r.diff) {
         expect(intersects(r.diff, r.plateA), `${name}: difference vs plate A`).toBe(false);
         expect(intersects(r.diff, r.plateB), `${name}: difference vs plate B`).toBe(false);
@@ -279,9 +283,9 @@ test.describe('layout', () => {
   test('screenshots of planting, growing, difference and explore', async ({ page }, info) => {
     await gotoReady(page);
     const shots: Array<[string, () => Promise<void>]> = [
-      ['planting', () => seek(page, 3)],
-      ['growing', () => seek(page, 26)],
-      ['difference', () => seek(page, 44)],
+      ['planting', () => atMoment(page, 3)],
+      ['growing', () => atMoment(page, 26)],
+      ['difference', () => atMoment(page, 44)],
       ['explore', () => skipToExplore(page)],
     ];
     for (const [moment, go] of shots) {

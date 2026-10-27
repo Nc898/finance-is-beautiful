@@ -1,9 +1,22 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { frames, gotoReady, openDetails, scrub, skipToExplore, state } from './helpers';
+import { atMoment, frames, gotoReady, openDetails, scrub, skipToExplore, state } from './helpers';
 
 const TAGS = ['wcag2a', 'wcag2aa'];
+
+/**
+ * Start keyboard navigation from the top of the document. Blurring alone is not enough: on phones the panel toggle
+ * was just clicked, and Chrome keeps the next Tab starting from the last clicked or focused element.
+ */
+async function tabFromTop(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.body.tabIndex = -1;
+    document.body.focus();
+    document.body.removeAttribute('tabindex');
+  });
+}
 
 function describeViolations(results: Awaited<ReturnType<AxeBuilder['analyze']>>): string {
   return results.violations
@@ -38,10 +51,14 @@ test.describe('accessibility', () => {
     expect(results.violations, describeViolations(results)).toEqual([]);
   });
 
-  test('axe: no violations during the story (planting and difference captions)', async ({ page }) => {
-    await gotoReady(page);
+  test('axe: no violations at the planting and difference notes, and with the introduction open', async ({ page }) => {
+    await gotoReady(page, { intro: true });
+    await expect(page.locator('#intro')).toBeVisible();
+    const open = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    expect(open.violations, 'introduction\n' + describeViolations(open)).toEqual([]);
+    await page.keyboard.press('Escape');
     for (const t of [3, 44]) {
-      await page.evaluate((s) => window.__ttg.actions.seekStory(s), t);
+      await atMoment(page, t);
       await frames(page, 4);
       await page.waitForTimeout(1200);
       const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
@@ -60,12 +77,11 @@ test.describe('accessibility', () => {
 
   test('every control is reachable by Tab, in logical order, with a visible focus indicator', async ({ page }) => {
     await gotoReady(page);
-    await skipToExplore(page); // Skip is hidden outside the story
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await tabFromTop(page);
 
     const expected = [
       'Time to Grow, back to all demonstrations',
-      'btn-replay',
+      'btn-about',
       'panel-toggle',
       'btn-play',
       'radio:1',
@@ -150,15 +166,13 @@ test.describe('accessibility', () => {
     expect(focused.equals(unfocused), 'focused timeline looks identical to unfocused').toBe(false);
   });
 
-  test('Skip to explore is in the Tab order while the story is active', async ({ page }) => {
+  test('"About this demo" is in the Tab order, right after the title link', async ({ page }) => {
     await gotoReady(page);
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    // title link home, Replay, then Skip
-    await page.keyboard.press('Tab');
+    await tabFromTop(page);
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     const id = await page.evaluate(() => document.activeElement?.id);
-    expect(id).toBe('btn-skip');
+    expect(id).toBe('btn-about');
   });
 
   test('focus indicators are not clipped: focus ring has contrast against the background', async ({ page }) => {
@@ -272,18 +286,17 @@ test.describe('accessibility', () => {
     expect(m.canvasLabel, 'canvas aria-label rewrites during playback').toBeLessThanOrEqual(3);
   });
 
-  test('live region is quiet during 3 s of story playback (chapter changes only)', async ({ page }) => {
+  test('live region is quiet during 3 s of playback (note changes only)', async ({ page }) => {
     await gotoReady(page);
     await observeMutations(page);
     await page.evaluate(() => {
-      window.__ttg.actions.seekStory(5.5);
       window.__ttg.actions.setSpeed(1);
       window.__ttg.actions.play();
     });
-    await page.waitForTimeout(3000); // crosses planting -> growing at 7 s
+    await page.waitForTimeout(3000); // crosses the planting note into the contributions
     const m = await mutations(page);
     const s = await state(page);
-    expect(s.storyTime).toBeGreaterThan(7);
+    expect(s.ageMonths).toBeGreaterThan(303);
     expect(m.announcer, `announcer texts: ${JSON.stringify(m.texts)}`).toBeLessThanOrEqual(3);
     expect(m.summary).toBeLessThanOrEqual(3);
     expect(m.canvasLabel).toBeLessThanOrEqual(3);

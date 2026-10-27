@@ -19,14 +19,14 @@ async function open(viewport) {
   const page = await ctx.newPage();
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[console]', m.type(), m.text()); });
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+  await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:time-to-grow', '1'));
   await page.goto(url);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 120000 });
-  await page.evaluate(() => window.__ttg.actions.pause()); // take over the story clock
   return page;
 }
 
-const seek = async (page, t) => {
-  await page.evaluate((t) => window.__ttg.actions.seekStory(t), t);
+const seek = async (page, months) => {
+  await page.evaluate((m) => window.__ttg.actions.scrubTo(m), months);
   await page.waitForTimeout(1200);
 };
 const shot = async (page, name, full = false) => {
@@ -42,15 +42,15 @@ const sizes = [
 ];
 for (const [tag, width, height] of sizes) {
   const page = await open({ width, height });
-  await seek(page, 3);
+  await seek(page, 300);
   await shot(page, `${tag}-planting`);
-  await seek(page, 20);
+  await seek(page, 480);
   await shot(page, `${tag}-growing`);
-  await seek(page, 44);
+  await seek(page, 780);
   await shot(page, `${tag}-difference`);
   const h = await page.evaluate(() => { const a = window.__ttg.anchors('A', 1); return Math.round(a.base.y - a.top.y); });
   console.log(tag, 'mature Tree A height px:', h);
-  await page.evaluate(() => window.__ttg.actions.skipToExplore());
+  await page.evaluate(() => window.__ttg.actions.scrubTo(1e6));
   await page.fill('#f-monthlyContribution', '300');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(2500);

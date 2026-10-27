@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { annuityFV, diffText, frames, gotoReady, openDetails, plate, scrub, seek, state, usd } from './helpers';
+import { annuityFV, diffText, frames, gotoReady, openDetails, plate, scrub, atMoment, state, usd } from './helpers';
 
 /** Table cell text for a data-cell key. */
 const cell = (page: import('@playwright/test').Page, key: string) =>
@@ -11,7 +11,7 @@ const cell = (page: import('@playwright/test').Page, key: string) =>
 test.describe('numbers', () => {
   test('difference moment shows the engine values on the plates and difference label', async ({ page }) => {
     await gotoReady(page);
-    await seek(page, 44);
+    await atMoment(page, 44);
     const a = await plate(page, 'A');
     const b = await plate(page, 'B');
     expect(a.balance).toBe('$381,536');
@@ -27,7 +27,7 @@ test.describe('numbers', () => {
 
   test('details table matches the plates at the difference moment', async ({ page }) => {
     await gotoReady(page);
-    await seek(page, 44);
+    await atMoment(page, 44);
     await openDetails(page);
     expect(await cell(page, 'A.balance')).toBe('$381,536');
     expect(await cell(page, 'B.balance')).toBe('$194,903');
@@ -119,7 +119,7 @@ test.describe('numbers', () => {
 
   test('the story reaches the same final numbers as exploring to the end', async ({ page }) => {
     await gotoReady(page);
-    await seek(page, 54);
+    await atMoment(page, 54);
     const sA = (await plate(page, 'A')).balance;
     const sB = (await plate(page, 'B')).balance;
     await scrub(page, 780);

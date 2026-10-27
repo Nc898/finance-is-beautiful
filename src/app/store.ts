@@ -10,11 +10,9 @@ import {
   visualScaleFor,
 } from '../engine';
 import type { InputField, Inputs, Scenario, ValidationResult } from '../engine';
-import { storyAge, storyDuration } from './story';
 
 export type Speed = 0.5 | 1 | 2 | 4;
 export const SPEEDS: readonly Speed[] = [0.5, 1, 2, 4];
-export type Mode = 'story' | 'explore';
 export type DraftFields = Record<InputField, string>;
 
 /** Why subscribers were notified; discrete events only, never per frame. */
@@ -26,12 +24,8 @@ export type Reason =
   | 'pause'
   | 'speed'
   | 'scrub'
-  | 'replay'
-  | 'skip'
-  | 'story-end'
   | 'play-end'
-  | 'reduced'
-  | 'seek';
+  | 'reduced';
 
 export interface AppState {
   /** Last VALID inputs. */
@@ -44,18 +38,15 @@ export interface AppState {
   displayScale: number;
   /** THE shared clock, in months (float). */
   ageMonths: number;
-  mode: Mode;
-  /** Seconds into the guided story (story mode only). */
-  storyTime: number;
   playing: boolean;
   speed: Speed;
   reducedMotion: boolean;
-  /** True from the story handoff / skip until the user next interacts: shows "Explore your own timeline". */
-  exploreHint: boolean;
 }
 
-/** Explore playback: 2 years per second at 1x. */
-export const EXPLORE_MONTHS_PER_SECOND = 24;
+/** A full run of the timeline takes this long at 1x, whatever its length (the default 40 years: 20 months a second). */
+export const PLAY_SECONDS = 24;
+/** Playback at 1x, in months a second: the timeline over PLAY_SECONDS (never slower than half a month a second). */
+export const playRate = (span: number): number => Math.max(0.5, span / PLAY_SECONDS);
 /** Max time step the clock will take in one frame (so tab switches don't jump). */
 export const MAX_DT = 0.1;
 /** Scale easing time constants, seconds. */
@@ -133,13 +124,9 @@ export interface Actions {
   play(): void;
   pause(): void;
   togglePlay(): void;
-  replayStory(): void;
-  skipToExplore(): void;
   scrubTo(ageMonths: number): void;
   setSpeed(speed: Speed): void;
   setReducedMotion(on: boolean): void;
-  /** Test/dev helper: jump the story clock (story mode, paused state unchanged). */
-  seekStory(seconds: number): void;
 }
 
 export interface Store {
@@ -148,8 +135,6 @@ export interface Store {
   subscribe(fn: (reason: Reason) => void): () => void;
   /** Advance the clocks by dt seconds (clamped to MAX_DT). Called by the rAF loop. */
   tick(dtSeconds: number): void;
-  /** Story duration for the current inputs and motion preference. */
-  storyLength(): number;
 }
 
 export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } = {}): Store {
@@ -164,34 +149,16 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
     scenario,
     targetScale: scale,
     displayScale: scale,
-    ageMonths: storyAge(0, inputs, reducedMotion),
-    mode: 'story',
-    storyTime: 0,
+    // the clock starts where the timeline does (the earlier planting), paused
+    ageMonths: scenario.timelineStartMonths,
     playing: false,
     speed: 1,
     reducedMotion,
-    exploreHint: false,
   };
   const listeners = new Set<(r: Reason) => void>();
   const emit = (r: Reason) => listeners.forEach((fn) => fn(r));
   const tlStart = () => state.scenario.timelineStartMonths;
   const tlEnd = () => state.scenario.timelineEndMonths;
-  const storyLength = () => storyDuration(state.inputs, state.reducedMotion);
-
-  /** Leave the guided story and carry on from the current age. */
-  const exitStory = () => {
-    if (state.mode !== 'story') return;
-    state.mode = 'explore';
-    state.playing = false;
-  };
-
-  const finishStory = () => {
-    state.mode = 'explore';
-    state.ageMonths = tlEnd();
-    state.playing = false;
-    state.exploreHint = true;
-    emit('story-end');
-  };
 
   const actions: Actions = {
     setDraftField(field, text) {
@@ -213,8 +180,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
         if (hadErrors) emit('errors');
         return;
       }
-      exitStory();
-      state.exploreHint = false;
       state.inputs = candidate;
       state.scenario = buildScenario(candidate);
       state.targetScale = visualScaleFor(state.scenario);
@@ -251,15 +216,9 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
     },
 
     play() {
-      if (state.mode === 'story') {
-        if (state.storyTime >= storyLength()) return;
-        state.playing = true;
-      } else {
-        if (tlEnd() <= tlStart()) return;
-        if (state.ageMonths >= tlEnd() - 1e-6) state.ageMonths = tlStart();
-        state.playing = true;
-        state.exploreHint = false;
-      }
+      if (tlEnd() <= tlStart()) return;
+      if (state.ageMonths >= tlEnd() - 1e-6) state.ageMonths = tlStart();
+      state.playing = true;
       emit('play');
     },
 
@@ -274,27 +233,10 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
       else actions.play();
     },
 
-    replayStory() {
-      state.mode = 'story';
-      state.storyTime = 0;
-      state.ageMonths = storyAge(0, state.inputs, state.reducedMotion);
-      state.playing = true;
-      state.exploreHint = false;
-      emit('replay');
-    },
 
-    skipToExplore() {
-      state.mode = 'explore';
-      state.playing = false;
-      state.ageMonths = tlEnd();
-      state.exploreHint = true;
-      emit('skip');
-    },
 
     scrubTo(ageMonths) {
-      exitStory();
       state.playing = false;
-      state.exploreHint = false;
       state.ageMonths = Math.min(tlEnd(), Math.max(tlStart(), ageMonths));
       emit('scrub');
     },
@@ -307,37 +249,15 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
     setReducedMotion(on) {
       if (state.reducedMotion === on) return;
       state.reducedMotion = on;
-      if (state.mode === 'story') {
-        // The two story timelines differ, so start over, paused (reduced motion never autoplays).
-        state.storyTime = 0;
-        state.ageMonths = storyAge(0, state.inputs, on);
-        state.playing = false;
-      }
       emit('reduced');
     },
 
-    seekStory(seconds) {
-      state.mode = 'story';
-      state.exploreHint = false;
-      state.storyTime = Math.min(storyLength(), Math.max(0, seconds));
-      state.ageMonths = storyAge(state.storyTime, state.inputs, state.reducedMotion);
-      emit('seek');
-    },
   };
 
   const tick = (dtRaw: number) => {
     const dt = Math.min(MAX_DT, Math.max(0, dtRaw));
-    if (state.mode === 'story') {
-      if (state.playing) {
-        state.storyTime += dt * state.speed;
-        if (state.storyTime >= storyLength()) {
-          state.storyTime = storyLength();
-          finishStory();
-        }
-      }
-      if (state.mode === 'story') state.ageMonths = storyAge(state.storyTime, state.inputs, state.reducedMotion);
-    } else if (state.playing) {
-      state.ageMonths += EXPLORE_MONTHS_PER_SECOND * state.speed * dt;
+    if (state.playing) {
+      state.ageMonths += playRate(tlEnd() - tlStart()) * state.speed * dt;
       if (state.ageMonths >= tlEnd()) {
         state.ageMonths = tlEnd();
         state.playing = false;
@@ -355,7 +275,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: Inputs } =
     state,
     actions,
     tick,
-    storyLength,
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);

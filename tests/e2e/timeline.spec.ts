@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { canvasData, frames, gotoReady, scrub, seek, state } from './helpers';
+import { canvasData, frames, gotoReady, scrub, atMoment, state } from './helpers';
 
 test.describe('timeline', () => {
   test('range min/max equal the timeline start and end months', async ({ page }) => {
@@ -86,17 +86,15 @@ test.describe('timeline', () => {
     await expect(page.locator('#timeline')).toHaveAttribute('aria-valuetext', 'Age 45 years, 3 months');
   });
 
-  test('scrubbing during the story switches to explore mode, paused, at that age', async ({ page }) => {
-    await gotoReady(page, { pause: false });
-    expect((await state(page)).mode).toBe('story');
+  test('scrubbing while playing pauses at the new age', async ({ page }) => {
+    await gotoReady(page);
+    await page.evaluate(() => window.__ttg.actions.play());
     await page.locator('#timeline').focus();
     await page.keyboard.press('PageUp');
     await frames(page, 2);
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.playing).toBe(false);
     expect(s.ageMonths).toBeGreaterThan(300);
-    await expect(page.locator('#btn-skip')).toBeHidden();
     await expect(page.locator('#btn-play')).toContainText('Play');
   });
 
@@ -107,7 +105,6 @@ test.describe('timeline', () => {
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
     await frames(page, 3);
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     // Roughly halfway along the track (thumb inset makes this approximate).
     expect(s.ageMonths).toBeGreaterThan(500);
     expect(s.ageMonths).toBeLessThan(580);
@@ -148,7 +145,7 @@ test.describe('timeline', () => {
 
     test('story and explore render the same pixels at the same age', async ({ page }) => {
       await gotoReady(page);
-      await seek(page, 54); // story hold at the end: age 65, no loupe
+      await atMoment(page, 54); // story hold at the end: age 65, no loupe
       await frames(page, 4);
       const fromStory = await canvasData(page);
       await scrub(page, 780);

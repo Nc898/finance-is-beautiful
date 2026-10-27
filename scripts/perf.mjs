@@ -94,6 +94,7 @@ async function measureProfile(browser, profile, throttle) {
     }
   });
 
+  await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:time-to-grow', '1'));
   await page.goto(baseUrl, { waitUntil: 'load' });
   await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 120000 });
   const readyMs = await page.evaluate(() => window.__perf.ready);
@@ -102,12 +103,12 @@ async function measureProfile(browser, profile, throttle) {
 
   const windows = [];
   for (const w of [
-    { name: 'growing early (story 8-18 s, loupe on roots)', seek: 8 },
-    { name: 'growing late (story 22-32 s, branch loupe)', seek: 22 },
+    { name: 'growing early (age 26 on, the close view easing out)', seek: 312 },
+    { name: 'growing late (age 40 on, both trees)', seek: 480 },
   ]) {
     await page.evaluate(({ seek }) => {
       window.__ttg.actions.pause();
-      window.__ttg.actions.seekStory(seek);
+      window.__ttg.actions.scrubTo(seek);
       window.__ttg.actions.setSpeed(2);
     }, { seek: w.seek });
     await page.waitForTimeout(600); // let the scene settle on the new age before measuring
@@ -116,7 +117,7 @@ async function measureProfile(browser, profile, throttle) {
     const lt0 = await page.evaluate(() => window.__perf.longTasks.length);
     const result = await page.evaluate(async (seconds) => {
       window.__ttg.actions.play();
-      const s0 = window.__ttg.getState().storyTime;
+      const s0 = window.__ttg.getState().ageMonths;
       const intervals = [];
       let last = null;
       await new Promise((resolve) => {
@@ -129,9 +130,9 @@ async function measureProfile(browser, profile, throttle) {
         };
         requestAnimationFrame(step);
       });
-      const s1 = window.__ttg.getState().storyTime;
+      const s1 = window.__ttg.getState().ageMonths;
       window.__ttg.actions.pause();
-      return { intervals, storyAdvanced: s1 - s0, mode: window.__ttg.getState().mode };
+      return { intervals, monthsAdvanced: s1 - s0 };
     }, SECONDS);
     const m1 = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((m) => [m.name, m.value]));
     const longTasks = await page.evaluate((from) => window.__perf.longTasks.slice(from), lt0);
@@ -139,7 +140,7 @@ async function measureProfile(browser, profile, throttle) {
     windows.push({
       name: w.name,
       ...stats(result.intervals),
-      storyAdvancedSeconds: +result.storyAdvanced.toFixed(2),
+      monthsAdvanced: +result.monthsAdvanced.toFixed(1),
       taskBusyPct: +(((m1.TaskDuration - m0.TaskDuration) / wall) * 100).toFixed(0),
       scriptBusyPct: +(((m1.ScriptDuration - m0.ScriptDuration) / wall) * 100).toFixed(0),
       longTasks: longTasks.length,

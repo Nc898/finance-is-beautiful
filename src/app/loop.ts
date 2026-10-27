@@ -6,7 +6,7 @@ import { maturityFor, snapshotAt } from '../engine';
 import type { TreeId, TreeSnapshot } from '../engine';
 import type { SceneAPI, SceneFrame, TreeVisualState } from '../scene/types';
 import type { Store } from './store';
-import { loupeAt, storyCamera } from './story';
+import { cameraAt, loupeAt } from './notes';
 import type { UI } from './ui';
 
 export interface Loop {
@@ -58,7 +58,7 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // Motion is capped at 30 fps: skip display refreshes until a 30 fps frame is due. The clock advances by
-    // the real elapsed time, so playback speed and story length are unchanged.
+    // the real elapsed time, so playback speed is unchanged.
     if (now - last < FRAME_MS) return;
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
@@ -74,8 +74,8 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     ui.update(exact);
 
     const motion = !state.reducedMotion;
-    const loupe =
-      state.mode === 'story' ? loupeAt(state.storyTime, state.inputs, state.reducedMotion) : undefined;
+    // the loupe on the second seedling's roots as it is planted, whenever the clock is there (played or dragged)
+    const loupe = loupeAt(age, state.inputs, state.reducedMotion);
     const loupeKey = loupe ? loupe.strength + loupe.target : '';
     if (!motion && !dirty && age === lastAge && state.displayScale === lastScale && sc === lastScenario && loupeKey === lastLoupe) return;
     lastLoupe = loupeKey;
@@ -84,9 +84,9 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     lastScenario = sc;
     dirty = false;
 
-    // Opening camera move (story only). Eased, so leaving the story mid-zoom glides back to the full view;
-    // the first frame starts already close in.
-    const camTarget = state.mode === 'story' ? storyCamera(state.storyTime, state.inputs, state.reducedMotion) : undefined;
+    // The close view on the first seedling, keyed to the age on the clock (close at its planting, pulling back over
+    // its first years). Eased, so a drag glides in or out; the first frame starts already close in.
+    const camTarget = cameraAt(age, state.inputs, state.reducedMotion);
     const tz = camTarget?.zoom ?? 1;
     if (camTarget) camFocus = camTarget.focus;
     camZoom = camInit && motion ? camZoom + (tz - camZoom) * (1 - Math.exp(-dt / 0.35)) : tz;
@@ -119,8 +119,8 @@ export function startLoop(store: Store, scene: SceneAPI, ui: UI): Loop {
     for (const id of ['A', 'B'] as const) {
       const el = document.getElementById(`plate-${id}`);
       if (!el) continue;
-      // follow only during the opening's own camera move; after a skip or scrub the label fades back in
-      // with the others while the camera glides out
+      // follow only while the close view is wanted; once it is not, the label fades back in with the others while
+      // the camera glides out
       const follow = !!camTarget && camZoom > 1 && id === camTree;
       el.classList.toggle('cam-follow', follow);
       if (follow) {
