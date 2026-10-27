@@ -16,8 +16,8 @@ import {
 import type { PlanId, PlanSnapshot, VineField } from '../engine';
 import { FIELDS } from './store';
 import { SPEED_MAX, SPEED_MIN, type Reason, type Store } from './store';
-import { BEATS, captionForBeat, minimumLiveLine, storyBeat, storyCaption } from './story';
-import type { StoryBeat, StoryCaption } from './story';
+import { NOTE_KINDS, minimumLiveLine, noteFor, noteKindAt } from './notes';
+import type { Note, NoteKind } from './notes';
 import { fixedNote, interestText, owedText, resultsSentence, sceneSummary, scrubSentence, timelineTicks } from './text';
 
 const COMMIT_DEBOUNCE_MS = 250;
@@ -54,6 +54,8 @@ export interface UI {
   /** Stage size in CSS px. */
   setStageSize(w: number, h: number): void;
   announce(text: string): void;
+  /** Draw the eye to the controls (as the introduction closes): the panel, or its toggle when it is folded away. */
+  highlight(): void;
 }
 
 function $<T extends HTMLElement>(id: string): T {
@@ -103,8 +105,6 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const playLabel = $('play-label');
   const icoPlay = playBtn.querySelector<SVGElement>('.ico-play')!;
   const icoPause = playBtn.querySelector<SVGElement>('.ico-pause')!;
-  const replayBtn = $<HTMLButtonElement>('btn-replay');
-  const skipBtn = $<HTMLButtonElement>('btn-skip');
   const timeline = $<HTMLInputElement>('timeline');
   const ageReadout = $('age-readout');
   const yearReadout = $('year-readout');
@@ -218,8 +218,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   /** Tallest caption this scenario can produce, at the current width (measured in a hidden twin). */
   function tallestCaption(): number {
     let tallest = 0;
-    for (const beat of BEATS) {
-      const c = captionForBeat(beat, state.inputs);
+    for (const kind of NOTE_KINDS) {
+      const c = noteFor(kind, state.inputs);
       setText(ghostCap.querySelector<HTMLElement>('.cap-1')!, c.primary);
       setText(ghostCap.querySelector<HTMLElement>('.cap-2')!, c.secondary ?? '');
       tallest = Math.max(tallest, ghostCap.offsetHeight);
@@ -229,7 +229,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   function applyInsets(): void {
     if (!stageW) return;
-    const capTop = $('caption').offsetTop;
+    const capTop = parseFloat(getComputedStyle($('caption')).getPropertyValue('--cap-top-closed')) || $('caption').offsetTop;
     const masthead = (document.querySelector('.masthead') as HTMLElement).offsetHeight;
     const top = Math.ceil(Math.max(masthead + 4, capTop + tallestCaption() + 4));
     const bottom = stageW < 700 ? BOTTOM_BAND_NARROW : BOTTOM_BAND_WIDE;
@@ -367,9 +367,9 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   const layers = Array.from(document.querySelectorAll<HTMLElement>('#caption .cap[data-layer]'));
   let activeLayer = 0;
   let captionKey = '';
-  function setCaption(c: StoryCaption | null): void {
+  function setCaption(c: Note | null): void {
     // a live secondary line is rewritten in place, so it is not part of the identity of the caption
-    const key = c ? `${c.beat}|${c.primary}|${c.live ? '' : (c.secondary ?? '')}` : '';
+    const key = c ? `${c.kind}|${c.primary}|${c.live ? '' : (c.secondary ?? '')}` : '';
     if (key === captionKey) return;
     captionKey = key;
     const cur = layers[activeLayer];
@@ -438,7 +438,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   }
 
   let lastSnaps: readonly PlanSnapshot[] = [];
-  let lastBeat: StoryBeat | null = null;
+  let lastNote: NoteKind | null = null;
   let timelineKey = '';
   let tableKey = '';
 
@@ -461,20 +461,16 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   function update(snaps: readonly PlanSnapshot[]): void {
     lastSnaps = snaps;
 
-    // Story beat handling (captions + live announcements).
-    let beat: StoryBeat | null = null;
-    if (state.mode === 'story') beat = storyBeat(state.storyTime, state.inputs, state.reducedMotion);
-    if (beat !== lastBeat) {
-      lastBeat = beat;
-      if (beat !== null) {
-        const cap = storyCaption(state.storyTime, state.inputs, state.reducedMotion);
-        setCaption(cap);
-        if (state.playing) announce([cap.primary, cap.secondary].filter(Boolean).join(' '));
-      }
+    // The milestone note for the moment on the clock (announced as it changes while playing; a drag announces the
+    // moment it lands on instead).
+    const kind = noteKindAt(state.months, state.inputs);
+    if (kind !== lastNote) {
+      lastNote = kind;
+      const note = noteFor(kind, state.inputs, state.months);
+      setCaption(note);
+      if (state.playing) announce([note.primary, note.secondary].filter(Boolean).join(' '));
     }
-    if (beat === null) {
-      setCaption(state.exploreHint ? { beat: 'handoff', primary: 'Explore your own garden' } : null);
-    } else if (beat === 'minimum') {
+    if (kind === 'minimum') {
       // the "Year 12: $1,176 still owed" line follows the clock, in place
       setText(layers[activeLayer].querySelector<HTMLElement>('.cap-2')!, minimumLiveLine(state.inputs, state.months));
     }
@@ -504,12 +500,9 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   /* ---------------- controls ---------------- */
 
   function syncPlay(): void {
-    const story = state.mode === 'story';
-    const label = state.playing ? (story ? 'Pause story' : 'Pause') : story ? (state.storyTime > 0 ? 'Resume story' : 'Play story') : 'Play';
-    setText(playLabel, label);
+    setText(playLabel, state.playing ? 'Pause' : 'Play');
     icoPlay.toggleAttribute('hidden', state.playing);
     icoPause.toggleAttribute('hidden', !state.playing);
-    skipBtn.hidden = !story;
   }
 
   function syncSpeed(): void {
@@ -590,8 +583,6 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   });
 
   playBtn.addEventListener('click', () => actions.togglePlay());
-  replayBtn.addEventListener('click', () => actions.replayStory());
-  skipBtn.addEventListener('click', () => actions.skipToExplore());
   speedSlider.addEventListener('input', () => {
     actions.setSpeed(sliderToSpeed(Number(speedSlider.value)));
     speedSlider.style.setProperty('--frac', String(Number(speedSlider.value) / 1000));
@@ -658,7 +649,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   function resetKeys(): void {
     timelineKey = '';
     tableKey = '';
-    lastBeat = null;
+    lastNote = null;
     for (const id of PLANS) {
       labelKey[id] = '';
       tagKey[id] = '';
@@ -691,7 +682,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
         break;
       case 'play':
         syncPlay();
-        announce(state.mode === 'story' ? 'Story playing.' : 'Playing.');
+        announce('Playing.');
         break;
       case 'pause':
         syncPlay();
@@ -712,33 +703,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
         scheduleSummary(SCRUB_ANNOUNCE_MS);
         announce(scrubSentence(state.inputs, state.months), SCRUB_ANNOUNCE_MS);
         break;
-      case 'replay':
-        syncPlay();
-        lastBeat = null;
-        refreshSummary();
-        announce('Story restarted.');
-        break;
-      case 'skip':
-        syncPlay();
-        refreshSummary();
-        highlight();
-        announce('Explore your own garden. Controls are ready.');
-        break;
-      case 'story-end':
-        syncPlay();
-        refreshSummary();
-        highlight();
-        break;
       case 'reduced':
         applyReduced();
         syncPlay();
-        lastBeat = null;
+        lastNote = null;
         refreshSummary();
-        announce(state.reducedMotion ? 'Reduced motion on. The story will not autoplay.' : 'Reduced motion off.');
-        break;
-      case 'seek':
-        syncPlay();
-        lastBeat = null;
+        announce(state.reducedMotion ? 'Reduced motion on.' : 'Reduced motion off.');
         break;
     }
   });
@@ -766,6 +736,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     place,
     invalidate,
     announce: (t) => announce(t),
+    highlight: () => highlight(),
     setStageSize(w) {
       stageW = w;
       applyInsets();

@@ -1,14 +1,14 @@
-// Usage: node scripts/bake-vine-preview.mjs [port] [storySeconds]   (dev server running, default :5180)
-// Paints the landing page's Nip It in the Bud still with the real scene: the story plays to a moment when both
-// gardeners are at work on half-cut vines with leaves in the air, the page chrome is hidden, and the painting is
-// written to public/assets/preview-vine.webp. Re-run after changing the vine scene's art.
+// Usage: node scripts/bake-vine-preview.mjs [port] [month]   (dev server running, default :5180)
+// Paints the landing page's Nip It in the Bud still with the real scene: the timeline is set to a month when both
+// gardeners are at work on half-cut vines and played a moment, so leaves are in the air; the page chrome is hidden,
+// and the painting is written to public/assets/preview-vine.webp. Re-run after changing the vine scene's art.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const PW = process.env.PLAYWRIGHT_PATH ?? 'playwright';
 const { chromium } = createRequire(import.meta.url)(PW);
 
 const port = process.argv[2] ?? '5180';
-const at = Number(process.argv[3] ?? '15.2');
+const at = Number(process.argv[3] ?? '9');
 const out = 'public/assets';
 mkdirSync(out, { recursive: true });
 
@@ -16,11 +16,17 @@ const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gp
 // rendered large and cropped in to 1300 x 929 (7:5 like the landing card, sharp at 2x)
 const page = await browser.newPage({ viewport: { width: 980, height: 700 }, deviceScaleFactor: 2.4 });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+// past the introduction (it shows the first time per session)
+await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:nip-it-in-the-bud', '1'));
 await page.goto(`http://localhost:${port}/nip-it-in-the-bud.html`);
 await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 90000 });
-// the whole stage for the painting: the controls folded away, then the story plays on to the moment
+// the whole stage for the painting: the controls folded away, the timeline set to the moment, then a moment of play
 await page.locator('#panel-toggle').click();
-await page.waitForFunction((t) => window.__vine.getState().storyTime >= t, at, { timeout: 90000, polling: 16 });
+await page.evaluate((m) => window.__vine.actions.scrubTo(m), at);
+await page.waitForTimeout(1200);
+await page.evaluate(() => window.__vine.actions.play());
+await page.waitForTimeout(1300);
+await page.evaluate(() => window.__vine.actions.pause());
 await page.addStyleTag({ content: '.overlay, .caption, .masthead, .year-readout, .panel-toggle, .loader { display: none !important; }' });
 await page.waitForTimeout(60);
 const shot = await page.locator('#scene').screenshot({ type: 'png' });
@@ -46,7 +52,7 @@ const dataUrl = await page.evaluate(async (b64) => {
 }, shot.toString('base64'));
 const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
 writeFileSync(`${out}/preview-vine.webp`, buf);
-console.log(`baked ${out}/preview-vine.webp (${Math.round(buf.length / 1024)} KB) at story ${at}s`);
+console.log(`baked ${out}/preview-vine.webp (${Math.round(buf.length / 1024)} KB) from month ${at}`);
 
 // the landing entry's drifting leaves: painted by the scene's own leaf painter (src/vine/scene/leaves.ts), each
 // at 4x the size it shows at, written as public/assets/vine-leaf-1..5.webp

@@ -4,7 +4,6 @@
  */
 import { DEFAULT_VINE_INPUTS, VINE_LIMITS, horizonMonths, validateVineInputs } from '../engine';
 import type { VineField, VineInputs, VineValidation } from '../engine';
-import { storyDuration, storyMonths } from './story';
 
 /** Playback speed, a multiple of the normal pace: anywhere from SPEED_MIN to SPEED_MAX, in tenths. */
 export type Speed = number;
@@ -15,7 +14,6 @@ export const clampSpeed = (s: number): Speed => {
   const v = Number.isFinite(s) ? s : 1;
   return Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, v)) * 10) / 10;
 };
-export type Mode = 'story' | 'explore';
 export type DraftFields = Record<VineField, string>;
 export const FIELDS: readonly VineField[] = ['balance', 'apr', 'fixedPayment', 'minPercent', 'minFloor'];
 
@@ -28,12 +26,8 @@ export type Reason =
   | 'pause'
   | 'speed'
   | 'scrub'
-  | 'replay'
-  | 'skip'
-  | 'story-end'
   | 'play-end'
-  | 'reduced'
-  | 'seek';
+  | 'reduced';
 
 export interface AppState {
   /** Last VALID inputs. */
@@ -41,22 +35,19 @@ export interface AppState {
   /** Raw field text; may be invalid. Rates are shown in percent. */
   draft: DraftFields;
   errors: VineValidation['errors'];
-  /** THE shared clock, in months (float). */
+  /** THE shared clock, in months (float). It starts at 0, paused: the viewer plays it or drags it. */
   months: number;
-  mode: Mode;
-  /** Seconds into the guided story (story mode only). */
-  storyTime: number;
   playing: boolean;
   speed: Speed;
   reducedMotion: boolean;
-  /** True from the story handoff / skip until the user next interacts: shows "Explore your own garden". */
-  exploreHint: boolean;
   /** How fast the shared clock moved in the last tick, in months per second (0 when not playing). */
   monthsPerSecond: number;
 }
 
-/** Explore playback: 10 months per second at 1x (the default 19 years take about 23 s). */
-export const EXPLORE_MONTHS_PER_SECOND = 10;
+/** A full run of the timeline takes this long at 1x, whatever its length (the default 19 years: about 10 months a second). */
+export const PLAY_SECONDS = 24;
+/** Playback at 1x, in months a second: the timeline over PLAY_SECONDS (never slower than half a month a second). */
+export const playRate = (horizon: number): number => Math.max(0.5, horizon / PLAY_SECONDS);
 /** Max time step the clock will take in one frame (so tab switches don't jump). */
 export const MAX_DT = 0.1;
 
@@ -142,14 +133,10 @@ export interface Actions {
   play(): void;
   pause(): void;
   togglePlay(): void;
-  replayStory(): void;
-  skipToExplore(): void;
-  /** Move the shared clock to `months` (clamped to 0…horizon). Leaves the story, paused. */
+  /** Move the shared clock to `months` (clamped to 0…horizon). Paused. */
   scrubTo(months: number): void;
   setSpeed(speed: Speed): void;
   setReducedMotion(on: boolean): void;
-  /** Test/dev helper: jump the story clock (story mode, paused state unchanged). */
-  seekStory(seconds: number): void;
 }
 
 export interface Store {
@@ -158,8 +145,6 @@ export interface Store {
   subscribe(fn: (reason: Reason) => void): () => void;
   /** Advance the clocks by dt seconds (clamped to MAX_DT). Called by the rAF loop. */
   tick(dtSeconds: number): void;
-  /** Story duration for the current inputs and motion preference. */
-  storyLength(): number;
   /** The timeline length in months for the current inputs (the later payoff). */
   horizon(): number;
 }
@@ -171,34 +156,17 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
     inputs,
     draft: inputsToDraft(inputs),
     errors: {},
-    months: storyMonths(0, inputs, reducedMotion),
-    mode: 'story',
-    storyTime: 0,
+    months: 0,
     playing: false,
     speed: 1,
     reducedMotion,
-    exploreHint: false,
     monthsPerSecond: 0,
   };
   const listeners = new Set<(r: Reason) => void>();
   const emit = (r: Reason) => listeners.forEach((fn) => fn(r));
   const end = () => horizonMonths(state.inputs);
-  const storyLength = () => storyDuration(state.inputs, state.reducedMotion);
 
-  /** Leave the guided story and carry on from the current month. */
-  const exitStory = () => {
-    if (state.mode !== 'story') return;
-    state.mode = 'explore';
-    state.playing = false;
-  };
 
-  const finishStory = () => {
-    state.mode = 'explore';
-    state.months = end();
-    state.playing = false;
-    state.exploreHint = true;
-    emit('story-end');
-  };
 
   const actions: Actions = {
     setDraftField(field, text) {
@@ -220,8 +188,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
         if (hadErrors) emit('errors');
         return;
       }
-      exitStory();
-      state.exploreHint = false;
       state.inputs = candidate;
       if (state.months > end()) {
         state.months = end();
@@ -257,15 +223,9 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
     },
 
     play() {
-      if (state.mode === 'story') {
-        if (state.storyTime >= storyLength()) return;
-        state.playing = true;
-      } else {
-        if (end() <= 0) return;
-        if (state.months >= end() - 1e-6) state.months = 0;
-        state.playing = true;
-        state.exploreHint = false;
-      }
+      if (end() <= 0) return;
+      if (state.months >= end() - 1e-6) state.months = 0;
+      state.playing = true;
       emit('play');
     },
 
@@ -281,27 +241,10 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
       else actions.play();
     },
 
-    replayStory() {
-      state.mode = 'story';
-      state.storyTime = 0;
-      state.months = storyMonths(0, state.inputs, state.reducedMotion);
-      state.playing = true;
-      state.exploreHint = false;
-      emit('replay');
-    },
 
-    skipToExplore() {
-      state.mode = 'explore';
-      state.playing = false;
-      state.months = end();
-      state.exploreHint = true;
-      emit('skip');
-    },
 
     scrubTo(months) {
-      exitStory();
       state.playing = false;
-      state.exploreHint = false;
       state.months = Math.min(end(), Math.max(0, months));
       emit('scrub');
     },
@@ -316,38 +259,16 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
     setReducedMotion(on) {
       if (state.reducedMotion === on) return;
       state.reducedMotion = on;
-      if (state.mode === 'story') {
-        // The two story timelines differ, so start over, paused (reduced motion never autoplays).
-        state.storyTime = 0;
-        state.months = storyMonths(0, state.inputs, on);
-        state.playing = false;
-      }
       emit('reduced');
     },
 
-    seekStory(seconds) {
-      state.mode = 'story';
-      state.exploreHint = false;
-      state.storyTime = Math.min(storyLength(), Math.max(0, seconds));
-      state.months = storyMonths(state.storyTime, state.inputs, state.reducedMotion);
-      emit('seek');
-    },
   };
 
   const tick = (dtRaw: number) => {
     const dt = Math.min(MAX_DT, Math.max(0, dtRaw));
     const before = state.months;
-    if (state.mode === 'story') {
-      if (state.playing) {
-        state.storyTime += dt * state.speed;
-        if (state.storyTime >= storyLength()) {
-          state.storyTime = storyLength();
-          finishStory();
-        }
-      }
-      if (state.mode === 'story') state.months = storyMonths(state.storyTime, state.inputs, state.reducedMotion);
-    } else if (state.playing) {
-      state.months += EXPLORE_MONTHS_PER_SECOND * state.speed * dt;
+    if (state.playing) {
+      state.months += playRate(end()) * state.speed * dt;
       if (state.months >= end()) {
         state.months = end();
         state.playing = false;
@@ -361,7 +282,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: VineInputs
     state,
     actions,
     tick,
-    storyLength,
     horizon: end,
     subscribe(fn) {
       listeners.add(fn);

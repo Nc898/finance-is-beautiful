@@ -2,8 +2,8 @@
 
 Third demonstration in the "Finance is beautiful" collection, the first of three about debt. Same world as
 Time to Grow and Against the Current: warm ivory paper, ink-and-watercolor illustration, light from the upper
-left, quiet type (Libre Caslon Display / Text italic, Figtree), collapsible right-hand controls panel, guided
-story that hands off to exploration. Motion at 60 fps (as the river).
+left, quiet type (Libre Caslon Display / Text italic, Figtree), collapsible right-hand controls panel, an
+introduction then free exploration (no scripted story). Motion at 60 fps (as the river).
 
 Season: **autumn**. Sky: **clear blue with the sun out, no clouds** (a change from the other two demos).
 
@@ -70,8 +70,7 @@ The vine (one per cottage, the heart of the picture):
 
 The gardener (src/vine/scene/gardener.ts, contract in gardenerApi.ts): see the next section.
 
-Camera (story only): starts close on both vines at their roots (focus 'both', zoom ~2.2) and eases out to
-the whole garden as the first months pass (labels fade during the zoom, as in the river).
+Camera: always the whole garden (no zoom: the two cottages are only ever compared at the same, full view).
 
 Performance: sky, hills, cottages, fence, lawn pre-rendered once per size into cached layers; per frame only
 the vine (cached leaf sprites, drawn transformed), falling leaves, smoke, piles, gardeners. Target ≤ 4 ms per
@@ -106,17 +105,21 @@ Animation quality bar (non-negotiable):
 - The shears tip (`shears()`) is exactly where the cut happens; the scene drops clippings there.
 - The gardener never walks through the bench, the pile or the other garden; it stays in its own garden.
 
-## Story (~52 s at 1×), driven by story time → months
-| t (s) | months | caption (primary / secondary) | notes |
-|---|---|---|---|
-| 0–6 | 0 | "Two cottages. The same $5,000 vine." / "A credit card balance at 22% a year." | camera close on both vine roots; gardeners idle |
-| 6–12 | 0 → 3 | "Interest grows it back every month." / "About $92 a month to start." | camera eases out; both start pruning |
-| 12–22 | 3 → 34 | "A fixed $200 a month clears it in 2 years, 10 months." | right vine cleared; right gardener rests |
-| 22–40 | 34 → 230 | "Minimum payments trim a little. The vine keeps coming back." / "Year 12: $1,176 still owed." (live, follows the clock) | months accelerate smoothly |
-| 40–48 | 230 | "Minimum payments: 19 years, 2 months and $8,100 in interest." / "A fixed $200: $1,750 in interest." | results |
-| 48–52 | 230 | "Explore your own garden" | hand off to explore, paused at the end |
-Copy is live (values from the engine), hopeful and plain, never scary or preachy. No em-dashes. Month marks
-adapt to the inputs (e.g. if the fixed plan takes longer, its beat stretches). Reduced motion: discrete holds.
+## Introduction and notes (no scripted story)
+The demonstration opens with the shared introduction (src/shared/intro.ts; content in nip-it-in-the-bud.html): what it
+shows, how to read the picture (a vine is a card balance, interest grows it back, pruning is a payment, the pile is
+the interest paid), the two plans, and how to use it. It shows the first time per browser session; "About this demo"
+opens it again. The timeline then waits at month 0, paused; Play runs the whole timeline in 24 s at 1x.
+
+Short notes under the title follow the MONTH (played or dragged), from src/vine/app/notes.ts:
+| months | note (primary / secondary) |
+|---|---|
+| before the first interest | "Two cottages. The same $5,000 vine." / "Each vine is a credit card balance at 22% a year." |
+| the first 3 months | "Interest grows it back every month." / "About $92 a month to start. Each clipping on the pile is interest paid." |
+| until a year after the fixed payoff | "A fixed $200 a month clears it in 2 years, 10 months." |
+| until the end | "Minimum payments trim a little. The vine keeps coming back." / live: "Year 12: $1,176 still owed." |
+| the end | "Minimum payments: 19 years, 2 months and $8,100 in interest." / "A fixed $200 saves $6,350 and 16 years, 4 months." |
+Copy is live (values from the engine), hopeful and plain. No em-dashes.
 
 ## Controls (right panel, same look as the river)
 Play/Pause, speed (0.5×–4×), timeline (months, with year ticks), Card balance, Interest rate (APR %),

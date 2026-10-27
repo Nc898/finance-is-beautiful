@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { frames, usd } from './helpers';
 
 /** Shape of `window.__vine.getState()` (see src/vine/main.ts). */
@@ -10,20 +10,18 @@ interface VineState {
   errors: Record<string, string>;
   months: number;
   horizon: number;
-  mode: 'story' | 'explore';
-  storyTime: number;
-  storyLength: number;
   playing: boolean;
   speed: number;
   reducedMotion: boolean;
-  exploreHint: boolean;
   monthsPerSecond: number;
 }
 
 const state = async (page: Page) => (await page.evaluate(() => window.__vine.getState())) as VineState;
 
-async function gotoVine(page: Page, opts: { pause?: boolean } = {}): Promise<string[]> {
-  const { pause = true } = opts;
+async function gotoVine(page: Page, opts: { pause?: boolean; intro?: boolean } = {}): Promise<string[]> {
+  const { pause = true, intro = false } = opts;
+  // the introduction shows the first time a demonstration is opened in a session: most tests start past it
+  if (!intro) await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:nip-it-in-the-bud', '1'));
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -41,14 +39,19 @@ async function gotoVine(page: Page, opts: { pause?: boolean } = {}): Promise<str
     await page.evaluate(() => window.__vine.actions.pause());
     await frames(page, 2);
   }
-  // phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would
+  // (with the introduction open, the page waits behind it: the panel is opened once it is closed)
+  if (!intro) await openPanel(page);
+  return errors;
+}
+
+/** Phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would. */
+async function openPanel(page: Page): Promise<void> {
   const toggle = page.locator('#panel-toggle');
   if ((await toggle.getAttribute('aria-expanded')) === 'false') {
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
     await frames(page, 2);
   }
-  return errors;
 }
 
 /** On a phone the open panel covers the whole stage: fold it to reach the stage's own buttons, then open it again. */
@@ -66,17 +69,13 @@ async function onStage(page: Page, act: () => Promise<void>): Promise<void> {
   }
 }
 
-const clickSkip = (page: Page) => onStage(page, () => page.locator('#btn-skip').click());
-
-/** Tests that follow the normal-motion story (autoplay, the close-up, beat timings) do not apply under reduced motion,
- * which holds each beat still instead; reduced-motion.spec and the reduced-motion test below cover that story. */
-const normalMotionOnly = (info: TestInfo) =>
-  test.skip(info.project.use.reducedMotion === 'reduce', 'the reduced-motion story has its own timing (see the reduced-motion test)');
-
-const seek = async (page: Page, seconds: number) => {
-  await page.evaluate((s) => window.__vine.actions.seekStory(s), seconds);
+/** Drag the clock to the last month (the result), as a visitor would with the timeline. */
+const toEnd = async (page: Page) => {
+  await page.evaluate(() => window.__vine.actions.scrubTo(1e6));
   await frames(page, 3);
 };
+
+const cap = (page: Page) => page.locator('#caption .cap.on:not(.cap-ghost)');
 
 const scrub = async (page: Page, months: number) => {
   await page.evaluate((m) => window.__vine.actions.scrubTo(m), months);
@@ -131,38 +130,39 @@ test.describe('Nip It in the Bud', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the story autoplays from the start and hands off to explore', async ({ page }, info) => {
-    normalMotionOnly(info);
-    await gotoVine(page, { pause: false });
-    // autoplay: the story clock runs by itself
-    await expect.poll(async () => (await state(page)).storyTime, { timeout: 10_000 }).toBeGreaterThan(0.3);
-    expect((await state(page)).mode).toBe('story');
-    await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toContainText('Two cottages. The same $5,000 vine.');
-    // run it to the end at 4x so the whole hand-off happens naturally
-    await page.evaluate(() => window.__vine.actions.setSpeed(4));
-    await expect.poll(async () => (await state(page)).mode, { timeout: 40_000 }).toBe('explore');
-    const s = await state(page);
+  test('opens with the introduction over the blurred scene; it closes to month 0, paused, and stays closed', async ({ page }) => {
+    const errors = await gotoVine(page, { intro: true, pause: false });
+    const intro = page.locator('#intro');
+    await expect(intro).toBeVisible();
+    await expect(intro.getByRole('heading', { name: 'Nip It in the Bud' })).toBeVisible();
+    await expect(intro).toContainText('Each vine is a credit card balance.');
+    await expect(page.locator('[data-intro-close]')).toBeFocused();
+    let s = await state(page);
+    expect(s.months).toBe(0);
     expect(s.playing).toBe(false);
-    expect(s.months).toBe(230);
-    expect(s.exploreHint).toBe(true);
-    await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toHaveText('Explore your own garden');
-  });
-
-  test('skip goes straight to explore at the last month', async ({ page }) => {
-    await gotoVine(page, { pause: false });
-    await clickSkip(page);
+    await page.keyboard.press('Enter');
+    await expect(intro).toBeHidden();
     await frames(page, 3);
-    const s = await state(page);
-    expect(s.mode).toBe('explore');
-    expect(s.months).toBe(230);
-    await expect(page.locator('#btn-skip')).toBeHidden();
-    await expect(page.locator('#btn-play')).toContainText('Play');
+    s = await state(page);
+    expect(s.months).toBe(0);
+    expect(s.playing).toBe(false);
+    await expect(page.locator('#btn-play')).toHaveText(/Play/);
+    // the first time per session only
+    await page.reload();
+    await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 45_000 });
+    await frames(page, 3);
+    await expect(intro).toBeHidden();
+    // "About this demo" opens it again; Escape closes it
+    await onStage(page, () => page.locator('#btn-about').click());
+    await expect(intro).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(intro).toBeHidden();
+    expect(errors).toEqual([]);
   });
 
   test('the numbers at the end match the engine (labels, readouts and tables)', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
-    await frames(page, 3);
+    await toEnd(page);
     expect(await labelTexts(page, 'minimum')).toEqual({ name: 'Minimum payments', owed: 'Paid off in 19 years, 2 months', tag: '$8,100 in interest' });
     expect(await labelTexts(page, 'fixed')).toEqual({ name: 'A fixed $200 a month', owed: 'Paid off in 2 years, 10 months', tag: '$1,750 in interest' });
     await expect(page.locator('#year-readout')).toHaveText('Year 19, month 2');
@@ -210,52 +210,45 @@ test.describe('Nip It in the Bud', () => {
     expect((await labelTexts(page, 'fixed')).owed).toBe(`${usd(e.fixed.balance)} still owed`.replace(/.*/, 'Paid off in 2 years, 10 months'));
   });
 
-  test('story captions carry the live numbers, and the minimum beat follows the clock in place', async ({ page }, info) => {
-    normalMotionOnly(info);
+  test('the notes follow the month (played or dragged), with live numbers; the minimum note updates in place', async ({ page }) => {
     await gotoVine(page);
-    await seek(page, 8);
-    await page.waitForTimeout(800);
-    const cap = () => page.locator('#caption .cap.on:not(.cap-ghost)');
-    await expect(cap().locator('.cap-1')).toHaveText('Interest grows it back every month.');
-    await expect(cap().locator('.cap-2')).toHaveText('About $92 a month to start. Each clipping on the pile is interest paid.');
-    await seek(page, 16);
-    await page.waitForTimeout(800);
-    await expect(cap().locator('.cap-1')).toHaveText('A fixed $200 a month clears it in 2 years, 10 months.');
-    await seek(page, 30);
-    await page.waitForTimeout(800);
-    await expect(cap().locator('.cap-1')).toHaveText('Minimum payments trim a little. The vine keeps coming back.');
-    const s = await state(page);
-    // what is owed reads as a statement does: the month's opening balance, then up by its interest once that is
-    // charged, then down to the closing balance once the payment lands (src/vine/engine INTEREST_AT, PAYMENT_AT)
-    const whole = Math.floor(s.months);
-    const f = s.months - whole;
-    const a = simulate(D, 'minimum', whole).balance;
-    const b = simulate(D, 'minimum', whole + 1).balance;
-    const owed = f < 0.2 ? a : f < 0.62 ? a + (a * D.apr) / 12 : b;
-    // (the year turns over with the statement: a month counts from when its interest is charged)
-    const shown = f < 0.2 ? whole : whole + 1;
-    await expect(cap().locator('.cap-2')).toHaveText(`Year ${Math.floor(shown / 12)}: ${usd(owed)} still owed.`);
-    await expect(page.locator('#lab-minimum .pl-owed')).toHaveText(`${usd(owed)} still owed`);
+    const at = async (m: number) => {
+      await scrub(page, m);
+      await page.waitForTimeout(700);
+    };
+    await at(0);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Two cottages. The same $5,000 vine.');
+    await at(1.5);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Interest grows it back every month.');
+    await expect(cap(page).locator('.cap-2')).toHaveText('About $92 a month to start. Each clipping on the pile is interest paid.');
+    await at(20);
+    await expect(cap(page).locator('.cap-1')).toHaveText('A fixed $200 a month clears it in 2 years, 10 months.');
+    await at(120);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Minimum payments trim a little. The vine keeps coming back.');
+    await expect(cap(page).locator('.cap-2')).toHaveText(`Year 10: ${usd(simulate(D, 'minimum', 120).balance)} still owed.`);
+    await expect(page.locator('#lab-minimum .pl-owed')).toHaveText(`${usd(simulate(D, 'minimum', 120).balance)} still owed`);
     // the line updates without the caption swapping layers
-    const layerBefore = await page.locator('#caption .cap.on:not(.cap-ghost)').getAttribute('data-layer');
-    await seek(page, 36);
-    await frames(page, 2);
-    expect(await page.locator('#caption .cap.on:not(.cap-ghost)').getAttribute('data-layer')).toBe(layerBefore);
-    await seek(page, 44);
-    await page.waitForTimeout(800);
-    await expect(cap().locator('.cap-1')).toHaveText('Minimum payments: 19 years, 2 months and $8,100 in interest.');
-    await expect(cap().locator('.cap-2')).toHaveText('A fixed $200 saves $6,350 and 16 years, 4 months.');
+    const layerBefore = await cap(page).getAttribute('data-layer');
+    await at(180);
+    expect(await cap(page).getAttribute('data-layer')).toBe(layerBefore);
+    await expect(cap(page).locator('.cap-2')).toHaveText(`Year 15: ${usd(simulate(D, 'minimum', 180).balance)} still owed.`);
+    await at(230);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Minimum payments: 19 years, 2 months and $8,100 in interest.');
+    await expect(cap(page).locator('.cap-2')).toHaveText('A fixed $200 saves $6,350 and 16 years, 4 months.');
+    // played, the notes change on their own as the months pass
+    await at(2);
+    await page.evaluate(() => window.__vine.actions.play());
+    await expect(cap(page).locator('.cap-1')).toHaveText('A fixed $200 a month clears it in 2 years, 10 months.', { timeout: 10_000 });
   });
 
   test('changing the interest rate re-renders the numbers and the timeline', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
+    await toEnd(page);
     const before = await state(page);
     await page.locator('#f-apr').fill('30');
     await page.locator('#f-apr').press('Enter');
     await frames(page, 3);
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.inputs.apr).toBeCloseTo(0.3, 12);
     expect(s.horizon).toBeGreaterThan(before.horizon);
     await expect(page.locator('#timeline')).toHaveAttribute('max', String(s.horizon));
@@ -268,7 +261,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('the fixed payment names its cottage, and a payment under the minimum explains itself', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
+    await toEnd(page);
     await expect(page.locator('#note-fixedPayment')).toBeHidden();
     await page.locator('#f-fixedPayment').fill('350');
     await page.locator('#f-fixedPayment').press('Enter');
@@ -307,9 +300,8 @@ test.describe('Nip It in the Bud', () => {
     await frames(page, 2);
     expect((await state(page)).months).toBe(218);
     await expect(page.locator('#year-readout')).toHaveText('Year 18, month 2');
-    // scrubbing leaves the story and pauses
+    // scrubbing pauses
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.playing).toBe(false);
     // the labels follow the clock
     const e = simulate(D, 'minimum', 218);
@@ -334,7 +326,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('an invalid input shows an inline error and keeps the last valid numbers', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
+    await toEnd(page);
     const input = page.locator('#f-balance');
     await input.fill('50');
     await input.press('Enter');
@@ -368,7 +360,7 @@ test.describe('Nip It in the Bud', () => {
 
   test('an interest rate of 0 is accepted: nothing grows back', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
+    await toEnd(page);
     await page.locator('#f-apr').fill('0');
     await page.locator('#f-apr').press('Enter');
     await frames(page, 3);
@@ -397,9 +389,8 @@ test.describe('Nip It in the Bud', () => {
     await expect(page.locator('#f-minFloor')).toHaveValue('20');
   });
 
-  test('play, pause and speed work in explore', async ({ page }) => {
+  test('play, pause and speed work', async ({ page }) => {
     await gotoVine(page);
-    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('#btn-play').click();
     await expect(page.locator('#btn-play')).toContainText('Pause');
@@ -426,7 +417,6 @@ test.describe('Nip It in the Bud', () => {
     await expect(page.locator('#dock')).toBeHidden({ timeout: 2000 });
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
-    await clickSkip(page);
     await scrub(page, 0);
     await page.locator('body').click({ position: { x: 5, y: 400 } });
     await page.keyboard.press('Space');
@@ -437,8 +427,8 @@ test.describe('Nip It in the Bud', () => {
     await gotoVine(page);
     // (a phone's panel covers the garden: the labels are seen with it folded away)
     if ((page.viewportSize()?.width ?? 1440) < 700) await page.locator('#panel-toggle').click();
-    for (const t of [14, 20, 30, 44]) {
-      await seek(page, t);
+    for (const t of [2, 20, 120, 230]) {
+      await scrub(page, t);
       await page.waitForTimeout(500);
       const boxes = await page.evaluate(() =>
         ['lab-minimum', 'lab-fixed', 'tag-minimum', 'tag-fixed'].map((id) => {
@@ -450,40 +440,28 @@ test.describe('Nip It in the Bud', () => {
       const dock = page.locator('#dock');
       const limit = (await dock.isVisible()) ? (await dock.boundingBox())!.x : page.viewportSize()!.width;
       for (const b of boxes) {
-        expect(b.x, `${b.id} at t=${t}`).toBeGreaterThanOrEqual(-1);
-        expect(b.x + b.w, `${b.id} at t=${t}`).toBeLessThanOrEqual(limit + 1);
+        expect(b.x, `${b.id} at month ${t}`).toBeGreaterThanOrEqual(-1);
+        expect(b.x + b.w, `${b.id} at month ${t}`).toBeLessThanOrEqual(limit + 1);
         expect(b.w).toBeGreaterThan(0);
       }
       // the two cottages' labels never touch
       const [lm, lf, tm, tf] = boxes;
       const overlap = lm.x < lf.x + lf.w && lf.x < lm.x + lm.w && lm.y < lf.y + lf.h && lf.y < lm.y + lm.h;
-      expect(overlap, `labels overlap at t=${t}`).toBe(false);
+      expect(overlap, `labels overlap at month ${t}`).toBe(false);
       // each label carries its interest line, under what is owed
       for (const [lab, tag] of [[lm, tm], [lf, tf]]) {
-        expect(tag.x, `${tag.id} at t=${t}`).toBeGreaterThanOrEqual(lab.x - 1);
-        expect(tag.x + tag.w, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.x + lab.w + 1);
-        expect(tag.y + tag.h, `${tag.id} at t=${t}`).toBeLessThanOrEqual(lab.y + lab.h + 1);
-        expect(tag.y, `${tag.id} at t=${t}`).toBeGreaterThan(lab.y + lab.h / 2);
+        expect(tag.x, `${tag.id} at month ${t}`).toBeGreaterThanOrEqual(lab.x - 1);
+        expect(tag.x + tag.w, `${tag.id} at month ${t}`).toBeLessThanOrEqual(lab.x + lab.w + 1);
+        expect(tag.y + tag.h, `${tag.id} at month ${t}`).toBeLessThanOrEqual(lab.y + lab.h + 1);
+        expect(tag.y, `${tag.id} at month ${t}`).toBeGreaterThan(lab.y + lab.h / 2);
       }
     }
-  });
-
-  test('the labels wait out the opening close-up and appear as the camera settles', async ({ page }, info) => {
-    normalMotionOnly(info);
-    await gotoVine(page);
-    await seek(page, 2);
-    await page.waitForTimeout(900);
-    const fade = () => page.evaluate(() => Number(document.documentElement.style.getPropertyValue('--label-fade') || '1'));
-    expect(await fade()).toBe(0);
-    await seek(page, 20);
-    await expect.poll(fade, { timeout: 8000 }).toBeGreaterThan(0.95);
   });
 
   test('announcements are discrete: the live region only changes on events', async ({ page }) => {
     await gotoVine(page, { pause: false });
     const region = page.locator('#announcer');
     await expect(region).toHaveAttribute('aria-live', 'polite');
-    // (reduced motion does not autoplay: start the story so there is something to pause)
     await page.evaluate(() => window.__vine.actions.play());
     await frames(page, 2);
     await page.evaluate(() => window.__vine.actions.pause());
@@ -496,7 +474,7 @@ test.describe('Nip It in the Bud', () => {
     await expect(region).toContainText('Updated. Minimum payments:', { timeout: 3000 });
   });
 
-  test('reduced motion: no autoplay, labels still show, story still reaches the numbers', async ({ browser }) => {
+  test('reduced motion: still at the start, labels showing, and the numbers at the end', async ({ browser }) => {
     const ctx = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     const errors = await gotoVine(page, { pause: false });
@@ -504,13 +482,10 @@ test.describe('Nip It in the Bud', () => {
     const s = await state(page);
     expect(s.reducedMotion).toBe(true);
     expect(s.playing).toBe(false);
-    expect(s.storyTime).toBe(0);
+    expect(s.months).toBe(0);
     await expect(page.locator('#reduce-motion')).toBeChecked();
     for (const id of ['minimum', 'fixed']) await expect(page.locator(`#lab-${id}`)).toBeVisible();
-    // the opening is not zoomed, so the labels are there from the start
-    expect(await page.evaluate(() => Number(document.documentElement.style.getPropertyValue('--label-fade') || '1'))).toBe(1);
-    await clickSkip(page);
-    await frames(page, 3);
+    await toEnd(page);
     expect((await labelTexts(page, 'minimum')).tag).toBe('$8,100 in interest');
     expect(errors).toEqual([]);
     await ctx.close();
@@ -533,19 +508,20 @@ function describeViolations(results: Awaited<ReturnType<AxeBuilder['analyze']>>)
 }
 
 test.describe('Nip It in the Bud: accessibility', () => {
-  test('axe: no violations in explore, with details open, with an error showing, and during the story', async ({ page }) => {
-    await gotoVine(page);
+  test('axe: no violations with the introduction open, at each note, with details open and with an error showing', async ({ page }) => {
+    await gotoVine(page, { intro: true });
     await page.evaluate(() => document.fonts.ready);
-    for (const t of [3, 16, 30, 44]) {
-      await seek(page, t);
-      await page.waitForTimeout(1200);
-      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-      expect(r.violations, `story t=${t}\n` + describeViolations(r)).toEqual([]);
-    }
-    await clickSkip(page);
-    await page.waitForTimeout(1800);
+    await expect(page.locator('#intro')).toBeVisible();
     let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-    expect(results.violations, 'explore\n' + describeViolations(results)).toEqual([]);
+    expect(results.violations, 'introduction\n' + describeViolations(results)).toEqual([]);
+    await page.keyboard.press('Escape');
+    await openPanel(page);
+    for (const m of [0, 1.5, 20, 120, 230]) {
+      await scrub(page, m);
+      await page.waitForTimeout(900);
+      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      expect(r.violations, `month ${m}\n` + describeViolations(r)).toEqual([]);
+    }
 
     await page.locator('#how > summary').click();
     await page.evaluate(() => window.__vine.actions.scrubTo(147));
