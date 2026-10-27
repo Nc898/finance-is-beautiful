@@ -2,7 +2,7 @@
 
 Second demonstration in the "Finance is beautiful" collection. Same world as Time to Grow: warm ivory paper,
 ink-and-watercolor illustration, light from the upper left, quiet type (Libre Caslon Display / Text italic,
-Figtree), collapsible right-hand controls panel, guided story that hands off to exploration, 60 fps for the river (30 fps elsewhere).
+Figtree), collapsible right-hand controls panel, an introduction then free exploration (no scripted story), 60 fps for the river (30 fps elsewhere).
 
 ## The lesson (one sentence)
 Rising prices are a current: money that sits still drifts backwards, and it has to grow faster than prices to
@@ -49,25 +49,30 @@ Motion (everything decorative is wall-clock; positions come only from the frame)
 - Reflections: each boat and rower reflected in the water (flipped, faded, rippled by sine displacement).
 - Ambient: light breeze in reeds and far trees, a heron or a few water birds occasionally (optional, restrained),
   a soft sparkle on the water under the sun. All off in reduced motion.
-- Opening camera (story only): starts close on the dock with all three boats tied up, eases out to the full
-  river before the boats separate (same rules as Time to Grow: labels fade during zoom, shared scale always).
+- Camera: always the full river (no zoom: the three boats are only ever compared at the same, full view).
 
 Performance: paper/sky/far bank/static river base/near bank pre-rendered once per size into cached layers;
 per frame only water motion layer (cheap strokes from a cached sprite pool), boats, rowers, wakes,
 reflections. Target ≤ 6 ms/frame at 1440×900 DPR 1. Determinism: same frame inputs ⇒ same boat poses
 (water texture may move with time).
 
-## Story (~50 s at 1×), driven by story time → years elapsed
-| t (s) | years | caption | notes |
-|---|---|---|---|
-| 0–6 | 0 | "Three boats. The same $10,000." / "Cash, a savings account, and investing." | camera close on the dock, boats tied |
-| 6–12 | 0 → 1 | "Prices rise a little every year. That's the current." | camera eases out; water starts to flow |
-| 12–20 | 1 → 6 | "Cash doesn't row. It drifts." | cash slides downstream |
-| 20–28 | 6 → 14 | "A savings account rows, but slower than the current." | savings loses ground slowly |
-| 28–38 | 14 → 30 | "Investing has to row harder than the current to make headway." | invest moves upstream |
-| 38–48 | 30 | "Still $10,000 in cash. It buys what $4,120 buys today." (live values) | results; difference callouts |
-| 48–52 | 30 | "Explore your own river" | hand off to explore, paused at the end |
-Copy is live (values from the engine), hopeful and plain, never scary. Reduced motion: discrete holds.
+## Introduction and notes (no scripted story)
+The demonstration opens with the shared introduction (src/shared/intro.ts; content in against-the-current.html): what
+it shows, how to read the picture (the current is inflation, each boat the same money rowing at its rate, distance
+from the start line what it buys in today's dollars), the three boats, and how to use it. It shows the first time per
+browser session; "About this demo" opens it again. The timeline then waits at year 0, paused; Play runs the whole
+timeline in 24 s at 1x.
+
+Short notes under the title follow the YEAR (played or dragged), from src/river/app/notes.ts:
+| years | note (primary / secondary) |
+|---|---|
+| at the start | "Three boats. The same $10,000." / "Cash, a savings account, and investing." |
+| the first year | "Prices rise a little every year. That's the current." / "Here, about 3% a year." |
+| to year 6 | "Cash doesn't row. It drifts." |
+| to year 14 | "A savings account rows, but slower than the current." |
+| to the end | "Investing has to row harder than the current to make headway." |
+| the end | "Still $10,000 in cash. It buys what $4,120 buys today." (live values) |
+Copy is live (values from the engine), hopeful and plain, never scary.
 
 ## Controls (right panel, same look as Time to Grow)
 Play/Pause, speed (0.5×–4×), year timeline (scale bar with year ticks), Starting amount, Years, Inflation,

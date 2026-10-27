@@ -4,11 +4,9 @@
  */
 import { DEFAULT_RIVER_INPUTS, RIVER_LIMITS, riverScale, validateRiverInputs } from '../engine';
 import type { RiverField, RiverInputs, RiverValidation } from '../engine';
-import { storyDuration, storyYears } from './story';
 
 export type Speed = 0.5 | 1 | 2 | 4;
 export const SPEEDS: readonly Speed[] = [0.5, 1, 2, 4];
-export type Mode = 'story' | 'explore';
 export type DraftFields = Record<RiverField, string>;
 export const FIELDS: readonly RiverField[] = ['start', 'years', 'inflation', 'savingsRate', 'investRate'];
 
@@ -21,12 +19,8 @@ export type Reason =
   | 'pause'
   | 'speed'
   | 'scrub'
-  | 'replay'
-  | 'skip'
-  | 'story-end'
   | 'play-end'
-  | 'reduced'
-  | 'seek';
+  | 'reduced';
 
 export interface AppState {
   /** Last VALID inputs. */
@@ -36,22 +30,19 @@ export interface AppState {
   errors: RiverValidation['errors'];
   targetScale: number;
   displayScale: number;
-  /** THE shared clock, in years (float). */
+  /** THE shared clock, in years (float). It starts at 0, paused: the viewer plays it or drags it. */
   years: number;
-  mode: Mode;
-  /** Seconds into the guided story (story mode only). */
-  storyTime: number;
   playing: boolean;
   speed: Speed;
   reducedMotion: boolean;
-  /** True from the story handoff / skip until the user next interacts: shows "Explore your own river". */
-  exploreHint: boolean;
   /** How fast the shared clock moved in the last tick, in years per second (0 when not playing). */
   yearsPerSecond: number;
 }
 
-/** Explore playback: 2 years per second at 1x. */
-export const EXPLORE_YEARS_PER_SECOND = 2;
+/** A full run of the timeline takes this long at 1x, whatever its length (the default 30 years: 1.25 years a second). */
+export const PLAY_SECONDS = 24;
+/** Playback at 1x, in years a second: the timeline over PLAY_SECONDS (never slower than a quarter year a second). */
+export const playRate = (horizon: number): number => Math.max(0.25, horizon / PLAY_SECONDS);
 /** Max time step the clock will take in one frame (so tab switches don't jump). */
 export const MAX_DT = 0.1;
 /** Scale easing time constants, seconds. */
@@ -138,14 +129,10 @@ export interface Actions {
   play(): void;
   pause(): void;
   togglePlay(): void;
-  replayStory(): void;
-  skipToExplore(): void;
-  /** Move the shared clock to `years` (clamped to 0…inputs.years). Leaves the story, paused. */
+  /** Move the shared clock to `years` (clamped to 0…inputs.years). Paused. */
   scrubTo(years: number): void;
   setSpeed(speed: Speed): void;
   setReducedMotion(on: boolean): void;
-  /** Test/dev helper: jump the story clock (story mode, paused state unchanged). */
-  seekStory(seconds: number): void;
 }
 
 export interface Store {
@@ -154,8 +141,6 @@ export interface Store {
   subscribe(fn: (reason: Reason) => void): () => void;
   /** Advance the clocks by dt seconds (clamped to MAX_DT). Called by the rAF loop. */
   tick(dtSeconds: number): void;
-  /** Story duration for the current inputs and motion preference. */
-  storyLength(): number;
 }
 
 export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInputs } = {}): Store {
@@ -168,34 +153,17 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
     errors: {},
     targetScale: scale,
     displayScale: scale,
-    years: storyYears(0, inputs, reducedMotion),
-    mode: 'story',
-    storyTime: 0,
+    years: 0,
     playing: false,
     speed: 1,
     reducedMotion,
-    exploreHint: false,
     yearsPerSecond: 0,
   };
   const listeners = new Set<(r: Reason) => void>();
   const emit = (r: Reason) => listeners.forEach((fn) => fn(r));
   const end = () => state.inputs.years;
-  const storyLength = () => storyDuration(state.inputs, state.reducedMotion);
 
-  /** Leave the guided story and carry on from the current year. */
-  const exitStory = () => {
-    if (state.mode !== 'story') return;
-    state.mode = 'explore';
-    state.playing = false;
-  };
 
-  const finishStory = () => {
-    state.mode = 'explore';
-    state.years = end();
-    state.playing = false;
-    state.exploreHint = true;
-    emit('story-end');
-  };
 
   const actions: Actions = {
     setDraftField(field, text) {
@@ -217,8 +185,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
         if (hadErrors) emit('errors');
         return;
       }
-      exitStory();
-      state.exploreHint = false;
       state.inputs = candidate;
       state.targetScale = riverScale(candidate);
       if (state.years > end()) {
@@ -254,15 +220,9 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
     },
 
     play() {
-      if (state.mode === 'story') {
-        if (state.storyTime >= storyLength()) return;
-        state.playing = true;
-      } else {
-        if (end() <= 0) return;
-        if (state.years >= end() - 1e-6) state.years = 0;
-        state.playing = true;
-        state.exploreHint = false;
-      }
+      if (end() <= 0) return;
+      if (state.years >= end() - 1e-6) state.years = 0;
+      state.playing = true;
       emit('play');
     },
 
@@ -278,27 +238,10 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
       else actions.play();
     },
 
-    replayStory() {
-      state.mode = 'story';
-      state.storyTime = 0;
-      state.years = storyYears(0, state.inputs, state.reducedMotion);
-      state.playing = true;
-      state.exploreHint = false;
-      emit('replay');
-    },
 
-    skipToExplore() {
-      state.mode = 'explore';
-      state.playing = false;
-      state.years = end();
-      state.exploreHint = true;
-      emit('skip');
-    },
 
     scrubTo(years) {
-      exitStory();
       state.playing = false;
-      state.exploreHint = false;
       state.years = Math.min(end(), Math.max(0, years));
       emit('scrub');
     },
@@ -311,38 +254,16 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
     setReducedMotion(on) {
       if (state.reducedMotion === on) return;
       state.reducedMotion = on;
-      if (state.mode === 'story') {
-        // The two story timelines differ, so start over, paused (reduced motion never autoplays).
-        state.storyTime = 0;
-        state.years = storyYears(0, state.inputs, on);
-        state.playing = false;
-      }
       emit('reduced');
     },
 
-    seekStory(seconds) {
-      state.mode = 'story';
-      state.exploreHint = false;
-      state.storyTime = Math.min(storyLength(), Math.max(0, seconds));
-      state.years = storyYears(state.storyTime, state.inputs, state.reducedMotion);
-      emit('seek');
-    },
   };
 
   const tick = (dtRaw: number) => {
     const dt = Math.min(MAX_DT, Math.max(0, dtRaw));
     const before = state.years;
-    if (state.mode === 'story') {
-      if (state.playing) {
-        state.storyTime += dt * state.speed;
-        if (state.storyTime >= storyLength()) {
-          state.storyTime = storyLength();
-          finishStory();
-        }
-      }
-      if (state.mode === 'story') state.years = storyYears(state.storyTime, state.inputs, state.reducedMotion);
-    } else if (state.playing) {
-      state.years += EXPLORE_YEARS_PER_SECOND * state.speed * dt;
+    if (state.playing) {
+      state.years += playRate(end()) * state.speed * dt;
       if (state.years >= end()) {
         state.years = end();
         state.playing = false;
@@ -361,7 +282,6 @@ export function createStore(opts: { reducedMotion?: boolean; inputs?: RiverInput
     state,
     actions,
     tick,
-    storyLength,
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);

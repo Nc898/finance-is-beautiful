@@ -45,13 +45,9 @@
       <header class="masthead">
         <h1 class="title"><a class="title-link" href="./" aria-label="Against the Current, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Against the Current</a></h1>
         <div class="story-actions">
-          <button type="button" class="btn quiet" id="btn-replay">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 4.5v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Replay<span class="long"> story</span></span>
-          </button>
-          <button type="button" class="btn quiet" id="btn-skip">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 13 12l-8 6.5zM15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Skip<span class="long"> to explore</span></span>
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
           </button>
         </div>
       </header>
@@ -68,7 +64,7 @@
           <button type="button" class="btn play" id="btn-play">
             <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
             <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
-            <span id="play-label">Play story</span>
+            <span id="play-label">Play</span>
           </button>
 
           <div class="speeds" role="radiogroup" aria-label="Playback speed" id="speeds">
@@ -175,6 +171,30 @@
     </aside>
 
   </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Inflation and your savings</p>
+      <h2 class="intro-title" id="intro-title">Against the Current</h2>
+      <p class="intro-lede" id="intro-lede">The same money in three places. Which keeps its buying power as prices rise?</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>The <strong>river's current</strong> is inflation: prices rising a little every year, carrying everything downstream.</li>
+        <li>Each <strong>boat</strong> is the same starting money. How hard it rows is what it earns.</li>
+        <li>How far a boat is from the <strong>start line</strong> is what its money buys in today's dollars: upstream it buys more, downstream less.</li>
+      </ul>
+      <h3 class="intro-h">Three boats</h3>
+      <ul class="intro-list">
+        <li><strong>Cash</strong> earns nothing, so it drifts with the current.</li>
+        <li><strong>A savings account</strong> earns a little interest and rows gently.</li>
+        <li><strong>Investing</strong> earns more over time and rows hardest.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change the money and the rates in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
   <p class="sr-only" id="summary"></p>
   <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>

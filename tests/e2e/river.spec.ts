@@ -9,13 +9,9 @@ interface RiverState {
   draft: Record<string, string>;
   errors: Record<string, string>;
   years: number;
-  mode: 'story' | 'explore';
-  storyTime: number;
-  storyLength: number;
   playing: boolean;
   speed: number;
   reducedMotion: boolean;
-  exploreHint: boolean;
   displayScale: number;
   targetScale: number;
   scale: number;
@@ -23,8 +19,10 @@ interface RiverState {
 
 const state = async (page: Page) => (await page.evaluate(() => window.__river.getState())) as RiverState;
 
-async function gotoRiver(page: Page, opts: { pause?: boolean } = {}): Promise<string[]> {
-  const { pause = true } = opts;
+async function gotoRiver(page: Page, opts: { pause?: boolean; intro?: boolean } = {}): Promise<string[]> {
+  const { pause = true, intro = false } = opts;
+  // the introduction shows the first time a demonstration is opened in a session: most tests start past it
+  if (!intro) await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:against-the-current', '1'));
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -42,13 +40,45 @@ async function gotoRiver(page: Page, opts: { pause?: boolean } = {}): Promise<st
     await page.evaluate(() => window.__river.actions.pause());
     await frames(page, 2);
   }
+  // (with the introduction open, the page waits behind it: the panel is opened once it is closed)
+  if (!intro) await openPanel(page);
   return errors;
 }
 
-const seek = async (page: Page, seconds: number) => {
-  await page.evaluate((s) => window.__river.actions.seekStory(s), seconds);
+/** Phones start with the controls folded away (the scene gets the whole screen): open them, as a visitor would. */
+async function openPanel(page: Page): Promise<void> {
+  const toggle = page.locator('#panel-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeVisible();
+    await frames(page, 2);
+  }
+}
+
+/** On a phone the open panel covers the whole stage: fold it to reach the stage's own buttons, then open it again. */
+async function onStage(page: Page, act: () => Promise<void>): Promise<void> {
+  const toggle = page.locator('#panel-toggle');
+  const covers = (page.viewportSize()?.width ?? 1440) < 700 && (await toggle.getAttribute('aria-expanded')) === 'true';
+  if (covers) {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeHidden();
+  }
+  await act();
+  if (covers) {
+    await toggle.click();
+    await expect(page.locator('#dock')).toBeVisible();
+  }
+}
+
+const scrub = async (page: Page, years: number) => {
+  await page.evaluate((y) => window.__river.actions.scrubTo(y), years);
   await frames(page, 3);
 };
+
+/** Drag the clock to the last year (the result), as a visitor would with the timeline. */
+const toEnd = (page: Page) => scrub(page, 1e6);
+
+const cap = (page: Page) => page.locator('#caption .cap.on:not(.cap-ghost)');
 
 /** Independent closed-form copy of the model: what the page must show. */
 function expected(inp: RiverState['inputs'], years: number) {
@@ -87,37 +117,39 @@ test.describe('Against the Current', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the story autoplays from the start and hands off to explore', async ({ page }) => {
-    await gotoRiver(page, { pause: false });
-    // autoplay: the story clock runs by itself
-    await expect.poll(async () => (await state(page)).storyTime, { timeout: 10_000 }).toBeGreaterThan(0.3);
-    expect((await state(page)).mode).toBe('story');
-    await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toContainText('Three boats. The same $10,000.');
-    // run it to the end at 4x so the whole hand-off happens naturally
-    await page.evaluate(() => window.__river.actions.setSpeed(4));
-    await expect.poll(async () => (await state(page)).mode, { timeout: 40_000 }).toBe('explore');
-    const s = await state(page);
+  test('opens with the introduction over the blurred scene; it closes to year 0, paused, and stays closed', async ({ page }) => {
+    const errors = await gotoRiver(page, { intro: true, pause: false });
+    const intro = page.locator('#intro');
+    await expect(intro).toBeVisible();
+    await expect(intro.getByRole('heading', { name: 'Against the Current' })).toBeVisible();
+    await expect(intro).toContainText("The river's current is inflation");
+    await expect(page.locator('[data-intro-close]')).toBeFocused();
+    let s = await state(page);
+    expect(s.years).toBe(0);
     expect(s.playing).toBe(false);
-    expect(s.years).toBe(30);
-    expect(s.exploreHint).toBe(true);
-    await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toHaveText('Explore your own river');
-  });
-
-  test('skip goes straight to explore at the last year', async ({ page }) => {
-    await gotoRiver(page, { pause: false });
-    await page.locator('#btn-skip').click();
+    await page.keyboard.press('Enter');
+    await expect(intro).toBeHidden();
     await frames(page, 3);
-    const s = await state(page);
-    expect(s.mode).toBe('explore');
-    expect(s.years).toBe(30);
-    await expect(page.locator('#btn-skip')).toBeHidden();
-    await expect(page.locator('#btn-play')).toContainText('Play');
+    s = await state(page);
+    expect(s.years).toBe(0);
+    expect(s.playing).toBe(false);
+    await expect(page.locator('#btn-play')).toHaveText(/Play/);
+    // the first time per session only
+    await page.reload();
+    await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 45_000 });
+    await frames(page, 3);
+    await expect(intro).toBeHidden();
+    // "About this demo" opens it again; Escape closes it
+    await onStage(page, () => page.locator('#btn-about').click());
+    await expect(intro).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(intro).toBeHidden();
+    expect(errors).toEqual([]);
   });
 
   test('the numbers at the end match the engine (labels, readouts and table)', async ({ page }) => {
     await gotoRiver(page);
-    await page.locator('#btn-skip').click();
-    await frames(page, 3);
+    await toEnd(page);
     const e = expected(D, 30);
     expect(await labelTexts(page, 'cash')).toEqual({ name: 'Cash', amount: usd(10_000), buys: `buys what ${usd(e.cash.real)} buys today` });
     expect(await labelTexts(page, 'savings')).toEqual({
@@ -149,27 +181,39 @@ test.describe('Against the Current', () => {
     await expect(page.locator('#how-age')).toHaveText('year 30');
   });
 
-  test('story captions carry the live results', async ({ page }) => {
+  test('the notes follow the year (played or dragged), with the live results', async ({ page }) => {
     await gotoRiver(page);
-    await seek(page, 40);
-    await page.waitForTimeout(800);
-    const cap = page.locator('#caption .cap.on:not(.cap-ghost)');
-    await expect(cap.locator('.cap-1')).toHaveText('Still $10,000 in cash. It buys what $4,120 buys today.');
-    await expect(cap.locator('.cap-2')).toContainText('$23,662');
-    await seek(page, 22);
-    await page.waitForTimeout(800);
-    await expect(page.locator('#caption .cap.on:not(.cap-ghost) .cap-1')).toHaveText('A savings account rows, but slower than the current.');
+    const at = async (y: number) => {
+      await scrub(page, y);
+      await page.waitForTimeout(700);
+    };
+    await at(0);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Three boats. The same $10,000.');
+    await at(0.5);
+    await expect(cap(page).locator('.cap-1')).toHaveText("Prices rise a little every year. That's the current.");
+    await at(3);
+    await expect(cap(page).locator('.cap-1')).toHaveText("Cash doesn't row. It drifts.");
+    await at(10);
+    await expect(cap(page).locator('.cap-1')).toHaveText('A savings account rows, but slower than the current.');
+    await at(20);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Investing has to row harder than the current to make headway.');
+    await at(30);
+    await expect(cap(page).locator('.cap-1')).toHaveText('Still $10,000 in cash. It buys what $4,120 buys today.');
+    await expect(cap(page).locator('.cap-2')).toContainText('$23,662');
+    // played, the notes change on their own as the years pass
+    await at(0);
+    await page.evaluate(() => window.__river.actions.play());
+    await expect(cap(page).locator('.cap-1')).toHaveText("Cash doesn't row. It drifts.", { timeout: 10_000 });
   });
 
   test('changing inflation re-renders the numbers and the shared scale', async ({ page }) => {
     await gotoRiver(page);
-    await page.locator('#btn-skip').click();
+    await toEnd(page);
     const before = await state(page);
     await page.locator('#f-inflation').fill('6');
     await page.locator('#f-inflation').press('Enter');
     await frames(page, 3);
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.inputs.inflation).toBeCloseTo(0.06, 12);
     expect(s.targetScale).toBeGreaterThan(before.targetScale);
     await expect.poll(async () => (await state(page)).displayScale, { timeout: 5000 }).toBeCloseTo(s.targetScale, 6);
@@ -203,7 +247,6 @@ test.describe('Against the Current', () => {
     await expect(page.locator('#year-readout')).toHaveText('Year 29');
     // scrubbing leaves the story and pauses
     const s = await state(page);
-    expect(s.mode).toBe('explore');
     expect(s.playing).toBe(false);
     // the labels follow the clock
     const e = expected(D, 29);
@@ -223,7 +266,7 @@ test.describe('Against the Current', () => {
 
   test('an invalid input shows an inline error and keeps the last valid numbers', async ({ page }) => {
     await gotoRiver(page);
-    await page.locator('#btn-skip').click();
+    await toEnd(page);
     const input = page.locator('#f-investRate');
     await input.fill('20');
     await input.press('Enter');
@@ -250,7 +293,7 @@ test.describe('Against the Current', () => {
 
   test('negative investment returns are accepted and shown with a true minus sign', async ({ page }) => {
     await gotoRiver(page);
-    await page.locator('#btn-skip').click();
+    await toEnd(page);
     await page.locator('#f-investRate').fill('-2');
     await page.locator('#f-investRate').press('Enter');
     await frames(page, 3);
@@ -270,10 +313,9 @@ test.describe('Against the Current', () => {
     expect((await state(page)).inputs.inflation).toBeCloseTo(0.025, 12);
   });
 
-  test('play, pause and speed work in explore', async ({ page }) => {
+  test('play, pause and speed work', async ({ page }) => {
     await gotoRiver(page);
-    await page.locator('#btn-skip').click();
-    await page.evaluate(() => window.__river.actions.scrubTo(0));
+    await scrub(page, 0);
     await page.locator('#btn-play').click();
     await expect(page.locator('#btn-play')).toContainText('Pause');
     await page.locator('.speed:has-text("4×")').click();
@@ -295,8 +337,7 @@ test.describe('Against the Current', () => {
     await expect(page.locator('#dock')).toBeHidden({ timeout: 2000 });
     await toggle.click();
     await expect(page.locator('#dock')).toBeVisible();
-    await page.locator('#btn-skip').click();
-    await page.evaluate(() => window.__river.actions.scrubTo(0));
+    await scrub(page, 0);
     await page.locator('body').click({ position: { x: 5, y: 400 } });
     await page.keyboard.press('Space');
     await expect.poll(async () => (await state(page)).playing).toBe(true);
@@ -304,8 +345,10 @@ test.describe('Against the Current', () => {
 
   test('labels sit inside the stage and do not overlap each other', async ({ page }) => {
     await gotoRiver(page);
-    for (const t of [12, 20, 30, 40]) {
-      await seek(page, t);
+    // (a phone's panel covers the river: the labels are seen with it folded away)
+    if ((page.viewportSize()?.width ?? 1440) < 700) await page.locator('#panel-toggle').click();
+    for (const t of [1, 6, 14, 30]) {
+      await scrub(page, t);
       await page.waitForTimeout(500);
       const boxes = await page.evaluate(() =>
         ['cash', 'savings', 'invest'].map((id) => {
@@ -314,17 +357,18 @@ test.describe('Against the Current', () => {
         }),
       );
       // the visible river is the stage minus the open panel
-      const limit = (await page.locator('#dock').boundingBox())!.x;
+      const dock = page.locator('#dock');
+      const limit = (await dock.isVisible()) ? (await dock.boundingBox())!.x : page.viewportSize()!.width;
       for (const b of boxes) {
-        expect(b.x, `${b.id} at t=${t}`).toBeGreaterThanOrEqual(-1);
-        expect(b.x + b.w, `${b.id} at t=${t}`).toBeLessThanOrEqual(limit + 1);
+        expect(b.x, `${b.id} at year ${t}`).toBeGreaterThanOrEqual(-1);
+        expect(b.x + b.w, `${b.id} at year ${t}`).toBeLessThanOrEqual(limit + 1);
       }
       for (let i = 0; i < boxes.length; i++) {
         for (let j = i + 1; j < boxes.length; j++) {
           const a = boxes[i];
           const b = boxes[j];
           const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          expect(overlap, `${a.id} vs ${b.id} at t=${t}`).toBe(false);
+          expect(overlap, `${a.id} vs ${b.id} at year ${t}`).toBe(false);
         }
       }
     }
@@ -334,6 +378,8 @@ test.describe('Against the Current', () => {
     await gotoRiver(page, { pause: false });
     const region = page.locator('#announcer');
     await expect(region).toHaveAttribute('aria-live', 'polite');
+    await page.evaluate(() => window.__river.actions.play());
+    await frames(page, 2);
     await page.evaluate(() => window.__river.actions.pause());
     await expect(region).toContainText('Paused');
     const before = await region.textContent();
@@ -344,7 +390,7 @@ test.describe('Against the Current', () => {
     await expect(region).toContainText('Updated. After 30 years', { timeout: 3000 });
   });
 
-  test('reduced motion: no autoplay, labels still show, story still reaches the numbers', async ({ browser }) => {
+  test('reduced motion: still at the start, labels showing, and the numbers at the end', async ({ browser }) => {
     const ctx = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     const errors = await gotoRiver(page, { pause: false });
@@ -352,11 +398,10 @@ test.describe('Against the Current', () => {
     const s = await state(page);
     expect(s.reducedMotion).toBe(true);
     expect(s.playing).toBe(false);
-    expect(s.storyTime).toBe(0);
+    expect(s.years).toBe(0);
     await expect(page.locator('#reduce-motion')).toBeChecked();
     for (const id of ['cash', 'savings', 'invest']) await expect(page.locator(`#lab-${id}`)).toBeVisible();
-    await page.locator('#btn-skip').click();
-    await frames(page, 3);
+    await toEnd(page);
     expect((await labelTexts(page, 'cash')).buys).toBe('buys what $4,120 buys today');
     expect(errors).toEqual([]);
     await ctx.close();
@@ -379,19 +424,20 @@ function describeViolations(results: Awaited<ReturnType<AxeBuilder['analyze']>>)
 }
 
 test.describe('Against the Current: accessibility', () => {
-  test('axe: no violations in explore, with details open, with an error showing, and during the story', async ({ page }) => {
-    await gotoRiver(page);
+  test('axe: no violations with the introduction open, at each note, with details open and with an error showing', async ({ page }) => {
+    await gotoRiver(page, { intro: true });
     await page.evaluate(() => document.fonts.ready);
-    for (const t of [3, 40]) {
-      await seek(page, t);
-      await page.waitForTimeout(1200);
-      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-      expect(r.violations, `story t=${t}\n` + describeViolations(r)).toEqual([]);
-    }
-    await page.locator('#btn-skip').click();
-    await page.waitForTimeout(1800);
+    await expect(page.locator('#intro')).toBeVisible();
     let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-    expect(results.violations, 'explore\n' + describeViolations(results)).toEqual([]);
+    expect(results.violations, 'introduction\n' + describeViolations(results)).toEqual([]);
+    await page.keyboard.press('Escape');
+    await openPanel(page);
+    for (const y of [0, 3, 14, 30]) {
+      await scrub(page, y);
+      await page.waitForTimeout(900);
+      const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      expect(r.violations, `year ${y}\n` + describeViolations(r)).toEqual([]);
+    }
 
     await page.locator('#how > summary').click();
     await page.evaluate(() => window.__river.actions.scrubTo(12.25));

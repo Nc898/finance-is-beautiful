@@ -1,22 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RIVER_INPUTS, RIVER_LIMITS, allBoats, effortOf, riverScale } from '../../src/river/engine';
 import {
-  EXPLORE_YEARS_PER_SECOND,
   FIELD_RANGE,
   MAX_DT,
+  PLAY_SECONDS,
   SCALE_TAU,
   createStore,
   draftToInputs,
   fieldStep,
   inputsToDraft,
   parseNumber,
+  playRate,
   rateToDraft,
 } from '../../src/river/app/store';
 import type { Reason } from '../../src/river/app/store';
 import { BOAT_HALF_U, boatVisual, fitFactor } from '../../src/river/app/loop';
-import { STORY_DURATION } from '../../src/river/app/story';
 
 const D = DEFAULT_RIVER_INPUTS;
+const END = D.years;
 
 function run(store: ReturnType<typeof createStore>, seconds: number, dt = 1 / 30): void {
   for (let t = 0; t < seconds; t += dt) store.tick(dt);
@@ -54,7 +55,6 @@ describe('commitInputs', () => {
     expect(s.state.inputs.inflation).toBeCloseTo(0.06, 12);
     expect(s.state.targetScale).toBeCloseTo(riverScale(s.state.inputs), 12);
     expect(s.state.targetScale).toBeGreaterThan(riverScale(D));
-    expect(s.state.mode).toBe('explore');
     expect(s.state.playing).toBe(false);
   });
 
@@ -68,7 +68,6 @@ describe('commitInputs', () => {
     expect(s.state.inputs).toEqual(D);
     expect(s.state.errors.years).toMatch(/whole/);
     expect(s.state.errors.investRate).toMatch(/must be a number/);
-    expect(s.state.mode).toBe('story'); // an invalid edit does not leave the story
     expect(reasons).toContain('errors');
     // fixing the draft clears the errors
     s.actions.setDraftField('years', '12');
@@ -100,16 +99,17 @@ describe('commitInputs', () => {
     }
   });
 
-  it('a no-op commit does not leave the story', () => {
+  it('a no-op commit changes nothing and tells no one', () => {
     const s = createStore();
+    const reasons: Reason[] = [];
+    s.subscribe((r) => reasons.push(r));
     s.actions.setDraftField('years', '30');
     s.actions.commitInputs();
-    expect(s.state.mode).toBe('story');
+    expect(reasons).not.toContain('inputs');
   });
 
   it('shortening the timeline clamps the clock to the new end and pauses', () => {
     const s = createStore();
-    s.actions.skipToExplore();
     s.actions.scrubTo(25);
     s.actions.setDraftField('years', '10');
     s.actions.commitInputs();
@@ -195,143 +195,87 @@ describe('stepField', () => {
 });
 
 describe('playback', () => {
-  it('story plays at 1x and ends in explore at the last year, paused', () => {
+  it('starts at 0, paused, and does not move until played', () => {
+    const s = createStore();
+    expect(s.state.years).toBe(0);
+    expect(s.state.playing).toBe(false);
+    run(s, 3);
+    expect(s.state.years).toBe(0);
+  });
+
+  it('plays the whole timeline in PLAY_SECONDS at 1x, then stops at the end, paused', () => {
     const s = createStore();
     const reasons: Reason[] = [];
     s.subscribe((r) => reasons.push(r));
     s.actions.play();
     expect(s.state.playing).toBe(true);
-    run(s, 20);
-    expect(s.state.storyTime).toBeGreaterThan(19);
-    expect(s.state.storyTime).toBeLessThan(21);
-    run(s, STORY_DURATION);
-    expect(s.state.mode).toBe('explore');
+    run(s, PLAY_SECONDS / 2);
+    expect(s.state.years / END).toBeCloseTo(0.5, 1);
+    run(s, PLAY_SECONDS);
+    expect(s.state.years).toBe(END);
     expect(s.state.playing).toBe(false);
-    expect(s.state.years).toBe(30);
-    expect(s.state.exploreHint).toBe(true);
-    expect(reasons).toContain('story-end');
+    expect(reasons).toContain('play-end');
   });
 
-  it('speed scales the story clock', () => {
+  it('speed scales the pace', () => {
     const s = createStore();
-    s.actions.setSpeed(4);
+    s.actions.setSpeed(2);
     s.actions.play();
-    run(s, 5);
-    expect(s.state.storyTime).toBeGreaterThan(19);
-    expect(s.state.storyTime).toBeLessThan(21);
+    run(s, 2);
+    expect(s.state.years).toBeCloseTo(2 * 2 * playRate(END), 0);
   });
 
-  it('years advance with the story, never backwards', () => {
+  it('advances while playing, never backwards', () => {
     const s = createStore();
     s.actions.play();
     let prev = 0;
-    for (let i = 0; i < 30 * 60; i++) {
+    for (let i = 0; i < 30 * 30; i++) {
       s.tick(1 / 30);
       expect(s.state.years).toBeGreaterThanOrEqual(prev - 1e-12);
       prev = s.state.years;
     }
-    expect(s.state.years).toBe(30);
+    expect(s.state.years).toBe(END);
   });
 
-  it('explore advances 2 years per second at 1x and stops at the end', () => {
+  it('pressing play at the end starts over from 0', () => {
     const s = createStore();
-    s.actions.skipToExplore();
-    s.actions.scrubTo(0);
-    s.actions.play();
-    run(s, 5);
-    expect(s.state.years).toBeCloseTo(10, 0);
-    expect(s.state.yearsPerSecond).toBeCloseTo(EXPLORE_YEARS_PER_SECOND, 5);
-    s.actions.setSpeed(2);
-    run(s, 2);
-    expect(s.state.years).toBeCloseTo(18, 0);
-    run(s, 10);
-    expect(s.state.years).toBe(30);
-    expect(s.state.playing).toBe(false);
-    expect(s.state.yearsPerSecond).toBe(0);
-  });
-
-  it('pressing play at the end restarts from year 0', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
+    s.actions.scrubTo(END);
     s.actions.play();
     expect(s.state.years).toBe(0);
     expect(s.state.playing).toBe(true);
-  });
-
-  it('yearsPerSecond is 0 when paused', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
-    s.actions.scrubTo(3);
-    run(s, 1);
-    expect(s.state.yearsPerSecond).toBe(0);
   });
 
   it('clamps huge frame gaps (tab switches) to MAX_DT', () => {
     const s = createStore();
-    s.actions.skipToExplore();
-    s.actions.scrubTo(0);
     s.actions.play();
     s.tick(30);
-    expect(s.state.years).toBeCloseTo(EXPLORE_YEARS_PER_SECOND * MAX_DT, 12);
+    expect(s.state.years).toBeCloseTo(playRate(END) * MAX_DT, 12);
   });
 
-  it('scrubbing leaves the story, pauses, clamps and clears the hint', () => {
+  it('scrubbing pauses and clamps', () => {
     const s = createStore();
     s.actions.play();
-    s.actions.scrubTo(12.5);
-    expect(s.state.mode).toBe('explore');
+    s.actions.scrubTo(10);
     expect(s.state.playing).toBe(false);
-    expect(s.state.years).toBe(12.5);
-    s.actions.scrubTo(999);
-    expect(s.state.years).toBe(30);
+    expect(s.state.years).toBe(10);
+    s.actions.scrubTo(1e9);
+    expect(s.state.years).toBe(END);
     s.actions.scrubTo(-4);
     expect(s.state.years).toBe(0);
-  });
-
-  it('skip jumps to the end with the hint; replay starts over and plays', () => {
-    const s = createStore();
-    s.actions.skipToExplore();
-    expect(s.state.years).toBe(30);
-    expect(s.state.exploreHint).toBe(true);
-    s.actions.replayStory();
-    expect(s.state.mode).toBe('story');
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.years).toBe(0);
-    expect(s.state.playing).toBe(true);
-    expect(s.state.exploreHint).toBe(false);
-  });
-
-  it('seekStory moves the shared clock with the story', () => {
-    const s = createStore();
-    s.actions.seekStory(20);
-    expect(s.state.mode).toBe('story');
-    expect(s.state.years).toBeCloseTo(6, 12);
-    s.actions.seekStory(1e6);
-    expect(s.state.storyTime).toBe(s.storyLength());
-    expect(s.state.years).toBe(30);
   });
 });
 
 describe('reduced motion', () => {
-  it('starts at the first hold, paused, and does not move until played', () => {
+  it('changes no time: the clock stays where it is, and still plays when asked', () => {
     const s = createStore({ reducedMotion: true });
-    expect(s.state.reducedMotion).toBe(true);
     expect(s.state.playing).toBe(false);
-    run(s, 3);
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.years).toBe(0);
-  });
-
-  it('switching restarts the story paused with the matching timeline', () => {
-    const s = createStore();
-    s.actions.play();
-    run(s, 15);
-    s.actions.setReducedMotion(true);
-    expect(s.state.storyTime).toBe(0);
-    expect(s.state.playing).toBe(false);
-    expect(s.storyLength()).not.toBe(STORY_DURATION);
+    s.actions.scrubTo(10);
     s.actions.setReducedMotion(false);
-    expect(s.storyLength()).toBe(STORY_DURATION);
+    expect(s.state.years).toBe(10);
+    s.actions.setReducedMotion(true);
+    s.actions.play();
+    run(s, 1);
+    expect(s.state.years).toBeGreaterThan(10);
   });
 
   it('eases the scale faster in reduced motion', () => {
