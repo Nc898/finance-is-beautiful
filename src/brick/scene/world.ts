@@ -13,7 +13,8 @@ import { SoftLayer, bloom, blobPoly, flowerDab, grassTuft } from '../../river/sc
 import { mix, ribbon } from '../../river/scene/boatInk';
 import { FENCE_Y, GATE, GROUND_Y, HEDGE_Y, HOUSE, JUNCTION, LANE, ROAD_FAR } from './geom';
 import { silhouette, PAPER } from './housePaint';
-import { drawClump, springSprites } from './springArt';
+import { drawClump, laySpringTree, renderSpringTree, springSprites, type SpringTree } from './springArt';
+import { daffodil, paintBeds, paintForeground } from './flowers';
 import type { Camera } from './layout';
 import { LOANS } from '../types';
 import type { Sprites } from '../../scene/sprites';
@@ -32,6 +33,12 @@ interface View {
 }
 
 const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+
+/** the trees at either end of the street (their trunks stand behind the houses' outer corners) */
+const SIDE_TREES: SpringTree[] = [
+  { seed: 5203, x: 70, y: 446, k: 0.56, m: 1, kit: 'leaf', haze: 0.04 },
+  { seed: 5309, x: 930, y: 448, k: 0.58, m: 1, kit: 'leaf', haze: 0.04, flip: true },
+];
 
 export const ridgeFar = (x: number): number => 246 + 14 * Math.sin(x / 160 + 0.8) + 7 * Math.sin(x / 67 + 2.1) + 3 * Math.sin(x / 31);
 export const ridgeMid = (x: number): number => 276 + 9 * Math.sin(x / 120 + 2.4) + 5 * Math.sin(x / 53 + 0.4) + 2 * Math.sin(x / 26);
@@ -85,11 +92,26 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   await tick();
   if (!check()) return null;
   paintPlots(ctx, rnd, v);
+  // a tree in fresh leaf at either end of the street, framing it (behind the houses: their outlines are reserved)
+  for (const t of SIDE_TREES) {
+    const r = await renderSpringTree(t, A, A > 1.6 ? 1.4 : 1, tick, check);
+    if (!r || !check()) return null;
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(70,90,60,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(t.x + 10, t.y + 2, 34, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    laySpringTree(ctx, t, r, A);
+  }
+  paintBeds(ctx, new Rand(51515));
   paintRoad(ctx, rnd);
   paintLane(ctx, rnd, v);
   await tick();
   if (!check()) return null;
   paintVerges(ctx, rnd, v);
+  paintForeground(ctx, new Rand(61616), v.x0, v.x1, v.y1);
   paintShadows(ctx);
 
   // the houses are reserved: their outlines are left as paper for the pencil drawings
@@ -542,39 +564,6 @@ function paintLane(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
 /** the two ruts along the lane (the carts' wheels run in them) */
 export const CART_RUT_A = 568;
 export const CART_RUT_B = 586;
-
-function daffodil(ctx: CanvasRenderingContext2D, rnd: Rand, x: number, y: number, h: number): void {
-  // strap leaves, a stem, a nodding six-petalled flower with an orange trumpet
-  for (let k = 0; k < 3; k++) {
-    ctx.fillStyle = rgba(rnd.pick(['#6E9A48', '#86AE56', '#5C8A40']), 0.75);
-    const tx = x + rnd.range(-0.35, 0.35) * h;
-    ribbon(ctx, [x + rnd.range(-0.5, 0.5), y, (x + tx) / 2, y - h * 0.4, tx, y - h * rnd.range(0.55, 0.85)], h * 0.07, 0.95);
-  }
-  const fx = x + rnd.range(-0.15, 0.25) * h;
-  const fy = y - h;
-  ctx.strokeStyle = 'rgba(96,136,64,0.8)';
-  ctx.lineWidth = h * 0.04;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.quadraticCurveTo(x, y - h * 0.6, fx, fy);
-  ctx.stroke();
-  const r = h * 0.17;
-  ctx.fillStyle = 'rgba(246,214,84,0.92)';
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * Math.PI * 2 + 0.3;
-    ctx.beginPath();
-    ctx.ellipse(fx + Math.cos(a) * r * 0.6, fy + Math.sin(a) * r * 0.45, r * 0.55, r * 0.3, a, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = 'rgba(236,150,52,0.95)';
-  ctx.beginPath();
-  ctx.ellipse(fx + r * 0.25, fy + r * 0.1, r * 0.36, r * 0.3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,250,220,0.5)';
-  ctx.beginPath();
-  ctx.ellipse(fx - r * 0.3, fy - r * 0.2, r * 0.2, r * 0.12, -0.5, 0, Math.PI * 2);
-  ctx.fill();
-}
 
 function paintVerges(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
   // the near verge below the lane, to the bottom of the picture
