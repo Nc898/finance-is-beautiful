@@ -10,8 +10,9 @@ export interface Demo {
   summary: string;
   href: string;
   /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the vine's
-   *  autumn rust, tendrils and falling leaves, or the snow's winter blue, snowflakes and birds on the rule. */
-  theme: 'grove' | 'river' | 'vine' | 'snow';
+   *  autumn rust, tendrils and falling leaves, the snow's winter blue, snowflakes and birds on the rule, or the
+   *  bricks' deep red, a course of bricks for the rule and a blossom wash. */
+  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick';
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -103,6 +104,17 @@ async function paintOnARoll(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
+async function paintBrickByBrick(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-brick.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 export const DEMOS: Demo[] = [
   {
     slug: 'time-to-grow',
@@ -135,5 +147,13 @@ export const DEMOS: Demo[] = [
     href: './on-a-roll.html',
     theme: 'snow',
     paintPreview: paintOnARoll,
+  },
+  {
+    slug: 'brick-by-brick',
+    title: 'Brick by Brick',
+    summary: 'The same home on a 30-year and a 15-year loan, built a brick at a time.',
+    href: './brick-by-brick.html',
+    theme: 'brick',
+    paintPreview: paintBrickByBrick,
   },
 ];

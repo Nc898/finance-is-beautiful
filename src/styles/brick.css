@@ -1,0 +1,1383 @@
+/* Brick by Brick: quiet chrome around a watercolor illustration (same system as the other demonstrations). */
+
+:root {
+  --paper: #fbf6ea;
+  --paper-shade: #efe5cf;
+  --ink: #2f2a22;
+  --muted: #6b6152;
+  /* the controls and the introduction: a deep brick red (cooler and darker than the vine's rust) */
+  --accent: #8c2834;
+  --accent-deep: #621a24;
+  --accent-tint: rgba(140, 40, 52, 0.08);
+  --golden: #f0b429;
+  --error: #b02a1e;
+  /* text over the painted sky: a softer ink than --ink (never the panel's --muted), on a pale lifted wash */
+  --ink-soft: #4a4236;
+  --lift: rgba(251, 246, 234, 0.74);
+  /* the introduction card's ink (src/styles/intro.css) */
+  --intro-accent: var(--accent);
+  --intro-accent-deep: var(--accent-deep);
+  /* the two houses' doors and scarves (ACCENT in src/brick/scene/geom.ts) and their deeper inks for text */
+  --house-a: #3f5e86;
+  --house-a-ink: #2c4466;
+  --house-b: #5e7d38;
+  --house-b-ink: #3d5524;
+  --rule: rgba(47, 42, 34, 0.18);
+  --rule-strong: rgba(47, 42, 34, 0.55);
+  --wash: rgba(47, 42, 34, 0.07);
+  --serif-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, serif;
+  --serif: 'Libre Caslon Text', Georgia, 'Times New Roman', serif;
+  --sans: 'Figtree Variable', 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --gutter: 20px;
+  --thumb: 20px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.45 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+p,
+h1,
+h2 {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Stage ---------- */
+
+.app {
+  min-height: 100svh;
+}
+
+.stage {
+  container: stage / inline-size;
+  position: relative;
+  height: 100svh;
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+
+.masthead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--gutter) 0;
+  pointer-events: none;
+}
+
+.title {
+  white-space: nowrap;
+  padding-top: 11px;
+  font: 400 21px/1.1 var(--serif-display);
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+/* the title is a quiet way back to the collection */
+.title-link {
+  position: relative;
+  display: inline-block;
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+  border-radius: 3px;
+}
+.title-arrow {
+  position: absolute;
+  right: 100%;
+  margin-right: 0.22em;
+  font-size: 0.72em;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateX(5px);
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.title-link:hover .title-arrow,
+.title-link:focus-visible .title-arrow {
+  opacity: 1;
+  transform: none;
+}
+
+.story-actions {
+  display: flex;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+/* ---------- Caption ---------- */
+
+/* the milestone note: a quiet line in the upper left corner, under the demonstration's name (and under the year,
+   when the panel is closed and the year shows) */
+.caption {
+  /* (the scene keeps clear of the note at its lower place, so opening the panel never moves the scene) */
+  --cap-top-open: 48px;
+  --cap-top-closed: 48px;
+  position: absolute;
+  top: var(--cap-top-open);
+  left: var(--gutter);
+  width: min(340px, calc(100% - 2 * var(--gutter)));
+  display: grid;
+  justify-items: start;
+  text-align: left;
+  pointer-events: none;
+  transition: top 0.35s ease;
+}
+
+.app:not(.panel-open) .caption {
+  top: var(--cap-top-closed);
+}
+
+.cap {
+  position: relative;
+  isolation: isolate;
+  grid-area: 1 / 1;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  padding: 2px 0;
+  font-family: var(--serif);
+  font-style: italic;
+  text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+}
+
+/* this sky darkens to a deep blue at the top, so the words sit on a pale wash, like a lifted cloud with soft edges */
+.cap::before,
+.year-readout::before,
+.plate::before,
+.diff::before {
+  content: '';
+  position: absolute;
+  inset: -6px -22px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--lift);
+  filter: blur(16px);
+}
+
+.cap::before {
+  inset: -10px -18px;
+}
+
+.cap-ghost {
+  align-self: start;
+  visibility: hidden;
+}
+
+.cap.on {
+  opacity: 1;
+}
+
+.cap-1 {
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.cap-2 {
+  margin-top: 1px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.cap-2:empty {
+  display: none;
+}
+
+/* ---------- The year ---------- */
+
+.year-readout {
+  position: absolute;
+  top: 58px;
+  right: var(--gutter);
+  isolation: isolate;
+  font: italic 400 17px/1.2 var(--serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.year-readout::before {
+  inset: -10px -26px;
+  background: rgba(251, 246, 234, 0.82);
+}
+
+/* with the panel open its own readout shows the month, so the scene's copy steps aside */
+.app.panel-open .year-readout {
+  opacity: 0;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--wash);
+}
+
+.btn:active {
+  background: rgba(47, 42, 34, 0.12);
+}
+
+.btn .long {
+  display: inline;
+}
+
+.btn .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.btn.quiet {
+  color: var(--ink);
+}
+
+.btn.play {
+  width: 156px;
+  padding: 0 18px 0 14px;
+  border: 1px solid rgba(47, 42, 34, 0.32);
+}
+
+.btn[hidden] {
+  display: none;
+}
+
+/* ---------- Dock ---------- */
+
+/* Side panel: fixed to the right edge, slides out of view when collapsed. On wide screens the
+   stage makes room for it; on narrow screens it overlays the scene. */
+:root {
+  --panel-w: 372px;
+}
+
+.dock {
+  container: dock / inline-size;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(var(--panel-w), 92vw);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 18px 20px 20px;
+  transform: translateX(0);
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 0s;
+}
+
+.app:not(.panel-open) .dock {
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 260ms;
+}
+
+/* Wide screens: the camera always reserves the panel's width, so opening the panel only slides the scene
+   left by half of it (a compositor transform, no re-layout or repaint). */
+@media (min-width: 900px) {
+  #scene,
+  .overlay {
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .story-actions {
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .app.panel-open #scene,
+  .app.panel-open .overlay {
+    transform: translateX(calc(var(--panel-w) / -2));
+  }
+
+  .app.panel-open .story-actions {
+    transform: translateX(calc(var(--panel-w) * -1));
+  }
+}
+
+.dock-inner {
+  display: grid;
+  gap: 14px;
+}
+
+.panel-toggle {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 21;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 64px;
+  margin-top: -32px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: right 260ms cubic-bezier(0.2, 0.7, 0.2, 1), background-color 150ms;
+}
+
+.panel-toggle:hover {
+  background: var(--accent-tint);
+}
+
+.panel-toggle .ico {
+  width: 20px;
+  height: 20px;
+  transform: rotate(180deg);
+  transition: transform 260ms;
+}
+
+.app.panel-open .panel-toggle {
+  right: min(var(--panel-w), 92vw);
+}
+
+.app.panel-open .panel-toggle .ico {
+  transform: none;
+}
+
+.panel-toggle.hl {
+  animation: soft-wash 1.5s ease-out 2;
+}
+
+.dock.hl .transport,
+.dock.hl .inputs {
+  animation: soft-wash 1.5s ease-out;
+  border-radius: 12px;
+}
+
+@keyframes soft-wash {
+  0% {
+    background-color: rgba(240, 180, 41, 0);
+  }
+  18% {
+    background-color: rgba(240, 180, 41, 0.2);
+  }
+  100% {
+    background-color: rgba(240, 180, 41, 0);
+  }
+}
+
+.transport {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+}
+
+/* the speed: a small slider of its own, styled as the timeline, from 0.1x to 5x */
+.speeds {
+  display: inline-grid;
+  grid-template-columns: auto minmax(110px, 1fr) 3.2em;
+  align-items: center;
+  column-gap: 10px;
+  min-width: 0;
+}
+
+.speed-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.speed-readout {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-deep);
+  text-align: right;
+}
+
+.speeds input[type='range'] {
+  --frac: 0.589;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.speeds input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    var(--ink) 0,
+    var(--ink) calc(var(--thumb) / 2 + var(--frac) * (100% - var(--thumb))),
+    rgba(47, 42, 34, 0.3) calc(var(--thumb) / 2 + var(--frac) * (100% - var(--thumb)))
+  );
+}
+
+.speeds input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -9px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 10px var(--accent);
+  cursor: grab;
+}
+
+.speeds input[type='range']::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(47, 42, 34, 0.3);
+}
+
+.speeds input[type='range']::-moz-range-progress {
+  height: 2px;
+  background: var(--ink);
+}
+
+.speeds input[type='range']::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--paper);
+  cursor: grab;
+}
+
+.speeds input[type='range']:focus-visible {
+  outline: none;
+}
+
+/* (two rules: a browser drops a whole rule over a pseudo-element it does not know) */
+.speeds input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.speeds input[type='range']:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.age-readout {
+  width: 10.4em;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* ---------- Timeline: a botanical-plate scale bar ---------- */
+
+.scale {
+  position: relative;
+  height: 58px;
+  min-width: 0;
+}
+
+.scale input[type='range'] {
+  --frac: 0;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.scale input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    var(--ink) 0,
+    var(--ink) calc(var(--thumb) / 2 + var(--frac) * (100% - var(--thumb))),
+    rgba(47, 42, 34, 0.3) calc(var(--thumb) / 2 + var(--frac) * (100% - var(--thumb)))
+  );
+}
+
+.scale input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -9px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 10px var(--accent);
+  cursor: grab;
+}
+
+.scale input[type='range']::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(47, 42, 34, 0.3);
+}
+
+.scale input[type='range']::-moz-range-progress {
+  height: 2px;
+  background: var(--ink);
+}
+
+.scale input[type='range']::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--paper);
+  cursor: grab;
+}
+
+.scale input[type='range']:focus-visible {
+  outline: none;
+}
+
+.scale input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.scale input[type='range']:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.scale-ticks {
+  position: absolute;
+  left: calc(var(--thumb) / 2);
+  right: calc(var(--thumb) / 2);
+  pointer-events: none;
+}
+
+.scale-ticks {
+  top: 28px;
+  height: 30px;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: rgba(47, 42, 34, 0.4);
+  transform: translateX(-0.5px);
+}
+
+.tick.major {
+  height: 8px;
+  background: rgba(47, 42, 34, 0.75);
+}
+
+.tick-label {
+  position: absolute;
+  top: 11px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+
+/* ---------- Inputs ---------- */
+
+.inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.field-note {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.field {
+  min-width: 0;
+}
+
+.field label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.field label .roundel {
+  width: 18px;
+  height: 18px;
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.stepper input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.step {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.step:hover {
+  background: var(--wash);
+}
+
+.step:active {
+  background: rgba(47, 42, 34, 0.12);
+}
+
+.field:has(input[aria-invalid='true']) .stepper {
+  border-bottom-color: var(--error);
+  border-bottom-width: 2px;
+}
+
+.field-error {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--error);
+}
+
+/* ---------- Foot: assumptions and disclosure ---------- */
+
+.foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 16px;
+}
+
+.how[open] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.assumptions {
+  max-width: 78ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.reduce {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.reduce:hover {
+  background: var(--wash);
+}
+
+.reduce input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.how > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.how > summary::-webkit-details-marker {
+  display: none;
+}
+
+.how > summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.how[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.how > summary:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+}
+
+.how-body {
+  padding: 4px 0 28px;
+  max-width: 760px;
+}
+
+.how-h {
+  margin-bottom: 8px;
+  font: italic 400 17px/1.3 var(--serif);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare th,
+.compare td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: right;
+  font-weight: 400;
+}
+
+.compare thead th {
+  font-weight: 600;
+}
+
+.compare thead th .roundel {
+  margin-right: 6px;
+}
+
+.compare th[scope='row'] {
+  text-align: left;
+  color: var(--muted);
+}
+
+.compare tr.strong th,
+.compare tr.strong td {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.compare .gap th,
+.compare .gap td {
+  border-bottom-color: var(--rule);
+}
+
+.compare .gap tr:first-child th,
+.compare .gap tr:first-child td {
+  border-top: 1px solid var(--rule-strong);
+}
+
+.conventions {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.conventions li + li {
+  margin-top: 4px;
+}
+
+/* ---------- Narrow screens ---------- */
+
+@container dock (max-width: 699px) {
+  .transport {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+
+  .transport .btn.play {
+    justify-self: start;
+  }
+
+  .age-readout {
+    justify-self: end;
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    min-width: 0;
+  }
+
+  .speeds {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .scale {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .foot {
+    grid-template-columns: 1fr;
+    row-gap: 6px;
+  }
+
+  .how[open] {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 699px) {
+  :root {
+    --gutter: 16px;
+  }
+
+  .stage {
+    min-height: 380px;
+  }
+
+  .title {
+    font-size: 18px;
+    padding-top: 10px;
+  }
+
+  .story-actions .btn {
+    padding: 0 10px;
+  }
+
+  .story-actions .long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .caption {
+    --cap-top-open: 44px;
+    --cap-top-closed: 44px;
+  }
+
+  .cap-1 {
+    font-size: 13.5px;
+  }
+
+  .cap-2 {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .dock {
+    padding: 14px 16px 18px;
+    box-shadow: -12px 0 32px rgba(47, 42, 34, 0.12);
+  }
+
+  /* (at the side, half way down: the bottom band holds the house labels) */
+  .panel-toggle {
+    width: 44px;
+    height: 56px;
+    margin-top: -28px;
+  }
+}
+
+@media (max-width: 380px) {
+  .inputs,
+  .loan-fields {
+    gap: 6px 10px;
+  }
+  .stepper {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+  }
+  .step {
+    width: 40px;
+  }
+  .btn.play {
+    min-width: 0;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+  .dock.hl .transport,
+  .dock.hl .inputs {
+    animation: none;
+    background-color: rgba(240, 180, 41, 0.16);
+  }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  transition-duration: 0.01ms !important;
+}
+
+html.reduce-motion .dock.hl .transport,
+html.reduce-motion .dock.hl .inputs {
+  animation: none;
+  background-color: rgba(240, 180, 41, 0.16);
+}
+
+/* Captions still change in reduced motion, but with a plain fade. */
+html.reduce-motion .cap {
+  transition: opacity 0.2s linear !important;
+}
+
+/* ---------- Load reveal ---------- */
+
+/* Nothing shows on the bare paper until the scene is painted; then the scene and controls arrive together. */
+body:not([data-ready]) .stage,
+body:not([data-ready]) .dock,
+body:not([data-ready]) .panel-toggle {
+  opacity: 0.01;
+}
+body[data-ready] .stage {
+  animation: reveal-in 0.8s cubic-bezier(0.25, 0.6, 0.3, 1) both;
+}
+body[data-ready] .dock,
+body[data-ready] .panel-toggle {
+  animation: reveal-in 0.6s ease 0.25s both;
+}
+@keyframes reveal-in {
+  from {
+    opacity: 0.01;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-ready] .stage,
+  body[data-ready] .dock,
+  body[data-ready] .panel-toggle {
+    animation-duration: 0.01s;
+    animation-delay: 0s;
+  }
+}
+
+/* The panel is narrow: tighten the comparison table. */
+.compare {
+  font-size: 13px;
+}
+.compare th,
+.compare td {
+  padding: 7px 5px;
+}
+.compare thead th {
+  white-space: nowrap;
+}
+.compare thead th .roundel {
+  margin-right: 4px;
+}
+
+.how-h + .table-wrap + .how-h {
+  margin-top: 16px;
+}
+
+/* ---------- Brick by Brick: the house labels (plates in the bottom band, as Time to Grow's) ---------- */
+
+.overlay {
+  --plate-w: 260px;
+}
+
+.plate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  isolation: isolate;
+  width: var(--plate-w);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 10px var(--paper), 0 0 5px var(--paper), 0 0 2px var(--paper);
+  will-change: transform;
+}
+
+.plate::before {
+  inset: -4px -14px;
+  background: rgba(251, 246, 234, 0.66);
+  filter: blur(12px);
+}
+
+.plate-ghost {
+  visibility: hidden;
+}
+
+.plate-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  column-gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.plate[data-loan='a'] .plate-id {
+  color: var(--house-a-ink);
+}
+
+.plate[data-loan='b'] .plate-id {
+  color: var(--house-b-ink);
+}
+
+.plate-terms {
+  margin-top: 1px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+.plate-owed {
+  margin-top: 2px;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.plate.paid .plate-owed {
+  font-size: 17px;
+}
+
+.plate-interest {
+  margin-top: 1px;
+  font: italic 400 15px/1.3 var(--serif);
+  color: var(--ink-soft);
+}
+
+/* the letter of each loan in a roundel: identity never by colour alone */
+.roundel {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1.4px solid currentColor;
+  border-radius: 50%;
+  font: italic 400 14px/1 var(--serif);
+  text-shadow: none;
+  vertical-align: middle;
+}
+
+.plate[data-loan='a'] .roundel,
+.loan[data-loan='a'] .roundel,
+.compare th:nth-child(2) .roundel,
+.formula:nth-of-type(2) .roundel {
+  color: var(--house-a-ink);
+  background: rgba(63, 94, 134, 0.12);
+}
+
+.plate[data-loan='b'] .roundel,
+.loan[data-loan='b'] .roundel,
+.compare th:nth-child(3) .roundel,
+.formula:nth-of-type(3) .roundel {
+  color: var(--house-b-ink);
+  background: rgba(94, 125, 56, 0.14);
+}
+
+/* the difference between them, centred between the plates */
+.diff {
+  position: absolute;
+  top: 0;
+  left: 0;
+  isolation: isolate;
+  min-width: 112px;
+  max-width: 190px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 10px var(--paper), 0 0 5px var(--paper), 0 0 2px var(--paper);
+  will-change: transform;
+}
+
+.diff::before {
+  inset: -6px -16px;
+  background: rgba(251, 246, 234, 0.7);
+  filter: blur(12px);
+}
+
+.diff-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink-soft);
+}
+
+.diff-value {
+  margin-top: 1px;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.diff-sub {
+  margin-top: 1px;
+  font: italic 400 13px/1.3 var(--serif);
+  color: var(--ink-soft);
+}
+
+.diff-sub:empty {
+  display: none;
+}
+
+/* at the end the saving is the point: it is emphasized */
+.diff.final .diff-label {
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+
+.diff.final .diff-value {
+  font: 400 26px/1.15 var(--serif-display);
+  color: var(--accent-deep);
+}
+
+/* ---------- Brick by Brick: the loans in the panel ---------- */
+
+.loan {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.loan legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loan-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.formula-lead {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.formula {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.formula .roundel {
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  transform: translateY(4px);
+}
+
+.formula + .how-h {
+  margin-top: 16px;
+}
+
+.yearly td,
+.yearly th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.yearly thead th:first-child,
+.yearly th[scope='row'] {
+  text-align: left;
+}
+
+.yearly tbody tr.now th,
+.yearly tbody tr.now td {
+  background: var(--accent-tint);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 699px) {
+  .plate-id {
+    font-size: 12.5px;
+  }
+
+  .plate-terms {
+    font-size: 12px;
+  }
+
+  .plate-owed {
+    font-size: 16px;
+  }
+
+  .plate-interest {
+    font-size: 13px;
+  }
+
+  .diff-value {
+    font-size: 17px;
+  }
+
+  .diff.final .diff-value {
+    font-size: 22px;
+  }
+
+  /* the note fills the top on phones, so the year sits just under it, on the right */
+  .year-readout {
+    top: var(--year-top, 96px);
+    font-size: 16px;
+  }
+}

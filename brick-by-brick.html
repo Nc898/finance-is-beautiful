@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="The same home bought twice: with a 30-year loan and a 15-year loan. Each payment is a barrow of bricks; the interest goes to the lender's cart and the rest is laid on the house. The shorter loan costs more each month but far less in all." />
+<title>Brick by Brick</title>
+</head>
+<body>
+<!-- loader: Brick by Brick -->
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two brick houses going up side by side, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="plate" id="plate-a" data-loan="a">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">A</span><span class="sr-only">Loan A, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-owed"></p>
+          <p class="plate-interest"></p>
+        </div>
+        <div class="plate" id="plate-b" data-loan="b">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">B</span><span class="sr-only">Loan B, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-owed"></p>
+          <p class="plate-interest"></p>
+        </div>
+        <div class="plate plate-ghost" id="plate-ghost" aria-hidden="true">
+          <p class="plate-id"><span class="roundel">A</span><span class="plate-name">40-year loan</span></p>
+          <p class="plate-terms">12.875% · $3,000,000 a month</p>
+          <p class="plate-owed">$3,000,000 still owed</p>
+          <p class="plate-interest">$13,000,000 in interest</p>
+        </div>
+        <div class="diff" id="diff" hidden>
+          <p class="diff-label" id="diff-label"></p>
+          <p class="diff-value" id="diff-value"></p>
+          <p class="diff-sub" id="diff-sub"></p>
+        </div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0, month 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="Brick by Brick, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Brick by Brick</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play</span>
+          </button>
+
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="360" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field wide" data-field="amount">
+            <label for="f-amount">Amount borrowed ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease amount borrowed">−</button>
+              <input id="f-amount" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-amount" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase amount borrowed">+</button>
+            </div>
+            <p class="field-error" id="err-amount" hidden></p>
+          </div>
+
+          <fieldset class="loan" data-loan="a">
+            <legend><span class="roundel" aria-hidden="true">A</span>Loan A</legend>
+            <div class="loan-fields">
+              <div class="field" data-field="a.years">
+                <label for="f-a-years"><span class="sr-only">Loan A </span>Term (years)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease loan A term">−</button>
+                  <input id="f-a-years" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-a-years" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase loan A term">+</button>
+                </div>
+                <p class="field-error" id="err-a-years" hidden></p>
+              </div>
+              <div class="field" data-field="a.apr">
+                <label for="f-a-apr"><span class="sr-only">Loan A </span>Interest rate (%)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease loan A interest rate">−</button>
+                  <input id="f-a-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-a-apr" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase loan A interest rate">+</button>
+                </div>
+                <p class="field-error" id="err-a-apr" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="loan" data-loan="b">
+            <legend><span class="roundel" aria-hidden="true">B</span>Loan B</legend>
+            <div class="loan-fields">
+              <div class="field" data-field="b.years">
+                <label for="f-b-years"><span class="sr-only">Loan B </span>Term (years)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease loan B term">−</button>
+                  <input id="f-b-years" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-b-years" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase loan B term">+</button>
+                </div>
+                <p class="field-error" id="err-b-years" hidden></p>
+              </div>
+              <div class="field" data-field="b.apr">
+                <label for="f-b-apr"><span class="sr-only">Loan B </span>Interest rate (%)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease loan B interest rate">−</button>
+                  <input id="f-b-apr" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-b-apr" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase loan B interest rate">+</button>
+                </div>
+                <p class="field-error" id="err-b-apr" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: fixed rates, and payments of principal and interest only (no taxes, insurance or fees), with no extra payments. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">The monthly payment</h2>
+            <p class="formula-lead">Payment = amount × r ÷ (1 − (1 + r)^−n), where r is the yearly rate ÷ 12 and n is the number of months.</p>
+            <p class="formula"><span class="roundel" aria-hidden="true">A</span><span class="sr-only">Loan A: </span><span data-cell="a.formula"></span></p>
+            <p class="formula"><span class="roundel" aria-hidden="true">B</span><span class="sr-only">Loan B: </span><span data-cell="b.formula"></span></p>
+
+            <h2 class="how-h">The whole loan</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-loan">
+                <caption class="sr-only">Each loan from start to finish</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name">Loan A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name">Loan B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Monthly payment</th><td data-cell="a.payment"></td><td data-cell="b.payment"></td></tr>
+                  <tr><th scope="row">Months</th><td data-cell="a.months"></td><td data-cell="b.months"></td></tr>
+                  <tr><th scope="row">Total paid</th><td data-cell="a.paid"></td><td data-cell="b.paid"></td></tr>
+                  <tr class="strong"><th scope="row">Total interest</th><td data-cell="a.interest"></td><td data-cell="b.interest"></td></tr>
+                  <tr><th scope="row">Most of a payment builds the house from</th><td data-cell="a.cross"></td><td data-cell="b.cross"></td></tr>
+                  <tr><th scope="row">Half owned at</th><td data-cell="a.half"></td><td data-cell="b.half"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">At <span id="how-age">year 0, month 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-now">
+                <caption class="sr-only">Each loan at the current month</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name2">Loan A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name2">Loan B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Still owed</th><td data-cell="a.owed"></td><td data-cell="b.owed"></td></tr>
+                  <tr><th scope="row">Interest so far</th><td data-cell="a.sofar"></td><td data-cell="b.sofar"></td></tr>
+                  <tr><th scope="row">This month's interest</th><td data-cell="a.monthInterest"></td><td data-cell="b.monthInterest"></td></tr>
+                  <tr><th scope="row">This month's principal</th><td data-cell="a.monthPrincipal"></td><td data-cell="b.monthPrincipal"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">Still owed, year by year</h2>
+            <div class="table-wrap">
+              <table class="compare yearly" id="yearly">
+                <caption class="sr-only">What is still owed on each loan at the end of each year</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Year</th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name3">Loan A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name3">Loan B</span></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <ul class="conventions">
+              <li>Each month the interest is the balance × rate ÷ 12. The rest of the payment pays the loan down. The last payment is whatever is left.</li>
+              <li>The pencil drawing is what is still owed: the part the lender owns. The painted bricks are the part paid for. Both houses are the same house, so they compare directly.</li>
+              <li>Every payment is a barrow of bricks: the interest goes into the lender's cart, the rest is laid on the house. Each full cart is a third of the amount borrowed in interest.</li>
+              <li>Fixed rates, and payments of principal and interest only (no taxes, insurance or fees), with no extra payments. Real loans vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Borrowing</p>
+      <h2 class="intro-title" id="intro-title">Brick by Brick</h2>
+      <p class="intro-lede" id="intro-lede">The same $300,000 home, bought with a 30-year loan or a 15-year loan. What does the shorter loan save?</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>The <strong>pencil drawing</strong> is the part of the house the lender still owns. The <strong>painted bricks</strong> are the part you own.</li>
+        <li>Every month's payment is a <strong>barrow of bricks</strong>. The interest goes into the <strong>lender's cart</strong>; the rest is laid on the house.</li>
+        <li>Each full cart is <strong>$100,000 of interest</strong>, a third of the amount borrowed.</li>
+      </ul>
+      <h3 class="intro-h">Two loans</h3>
+      <ul class="intro-list">
+        <li>The <strong>30-year loan</strong> (left) has the smaller payment, but more of it is interest, and for twice as long.</li>
+        <li>The <strong>15-year loan</strong> (right) costs more each month, and often comes with a lower rate.</li>
+        <li>Both houses are the same house, so they compare directly.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change the amount and the loans in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/brick/main.ts"></script>
+</body>
+</html>

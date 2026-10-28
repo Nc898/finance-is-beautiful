@@ -112,7 +112,7 @@ export const SCAFFOLD = {
   y: 476,
   lifts: [0, 66, 132, 198] as const,
   /** the bricklayer's comfortable reach above its feet (it works between these heights) */
-  reach: { low: 18, high: 78 },
+  reach: { low: 14, high: 74 },
 };
 export const SCAFFOLD_X: Record<LoanId, { x0: number; x1: number; ladderX: number; roofLadderX: number }> = {
   a: { x0: 98, x1: 392, ladderX: 386, roofLadderX: 300 },
@@ -122,12 +122,12 @@ export const SCAFFOLD_X: Record<LoanId, { x0: number; x1: number; ladderX: numbe
 /** The gin-wheel hoist at the scaffold's outer end: the wheel's height above SCAFFOLD.y, and where the builder stands
  *  to haul the rope (on the ground). The bucket hangs under the wheel and rises to the lift being worked. */
 export const HOIST: Record<LoanId, { x: number; wheelH: number; haul: Pt }> = {
-  a: { x: 104, wheelH: 236, haul: { x: 92, y: 490 } },
-  b: { x: 896, wheelH: 236, haul: { x: 908, y: 490 } },
+  a: { x: 86, wheelH: 236, haul: { x: 72, y: 494 } },
+  b: { x: 914, wheelH: 236, haul: { x: 928, y: 494 } },
 };
 
 /** the pallet of bricks just inside the gate (its centre at ground level): where the builder loads the barrow */
-export const STACK = both({ x: 128, y: 512 });
+export const STACK = both({ x: 122, y: 506 });
 /** the garden fence along the front and the gap of each gate (x0 … x1) */
 export const FENCE_Y = 530;
 export const GATE: Record<LoanId, { x0: number; x1: number }> = {
@@ -137,7 +137,7 @@ export const GATE: Record<LoanId, { x0: number; x1: number }> = {
 /** the bench in each front garden (the seat's front edge, centre), facing us: where the crew rests at the end */
 export const BENCH = both({ x: 318, y: 514 });
 /** the chalk tally slate on the gate's outer post (one mark per full cart), its centre */
-export const TALLY = both({ x: 140, y: 516 });
+export const TALLY = both({ x: 152, y: 521 });
 
 /** the lane along the front of both gardens */
 export const LANE = { y0: 548, y1: 612 };
@@ -147,17 +147,20 @@ export const LANE = { y0: 548, y1: 612 };
  * the cart ahead leaves, fill there, and are pulled on out of the picture at EXIT. Always pulled forward, never
  * reversed. Points are the cart's axle on the ground; the carter walks ahead of it between the shafts.
  */
-export const ROAD_FAR: Pt = { x: 500, y: 404 };
-export const JUNCTION: Pt = { x: 500, y: 572 };
+export const ROAD_FAR: Pt = { x: 532, y: 404 };
+export const JUNCTION: Pt = { x: 532, y: 574 };
 export const CART = both({ x: 172, y: 576 });
 export const NEXT = both({ x: 262, y: 576 });
 export const EXIT = both({ x: -130, y: 580 });
 
-/** the blossom tree between the plots (the foot of its trunk) */
-export const BLOSSOM: Pt = { x: 500, y: 470 };
+/** the blossom tree between the plots (the foot of its trunk), just left of the road */
+export const BLOSSOM: Pt = { x: 462, y: 470 };
+/** the hedge along the back of both gardens (a gap where the road comes through) */
+export const HEDGE_Y = 404;
 
-/** the crew's height (boots to cap top) at depth CREW_REF_Y; smaller with distance (depthScale) */
-export const CREW_H = 92;
+/** the crew's height (boots to cap top) at depth CREW_REF_Y, about 1.75 m against the 5.5 m wall; smaller with
+ *  distance (depthScale) */
+export const CREW_H = 64;
 export const CREW_REF_Y = 500;
 export const depthScale = (y: number): number => 1 + (y - CREW_REF_Y) * 0.0018;
 

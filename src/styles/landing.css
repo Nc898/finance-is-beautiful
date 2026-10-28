@@ -486,6 +486,56 @@ html[data-ready] .hero-sub {
   width: 100%;
 }
 
+/* ---------- The bricks' entry: deep brick red, a course of bricks for a rule, a blossom wash ---------- */
+
+/* a course of bricks, hand-laid, for the rule, and a pale blossom wash behind the painting */
+.demo-item[data-theme='brick'] {
+  position: relative;
+  isolation: isolate;
+  border-top: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='10' viewBox='0 0 60 10'%3E%3Cg fill='%23a5503a' fill-opacity='.42' stroke='%236e2a20' stroke-opacity='.4' stroke-width='.5'%3E%3Crect x='.6' y='1' width='13.4' height='3.6' rx='.5'/%3E%3Crect x='15.4' y='1.2' width='13.6' height='3.4' rx='.5'/%3E%3Crect x='30.3' y='.9' width='13.5' height='3.7' rx='.5'/%3E%3Crect x='45.2' y='1.1' width='13.6' height='3.5' rx='.5'/%3E%3Crect x='7.8' y='5.6' width='13.6' height='3.5' rx='.5'/%3E%3Crect x='22.8' y='5.7' width='13.4' height='3.4' rx='.5'/%3E%3Crect x='37.6' y='5.5' width='13.6' height='3.6' rx='.5'/%3E%3C/g%3E%3C/svg%3E")
+    0 0 / 60px 10px repeat-x;
+}
+.demo-item[data-theme='brick']::before {
+  content: '';
+  position: absolute;
+  inset: 4% 34% 0 -6%;
+  z-index: -1;
+  background:
+    radial-gradient(48% 52% at 42% 55%, rgba(230, 160, 180, 0.16), transparent 72%),
+    radial-gradient(32% 40% at 70% 30%, rgba(200, 120, 100, 0.1), transparent 70%),
+    radial-gradient(30% 34% at 18% 78%, rgba(170, 200, 120, 0.12), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.demo[data-theme='brick'] {
+  --accent: #8c2834;
+  --accent-deep: #621a24;
+  padding-top: 26px;
+}
+
+/* a row of little bricks for an underline: it is laid out under the words while hovered */
+.demo[data-theme='brick'] .demo-cta > span {
+  position: relative;
+  background: none;
+}
+.demo[data-theme='brick'] .demo-cta > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 0;
+  height: 5px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' viewBox='0 0 9 5'%3E%3Crect x='.5' y='.8' width='7.6' height='3.4' rx='.6' fill='%23b4533b' stroke='%23621a24' stroke-width='.6'/%3E%3C/svg%3E")
+    0 0 / 9px 5px repeat-x;
+  transition: width 0.6s cubic-bezier(0.3, 0.6, 0.2, 1);
+}
+.demo[data-theme='brick']:hover .demo-cta > span::after,
+.demo[data-theme='brick']:focus-visible .demo-cta > span::after {
+  width: 100%;
+}
+
 /* ---------- Closing and footer ---------- */
 
 .closing {

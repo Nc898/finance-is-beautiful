@@ -39,8 +39,8 @@ export const BRICK_LIMITS = {
   apr: { min: 0, max: 0.15, step: 0.00125 },
 } as const;
 
-/** A lender's cart carries this share of the amount borrowed in interest ($50,000 on $300,000). */
-export const CARTS_PER_AMOUNT = 6;
+/** A lender's cart carries this share of the amount borrowed in interest ($100,000 on $300,000). */
+export const CARTS_PER_AMOUNT = 3;
 
 /** One month of a loan, as the month ends (dollars, full precision). */
 export interface LoanRow {
