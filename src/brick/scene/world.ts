@@ -11,7 +11,7 @@ import { Rand } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
 import { SoftLayer, bloom, blobPoly, flowerDab, grassTuft } from '../../river/scene/paint';
 import { mix, ribbon } from '../../river/scene/boatInk';
-import { FENCE_Y, GATE, GROUND_Y, HEDGE_Y, HOUSE, JUNCTION, LANE, ROAD_FAR } from './geom';
+import { FENCE_Y, GATE, GROUND_Y, HEDGE_Y, HOUSE, JUNCTION, LANE, ROAD_FAR, SIDE_BLOSSOMS } from './geom';
 import { silhouette, PAPER } from './housePaint';
 import { drawClump, laySpringTree, renderSpringTree, springSprites, type SpringTree } from './springArt';
 import { daffodil, paintBeds, paintForeground } from './flowers';
@@ -34,11 +34,8 @@ interface View {
 
 const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
 
-/** the trees at either end of the street (their trunks stand behind the houses' outer corners) */
-const SIDE_TREES: SpringTree[] = [
-  { seed: 5203, x: 70, y: 446, k: 0.56, m: 1, kit: 'leaf', haze: 0.04 },
-  { seed: 5309, x: 930, y: 448, k: 0.58, m: 1, kit: 'leaf', haze: 0.04, flip: true },
-];
+/** the blossom trees beside the houses (behind the houses' fronts: a house's outline hides any crown it overlaps) */
+const SIDE_TREES: SpringTree[] = SIDE_BLOSSOMS.map((p, i) => ({ seed: [5203, 5309][i]!, x: p.x, y: p.y, k: 0.33, m: 1, kit: 'blossom' as const, haze: 0, flip: i === 1 }));
 
 export const ridgeFar = (x: number): number => 246 + 14 * Math.sin(x / 160 + 0.8) + 7 * Math.sin(x / 67 + 2.1) + 3 * Math.sin(x / 31);
 export const ridgeMid = (x: number): number => 276 + 9 * Math.sin(x / 120 + 2.4) + 5 * Math.sin(x / 53 + 0.4) + 2 * Math.sin(x / 26);
@@ -92,13 +89,13 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   await tick();
   if (!check()) return null;
   paintPlots(ctx, rnd, v);
-  // a tree in fresh leaf at either end of the street, framing it (behind the houses: their outlines are reserved)
+  // a blossom tree beside each house, framing the street (behind the houses: their outlines are reserved)
   for (const t of SIDE_TREES) {
     const r = await renderSpringTree(t, A, A > 1.6 ? 1.4 : 1, tick, check);
     if (!r || !check()) return null;
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgba(70,90,60,0.22)';
+    ctx.fillStyle = 'rgba(80,80,70,0.2)';
     ctx.beginPath();
     ctx.ellipse(t.x + 10, t.y + 2, 34, 5, 0, 0, Math.PI * 2);
     ctx.fill();

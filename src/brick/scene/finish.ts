@@ -8,7 +8,7 @@
 import { Rand } from '../../scene/prng';
 import { rgba, tracePoly } from '../../scene/watercolor';
 import { ribbon } from '../../river/scene/boatInk';
-import { BLOSSOM, GROUND_Y, HOUSE } from './geom';
+import { BLOSSOM, GROUND_Y, HOUSE, SIDE_BLOSSOMS } from './geom';
 import type { HouseView } from './houseView';
 import type { LoanId } from '../types';
 
@@ -120,16 +120,20 @@ export class Petals {
     if (!moving) return;
     // a new petal leaves the crown now and then (more on a gust)
     const gust = 0.5 + 0.5 * Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1);
-    this.acc += dt * (1.6 + 3.5 * gust);
-    while (this.acc > 1 && this.list.length < 46) {
+    this.acc += dt * (3 + 6.5 * gust);
+    while (this.acc > 1 && this.list.length < 90) {
       this.acc -= 1;
       const r = this.rnd;
+      // from the middle tree half the time, else from one of the trees beside the houses (a little smaller)
+      const side = r.chance(0.5) ? null : r.pick(SIDE_BLOSSOMS);
+      const src = side ?? BLOSSOM;
+      const k = side ? 0.9 : 1;
       const a = r.range(0, Math.PI * 2);
       const d = Math.sqrt(r.next());
       this.list.push({
-        x: BLOSSOM.x + Math.cos(a) * 62 * d,
-        y: BLOSSOM.y + r.range(-14, 26),
-        h: 150 + Math.sin(a) * 46 * d,
+        x: src.x + Math.cos(a) * 62 * k * d,
+        y: src.y + r.range(-14, 26),
+        h: (150 + Math.sin(a) * 46 * d) * k,
         vx: r.range(4, 12),
         vh: -r.range(9, 15),
         spin: r.range(-3, 3),

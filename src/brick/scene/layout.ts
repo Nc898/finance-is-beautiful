@@ -23,8 +23,9 @@ export interface Camera {
   oy: number;
 }
 
-/** the part of the world the camera must always show (x), and the depth band it frames (y) */
-export const VIEW = { x0: 52, x1: 948, y0: 96, y1: 628 } as const;
+/** the part of the world the camera must always show (x: both houses and the blossom trees beside them), and the depth
+ * band it frames (y) */
+export const VIEW = { x0: -26, x1: 1026, y0: 96, y1: 628 } as const;
 
 export function fitCamera(cssW: number, cssH: number, dpr: number, insets: Insets): Camera {
   const availH = Math.max(80, cssH - insets.top - insets.bottom);

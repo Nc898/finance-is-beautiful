@@ -155,6 +155,11 @@ export const EXIT = both({ x: -130, y: 580 });
 
 /** the blossom tree between the plots (the foot of its trunk), just left of the road */
 export const BLOSSOM: Pt = { x: 462, y: 470 };
+/** two more blossom trees, one beside each house's outer wall (standing a little behind its front) */
+export const SIDE_BLOSSOMS: readonly Pt[] = [
+  { x: 36, y: 452 },
+  { x: 964, y: 452 },
+];
 /** the hedge along the back of both gardens (a gap where the road comes through) */
 export const HEDGE_Y = 404;
 
