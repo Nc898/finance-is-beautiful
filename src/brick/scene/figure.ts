@@ -582,6 +582,11 @@ export class Figure {
       ctx.drawImage(p.cv, -p.px, -p.py, p.w, p.h);
       if (alpha !== 1) ctx.globalAlpha = 1;
     };
+    /** the nearest painted view only (small parts: at their size a dissolve between two views does not show) */
+    const nearest = (parts: Part[], psi: number, x: number, y: number, ang: number) => {
+      const t = ((((psi / (2 * PI)) % 1) + 1) % 1) * VIEWS;
+      put(parts[Math.round(t) % VIEWS]!, x, y, ang);
+    };
     const view = (parts: Part[], psi: number, x: number, y: number, ang: number, sw = 1) => {
       const t = ((((psi / (2 * PI)) % 1) + 1) % 1) * VIEWS;
       const k0 = Math.floor(t) % VIEWS;
@@ -604,8 +609,8 @@ export class Figure {
       if (L < 1e-3) return;
       const ang = Math.atan2(dy, dx);
       const r = clamp(L / (len * S), 0.42, 1.5);
-      put(p, a[0], a[1], ang, r, 1);
-      if (far > 0.01) put(pt, a[0], a[1], ang, r, 1, far);
+      // (the far limbs use their own cooler painting rather than a second, tinted draw)
+      put(far > 0.4 ? pt : p, a[0], a[1], ang, r, 1);
       if (capP && r < capR && B[1] > A[1] + 1) put(capP, b[0], b[1], 0, 1, 1, clamp((capR - r) / 0.25, 0, 1) * clamp((B[1] - A[1] - 1) / 4, 0, 1));
     };
     const halfOf = (A: V3, B: V3, nearA: boolean, draw: () => void) => {
@@ -675,7 +680,7 @@ export class Figure {
     const cH = Math.cos(this.yawH);
     const headRot = 0.4 * torsoRot + this.look.x * (0.65 * cH + 0.35 * Math.tanh(cH * 4));
     items.push({ k: this.neck[1] + 8, f: () => view(set.head, this.yawH, neckS[0], neckS[1], headRot) });
-    items.push({ k: this.neck[1] + 8.2, f: () => view(set.scarf, this.yawT, neckS[0], neckS[1], torsoRot) });
+    items.push({ k: this.neck[1] + 8.2, f: () => nearest(set.scarf, this.yawT, neckS[0], neckS[1], torsoRot) });
     for (let i = 0; i < 2; i++) {
       const hip = this.hips[i]!;
       const kn = this.knee[i]!;
@@ -713,8 +718,9 @@ export class Figure {
           };
           bone(set.thigh, set.thighFar, hip, kn, DIM.THIGH, far, set.knee, 0.72);
           bone(set.shin, set.shinFar, kn, an, DIM.SHIN, far, null, 0);
-          half(true, rotFoot);
-          half(false, rotShaft);
+          // (one draw, turned halfway between the foot and the shaft: at this size the hinge does not show)
+          void half;
+          nearest(set.boot, f.yaw, a[0], a[1], (rotFoot + rotShaft) / 2);
         },
       });
     }

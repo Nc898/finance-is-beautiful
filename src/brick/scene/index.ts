@@ -91,16 +91,17 @@ export function createBrickScene(canvas: HTMLCanvasElement): BrickSceneAPI {
       if (!alive()) return;
       const W = await buildWorld(c, alive);
       if (!W || !alive()) return;
-      const hq = Math.min(4, c.s * c.dpr * 2.2);
+      // every painting is made at about the density it is drawn at (no oversampling: it costs fill rate every frame)
+      const hq = Math.min(2.8, c.s * c.dpr * 1.35);
       const hv = { a: new HouseView('a', hq), b: new HouseView('b', hq) };
       await tick();
       if (!alive()) return;
-      const A = Math.min(4, c.s * c.dpr * 1.6);
+      const A = Math.min(3, c.s * c.dpr * 1.25);
       const tr = await renderSpringTree(TREE, A, A > 1.6 ? 1.4 : 1, tick, alive);
       if (!tr || !alive()) return;
-      const pq = Math.min(4, c.s * c.dpr * 2.4);
+      const pq = Math.min(3, c.s * c.dpr * 1.5);
       const mk = (id: LoanId): HouseProps => ({
-        scaffold: new ScaffoldView(id, Math.min(3.5, c.s * c.dpr * 2)),
+        scaffold: new ScaffoldView(id, Math.min(2.4, c.s * c.dpr * 1.3)),
         pallet: makePallet(id, pq),
         bench: makeBench(id, pq),
         sand: makeSand(id, pq),
@@ -112,6 +113,12 @@ export function createBrickScene(canvas: HTMLCanvasElement): BrickSceneAPI {
       await tick();
       if (!alive()) return;
       // keep what is laid across a resize: the new views start empty and are brought up to the last frame
+      // the paper, the sky and the world never change at this size: one picture, drawn once a frame
+      {
+        const g = pp.getContext('2d')!;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(W.cv, 0, 0, pp.width, pp.height);
+      }
       cam = c;
       canvas.width = Math.round(c.cssW * c.dpr);
       canvas.height = Math.round(c.cssH * c.dpr);
@@ -124,12 +131,13 @@ export function createBrickScene(canvas: HTMLCanvasElement): BrickSceneAPI {
       props = pr;
       if (!queues) {
         const road = new Road();
-        const cq = Math.min(5, c.s * c.dpr * 3);
+        const cq = Math.min(3, c.s * c.dpr * 1.7);
         queues = { a: new CartQueue('a', cq, road), b: new CartQueue('b', cq, road) };
       }
       if (import.meta.env.DEV) (window as unknown as { __brickScene: unknown }).__brickScene = { get builders() { return builders; }, get queues() { return queues; }, get layers() { return layers; } };
-      layers ??= { a: createBricklayer('a', Math.min(5, c.s * c.dpr * 3)), b: createBricklayer('b', Math.min(5, c.s * c.dpr * 3)) };
-      builders ??= { a: createBuilder('a', Math.min(5, c.s * c.dpr * 3)), b: createBuilder('b', Math.min(5, c.s * c.dpr * 3)) };
+      const fq = Math.min(3, c.s * c.dpr * 1.7);
+      layers ??= { a: createBricklayer('a', fq), b: createBricklayer('b', fq) };
+      builders ??= { a: createBuilder('a', fq), b: createBuilder('b', fq) };
       fence = fn;
       if (!readyDone) {
         readyDone = true;
@@ -164,10 +172,9 @@ export function createBrickScene(canvas: HTMLCanvasElement): BrickSceneAPI {
       const c = cam;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(paper, 0, 0);
-      ctx.drawImage(world.cv, 0, 0, canvas.width, canvas.height);
       ctx.setTransform(c.dpr * c.s, 0, 0, c.dpr * c.s, c.dpr * c.ox, c.dpr * c.oy);
-      // (medium, not high: high quality filtering of the figures' downscaled parts costs the GPU dearly)
-      ctx.imageSmoothingQuality = 'medium';
+      // (low: every painting is drawn at about its own density, and finer filtering costs the GPU dearly)
+      ctx.imageSmoothingQuality = 'low';
 
       const items: Item[] = [];
       const playing = frame.monthsPerSecond > 0 && !frame.reducedMotion;

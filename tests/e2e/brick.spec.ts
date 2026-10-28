@@ -113,6 +113,8 @@ test.describe('Brick by Brick', () => {
     let s = await state(page);
     expect(s.months).toBe(0);
     expect(s.playing).toBe(false);
+    // (the dialog's close event, which remembers it for the session, comes a moment after it hides)
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('fib-intro-seen:brick-by-brick'))).toBe('1');
     await page.reload();
     await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 60_000 });
     await frames(page, 3);

@@ -183,6 +183,7 @@ function standardsX(id: LoanId): number[] {
 export class ScaffoldView {
   readonly id: LoanId;
   private bands: Band[] = [];
+  private whole: Band = { back: makeCanvas(1, 1), front: makeCanvas(1, 1) };
   private box: Box;
   private q: number;
   /** the stack of struck timber on the ground (one sprite per lift's worth) */
@@ -197,6 +198,20 @@ export class ScaffoldView {
     const H = HOUSE[id];
     this.stackAt = { x: H.outer === 1 ? H.wall.x0 - 6 : H.wall.x1 + 6, y: GROUND_Y + 30 };
     for (let i = 0; i < LIFTS; i++) this.bands.push(this.paintBand(i));
+    // standing (most of the time) it is drawn as one picture for the back and one for the front
+    const back = this.canvas();
+    const front = this.canvas();
+    for (const b of this.bands) {
+      back.ctx.save();
+      back.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      back.ctx.drawImage(b.back, 0, 0);
+      back.ctx.restore();
+      front.ctx.save();
+      front.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      front.ctx.drawImage(b.front, 0, 0);
+      front.ctx.restore();
+    }
+    this.whole = { back: back.cv, front: front.cv };
     for (let i = 0; i < LIFTS; i++) this.stack.push(this.paintStack(i));
   }
 
@@ -315,6 +330,7 @@ export class ScaffoldView {
 
   /** the back layer (behind the bricklayer); `strike` 0 … 1 */
   drawBack(ctx: CanvasRenderingContext2D, strike: number): void {
+    if (strike <= 0) return this.blit(ctx, this.whole.back);
     const s = this.state(strike);
     for (let i = 0; i < s.up; i++) {
       if (i === s.moving) {
@@ -326,6 +342,7 @@ export class ScaffoldView {
 
   /** the front layer (in front of the bricklayer) */
   drawFront(ctx: CanvasRenderingContext2D, strike: number): void {
+    if (strike <= 0) return this.blit(ctx, this.whole.front);
     const s = this.state(strike);
     for (let i = 0; i < s.up; i++) {
       if (i === s.moving) {

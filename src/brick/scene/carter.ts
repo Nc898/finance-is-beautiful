@@ -34,6 +34,9 @@ const DRAW = 50;
 const HELD_H = 26;
 const REST_H = 4;
 const STEP = 1 / 60;
+/** the watch comes out every so often (seconds), for a little while */
+const WATCH_EVERY = 11;
+const WATCH_FOR = 2.6;
 
 /** a 2D point in true ground units (d = depth y / KAPPA) */
 interface G {
@@ -116,7 +119,7 @@ export class Cart {
 
   /** draw through a cached picture (a parked cart is painted once) */
   drawCached(ctx: CanvasRenderingContext2D): void {
-    const sig = [r4(this.a.x, 0.1), r4(this.a.d, 0.1), r4(this.h.x, 0.004), r4(this.h.d, 0.004), r4(this.roll, 0.04), r4(this.shaft.v, 0.2), r4(this.fill, 0.01)].join('|');
+    const sig = [r4(this.a.x, 0.1), r4(this.a.d, 0.1), r4(this.h.x, 0.004), r4(this.h.d, 0.004), r4(this.roll, 0.04), r4(this.shaft.v, 0.2), r4(this.fill, 0.04)].join('|');
     const a = this.axleWorld();
     this.cache.draw(ctx, { x: a.x - 80, y: a.y - 70, w: 160, h: 90 }, sig, (c) => this.draw(c));
   }
@@ -257,8 +260,10 @@ class CarterImpl implements Carter {
   private phase: Phase = 'route';
   private route: Pt[] = [];
   private spot: Pt | null = null;
-  private watchAt = 4;
-  private watchUntil = 0;
+  private watching = false;
+  private rest = 0;
+  /** when in the cycle his watch comes out (each carter his own) */
+  private watchPhase = Math.random() * 10;
   private leaving = false;
 
   constructor(id: LoanId, start: Pt, q: number, seed: number) {
@@ -291,6 +296,14 @@ class CarterImpl implements Carter {
       this.place(it);
       return;
     }
+    // Standing at ease between his shafts he stands still (so his picture stays cached and costs nothing); now and
+    // then the watch comes out of his waistcoat pocket and is looked at, and only then does he move.
+    this.rest += dt;
+    const k = (this.rest + this.watchPhase) % WATCH_EVERY;
+    this.watching = k > WATCH_EVERY - WATCH_FOR;
+    const idle = this.phase === 'stand' && it.activity !== 'leave' && (!it.spot || !this.spot || Math.hypot(it.spot.x - this.spot.x, it.spot.y - this.spot.y) <= 2);
+    const settling = this.fig.wHold[1].moving || this.fig.walking || this.fig.yaw.moving;
+    if (idle && !this.watching && !settling && this.fig.wHold[1].v < 0.01) return;
     const n = Math.max(1, Math.ceil(dt / STEP - 1e-6));
     for (let i = 0; i < n; i++) this.step(dt / n, it);
     this.fig.finish();
@@ -374,11 +387,7 @@ class CarterImpl implements Carter {
         f.holdBoth(null, null, 0, 0.4);
         if (f.goTo(s, s.yaw, 4)) {
           // now and then the watch comes out of the waistcoat pocket and is looked at
-          if (f.clock > this.watchAt && this.watchUntil < f.clock) {
-            this.watchUntil = f.clock + 2.2;
-            this.watchAt = f.clock + 7 + 4 * Math.abs(Math.sin(f.clock * 1.7));
-          }
-          if (f.clock < this.watchUntil) {
+          if (this.watching) {
             const fr = f.frame();
             const w: W3 = { x: fr.x + fr.fwd.x * 9 * fr.S - fr.side.x * 2, y: fr.y + fr.fwd.y * 9 * fr.S, h: 64 * fr.S };
             f.hold(1, w, 1, 0.5);

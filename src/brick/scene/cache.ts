@@ -47,7 +47,7 @@ export class Cached {
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, this.cv.width, this.cv.height);
     c.setTransform(sc, 0, 0, sc, -box.x * sc, -box.y * sc);
-    c.imageSmoothingQuality = 'medium';
+    c.imageSmoothingQuality = 'low';
     paint(c);
     this.box = { x: box.x, y: box.y, w: this.cv.width / sc, h: this.cv.height / sc };
     ctx.drawImage(this.cv, this.box.x, this.box.y, this.box.w, this.box.h);

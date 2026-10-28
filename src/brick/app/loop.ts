@@ -15,10 +15,14 @@ export interface Loop {
 }
 
 /**
- * Minimum time between rendered frames: 60 fps (with slack so 120 Hz displays land on every 2nd refresh).
- * The crew's arms and the drifting petals need 60 to read smoothly.
+ * Minimum time between rendered frames: 60 fps (with slack so 120 Hz displays land on every 2nd refresh), or 30 fps on
+ * a machine where a frame's work takes long: a steady 30 reads far better than an uneven 60 that keeps dropping frames.
  */
-const FRAME_MS = 1000 / 60 - 2;
+const FRAME_60 = 1000 / 60 - 2;
+const FRAME_30 = 1000 / 30 - 2;
+/** a frame's own work (ms, smoothed) above which the loop drops to 30 fps, and below which it goes back to 60 */
+const SLOW_MS = 10;
+const FAST_MS = 5;
 
 /** In reduced motion the scene keeps being drawn for this long after anything changes, so it can settle. */
 const SETTLE_MS = 1500;
@@ -48,13 +52,17 @@ export function startLoop(store: Store, scene: BrickSceneAPI, ui: UI): Loop {
   let lastInputs: unknown = null;
   let running = true;
   let settleUntil = 0;
+  let frameMs = FRAME_60;
+  /** a frame's work, smoothed (ms) */
+  let work = 0;
 
   const frame = (now: number) => {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // Motion is capped at 60 fps: skip display refreshes until a 60 fps frame is due. The clock advances by the real
     // elapsed time, so playback speed is unchanged.
-    if (now - last < FRAME_MS) return;
+    if (now - last < frameMs) return;
+    const t0 = performance.now();
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     store.tick(dt);
@@ -83,6 +91,16 @@ export function startLoop(store: Store, scene: BrickSceneAPI, ui: UI): Loop {
     };
     scene.render(f);
     ui.place();
+    work += (performance.now() - t0 - work) * 0.05;
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __brickPerf?: { frames: number; work: number; capped: boolean } };
+      const p = (w.__brickPerf ??= { frames: 0, work: 0, capped: false });
+      p.frames++;
+      p.work = work;
+      p.capped = frameMs === FRAME_30;
+    }
+    if (frameMs === FRAME_60 && work > SLOW_MS) frameMs = FRAME_30;
+    else if (frameMs === FRAME_30 && work < FAST_MS) frameMs = FRAME_60;
   };
 
   raf = requestAnimationFrame(frame);

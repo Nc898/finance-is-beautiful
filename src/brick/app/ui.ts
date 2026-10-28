@@ -197,9 +197,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   let lastInsets = { top: -1, bottom: -1, side: -1 };
 
   /** Wide screens reserve the side panel's width whether it is open or not, so toggling it only slides the scene. */
+  /** (read from the stylesheet once per size, never per frame) */
+  let panelW = -1;
   function sideReserve(): number {
     if (stageW < 900) return 0;
-    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+    if (panelW < 0) panelW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+    return panelW;
   }
 
   /** Tallest note this scenario can produce, at the current width (measured in a hidden twin). */
@@ -251,6 +254,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   const plateKey: Record<LoanId, string> = { a: '', b: '' };
   let diffKey = '';
+  let diffWasHidden = true;
 
   function measureAll(): void {
     for (const id of LOANS) {
@@ -275,8 +279,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     setText(P.owed, owed);
     setText(P.interest, interest);
     P.root.classList.toggle('paid', snap.paidOff);
-    P.w = P.root.offsetWidth;
-    P.h = P.root.offsetHeight;
+    // (its new size is measured by the resize observer, not here: reading it now would force a layout every month)
   }
 
   function updateDiff(): void {
@@ -291,8 +294,12 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       setText(diffSub, d.sub);
       diffEl.classList.toggle('final', d.final);
     }
-    diffW = diffEl.hidden ? 0 : diffEl.offsetWidth;
-    diffH = diffEl.hidden ? 0 : diffEl.offsetHeight;
+    // (shown or hidden changes its size: measured once then, never per month)
+    if (diffEl.hidden !== diffWasHidden) {
+      diffWasHidden = diffEl.hidden;
+      diffW = diffEl.hidden ? 0 : diffEl.offsetWidth;
+      diffH = diffEl.hidden ? 0 : diffEl.offsetHeight;
+    }
   }
 
   const lastTransform: Record<string, string> = {};
@@ -443,6 +450,8 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   let lastSnaps: readonly LoanSnapshot[] = [];
   let lastNote: NoteKind | null = null;
+  let labelsKey = '';
+  let labelsInputs: unknown = null;
   let liveNote = false;
   let timelineKey = '';
   let tableKey = '';
@@ -490,8 +499,14 @@ export function createUI(store: Store, hooks: UIHooks): UI {
       setText(layers[activeLayer].querySelector<HTMLElement>('.cap-2')!, noteFor(kind, state.inputs, state.months).secondary ?? '');
     }
 
-    for (const s of snaps) updatePlate(s);
-    updateDiff();
+    // the labels' numbers change only when the statement month turns over (or the inputs change)
+    const lk = `${statementMonth(state.months)}|${snaps.map((sn) => (sn.paidOff ? 1 : 0)).join('')}`;
+    if (lk !== labelsKey || state.inputs !== labelsInputs) {
+      labelsKey = lk;
+      labelsInputs = state.inputs;
+      for (const s of snaps) updatePlate(s);
+      updateDiff();
+    }
 
     // Timeline + readouts (on the statement month, so the clock turns over as each month's interest is charged).
     const months = statementMonth(state.months);
@@ -658,6 +673,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   function resetKeys(): void {
     timelineKey = '';
+    labelsKey = '';
     tableKey = '';
     lastNote = null;
     diffKey = '';
@@ -745,6 +761,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     highlight: () => highlight(),
     setStageSize(w) {
       stageW = w;
+      panelW = -1;
       applyInsets();
       invalidate();
     },

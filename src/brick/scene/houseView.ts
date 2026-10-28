@@ -36,6 +36,7 @@ export class HouseView {
     this.finished = paintFinishedSprite(id, q, this.wall);
     this.laid = makeCanvas(this.wall.width, this.wall.height);
     this.lctx = this.laid.getContext('2d')!;
+    this.lctx.drawImage(this.pencil, 0, 0);
     this.open = this.plan.openings.map(() => false);
   }
 
@@ -60,7 +61,9 @@ export class HouseView {
     const w = px1 - px0;
     const h = py1 - py0;
     if (w <= 0 || h <= 0) return;
+    // the house is one picture: the pencil drawing under whatever has been laid
     this.lctx.clearRect(px0, py0, w, h);
+    this.lctx.drawImage(this.pencil, px0, py0, w, h, px0, py0, w, h);
     this.lctx.drawImage(src, px0, py0, w, h, px0, py0, w, h);
   }
 
@@ -80,6 +83,7 @@ export class HouseView {
     if (want === this.count) return;
     if (want < this.count) {
       this.lctx.clearRect(0, 0, this.laid.width, this.laid.height);
+      this.lctx.drawImage(this.pencil, 0, 0);
       this.open.fill(false);
       this.count = 0;
     }
@@ -90,8 +94,7 @@ export class HouseView {
   /** paint the house at its place (the caller's transform maps world units) */
   draw(ctx: CanvasRenderingContext2D): void {
     const b = this.box;
-    ctx.drawImage(this.pencil, b.x, b.y, b.w, b.h);
-    if (this.count > 0) ctx.drawImage(this.laid, b.x, b.y, b.w, b.h);
+    ctx.drawImage(this.laid, b.x, b.y, b.w, b.h);
   }
 
   /** the top of the chimney pots (where smoke leaves), world */
