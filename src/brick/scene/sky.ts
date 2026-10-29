@@ -106,7 +106,8 @@ export function paintPaperAndSky(cam: Camera, tile: CanvasImageSource): HTMLCanv
     }
   }
   ctx.restore();
-  // 5. a few small fair-weather clouds low over the hills: lifted white tops, a grey-violet underside
+  // 5. fair-weather clouds: small ones low over the hills, a few bigger spring cumulus drifting higher up (clear of
+  // the title); lifted white tops, a grey-violet underside
   const clouds = [
     { x: 150, y: 250, w: 74 },
     { x: 330, y: 236, w: 52 },
@@ -114,39 +115,89 @@ export function paintPaperAndSky(cam: Camera, tile: CanvasImageSource): HTMLCanv
     { x: 880, y: 246, w: 60 },
     { x: 1040, y: 232, w: 70 },
     { x: -40, y: 238, w: 58 },
+    { x: 420, y: 96, w: 150 },
+    { x: 760, y: 40, w: 200 },
+    { x: 1010, y: 150, w: 120 },
+    { x: 80, y: 170, w: 110 },
+    { x: 600, y: 176, w: 84 },
+    { x: 250, y: -20, w: 130 },
   ];
+  // the lift is laid soft (on a low-resolution sheet, scaled up), so a cloud's base is a lost edge; only the sunlit
+  // tops of its billows are lifted again crisply
+  const q = 3;
+  const soft = makeCanvas(Math.ceil(Wd / q), Math.ceil(hy / q));
+  const sc = soft.getContext('2d')!;
+  sc.scale(1 / q, 1 / q);
+  const under: Array<{ lumps: number[][]; cx: number; cy: number; w: number }> = [];
   for (const c of clouds) {
     const cx = X(c.x);
     const cy = Y(c.y);
     const w = c.w * S;
     const lumps: number[][] = [];
-    const n = 4 + Math.round(c.w / 26);
+    const tops: number[][] = [];
+    // billows along an arc, highest a little left of the middle (toward the sun), smaller at the ends
+    const n = 5 + Math.round(c.w / 22);
     for (let k = 0; k < n; k++) {
       const t = k / (n - 1) - 0.5;
-      const r = w * (0.2 + 0.16 * (1 - Math.abs(t) * 1.6)) * rnd.range(0.85, 1.15);
-      lumps.push(blobPoly(cx + t * w * 0.9, cy - r * 0.45 + rnd.range(-0.06, 0.06) * w, r, r * 0.8, rnd, 14, 0.12));
+      const lift = 1 - Math.abs(t + 0.08) * 1.7;
+      const r = w * (0.11 + 0.15 * Math.max(0, lift)) * rnd.range(0.75, 1.25);
+      const l = blobPoly(cx + t * w * 0.95 + rnd.range(-0.03, 0.03) * w, cy - r * 0.5 - w * 0.1 * Math.max(0, lift) + rnd.range(-0.04, 0.04) * w, r, r * 0.82, rnd, 16, 0.14);
+      lumps.push(l);
+      if (rnd.chance(0.7)) tops.push(l);
     }
-    lumps.push(blobPoly(cx, cy, w * 0.56, w * 0.13, rnd, 14, 0.1));
-    // lift the wash out where the cloud is (the paper shows)
+    if (c.w > 100) {
+      for (let k = 0; k < 3; k++) {
+        const r = w * rnd.range(0.12, 0.18);
+        const l = blobPoly(cx + rnd.range(-0.28, 0.15) * w, cy - w * rnd.range(0.26, 0.36), r, r * 0.8, rnd, 16, 0.14);
+        lumps.push(l);
+        tops.push(l);
+      }
+    }
+    // the base: a soft flat smear, narrower than the billows
+    const base = blobPoly(cx, cy + w * 0.02, w * 0.46, w * 0.09, rnd, 16, 0.12);
+    sc.fillStyle = 'rgba(0,0,0,0.34)';
+    for (const l of [...lumps, base]) {
+      tracePoly(sc, deform(l, rnd, 2, 0.08));
+      sc.fill();
+    }
+    sc.fillStyle = 'rgba(0,0,0,0.22)';
+    for (const l of lumps) {
+      tracePoly(sc, deform(l.map((v, i) => (i % 2 === 0 ? cx + (v - cx) * 0.8 : cy + (v - cy) * 0.8 - w * 0.03)), rnd, 2, 0.08));
+      sc.fill();
+    }
+    // the crisp sunlit tops
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    for (const l of lumps) {
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
-      tracePoly(ctx, deform(l, rnd, 2, 0.06));
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    for (const l of tops) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cx - w, cy - w, w * 2, w * 0.86);
+      ctx.clip();
+      tracePoly(ctx, deform(l, rnd, 2, 0.05));
       ctx.fill();
+      ctx.restore();
     }
     ctx.restore();
-    // the underside: a cool grey-violet wash along the flat base, fading up
+    under.push({ lumps: [...lumps, base], cx, cy, w });
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(soft, 0, 0, soft.width * q, soft.height * q);
+  ctx.restore();
+  // the undersides: a cool grey-violet wash along each base, fading up into the cloud
+  for (const u of under) {
     ctx.save();
     ctx.beginPath();
-    for (const l of lumps) tracePoly(ctx, l);
+    for (const l of u.lumps) tracePoly(ctx, l);
     ctx.clip();
-    const ug = ctx.createLinearGradient(0, cy - w * 0.3, 0, cy + w * 0.14);
+    const ug = ctx.createLinearGradient(0, u.cy - u.w * 0.3, 0, u.cy + u.w * 0.12);
     ug.addColorStop(0, 'rgba(150,150,190,0)');
-    ug.addColorStop(0.65, 'rgba(150,150,190,0.16)');
-    ug.addColorStop(1, 'rgba(130,128,170,0.3)');
+    ug.addColorStop(0.6, 'rgba(150,150,190,0.12)');
+    ug.addColorStop(1, 'rgba(130,128,170,0.24)');
     ctx.fillStyle = ug;
-    ctx.fillRect(cx - w, cy - w * 0.6, w * 2, w);
+    ctx.fillRect(u.cx - u.w, u.cy - u.w * 0.6, u.w * 2, u.w);
     ctx.restore();
   }
   // 6. granulation, denser up high where the wash is richer

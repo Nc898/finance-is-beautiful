@@ -177,7 +177,7 @@ the scene (statement month; hidden while the panel is open, as the vine). Text o
   crew's contract).
 - Engine and app: src/brick/engine/*, src/brick/app/* (store, loop, notes, text, ui), src/brick/main.ts,
   brick-by-brick.html, src/styles/brick.css; tests/brick/*, tests/e2e/brick.spec.ts.
-- Scene: index.ts (the orchestrator), layout.ts (camera), sky.ts, world.ts, flowers.ts (the beds and the near verge),
+- Scene: index.ts (the orchestrator), layout.ts (camera), sky.ts, world.ts, ground.ts (the grass, the yards, the paths, the road and the lane), flowers.ts (the beds and the near verge),
   springArt.ts (the three blossom trees: one between the houses, one beside each),
   housePlan.ts (every brick, tile and pot in laying order), housePaint.ts and houseView.ts (the house three ways and
   its laid canvas), scaffold.ts, props.ts, finish.ts (topping out, smoke, tulips, petals), carts.ts (the queues),

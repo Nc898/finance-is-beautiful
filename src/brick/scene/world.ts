@@ -2,19 +2,21 @@
  * The static world, painted once per size into one cached layer: hazy blue-violet hills, nearer hills of spring
  * fields and hedgerows with copses in fresh leaf and white blossom trees dotted about, the village behind the plots
  * (red tile and grey slate roofs, chimneys, a church tower with a weathervane), the hedge along the back of the
- * gardens with a gap where the road comes through, the two plots of new grass and trodden earth, the garden paths,
- * the road down from the village, the lane with its ruts and puddles, and the verges with daffodils and primroses.
+ * gardens with a gap where the road comes through; then the ground (ground.ts: the grass, the trodden yards and the
+ * garden paths, the road down from the village, the lane with its ruts and puddles), the blossom trees beside the
+ * houses, and the flower beds and the verges (flowers.ts).
  * Translucent washes lit from the upper left, paper tooth, a few broken ink lines. The two houses are reserved
  * (left as paper) so their pencil drawings sit on clean paper.
  */
 import { Rand } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
-import { SoftLayer, bloom, blobPoly, flowerDab, grassTuft } from '../../river/scene/paint';
-import { mix, ribbon } from '../../river/scene/boatInk';
-import { FENCE_Y, GATE, GROUND_Y, HEDGE_Y, HOUSE, JUNCTION, LANE, ROAD_FAR, SIDE_BLOSSOMS } from './geom';
+import { SoftLayer, bloom, flowerDab } from '../../river/scene/paint';
+import { mix } from '../../river/scene/boatInk';
+import { FENCE_Y, GROUND_Y, HEDGE_Y, HOUSE, JUNCTION, LANE, ROAD_FAR, SIDE_BLOSSOMS } from './geom';
 import { silhouette, PAPER } from './housePaint';
 import { drawClump, laySpringTree, renderSpringTree, springSprites, type SpringTree } from './springArt';
 import { daffodil, paintBeds, paintForeground } from './flowers';
+import { paintGrass, paintLane, paintRoad, paintYards, roadHalf } from './ground';
 import type { Camera } from './layout';
 import { LOANS } from '../types';
 import type { Sprites } from '../../scene/sprites';
@@ -46,9 +48,6 @@ const xs = (a: number, b: number, step: number): number[] => {
   for (let x = a; x <= b + step; x += step) o.push(x);
   return o;
 };
-
-/** half the road's width at depth y (it widens toward us) */
-export const roadHalf = (y: number): number => 7 + (y - ROAD_FAR.y) * 0.1;
 
 function haze(ctx: CanvasRenderingContext2D, v: View, y0: number, y1: number, a: number): void {
   ctx.save();
@@ -88,7 +87,8 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   paintHedge(ctx, rnd, v, leaf, blossom);
   await tick();
   if (!check()) return null;
-  paintPlots(ctx, rnd, v);
+  paintGrass(ctx, rnd, v, gd);
+  paintYards(ctx, rnd);
   // a blossom tree beside each house, framing the street (behind the houses: their outlines are reserved)
   for (const t of SIDE_TREES) {
     const r = await renderSpringTree(t, A, A > 1.6 ? 1.4 : 1, tick, check);
@@ -404,176 +404,9 @@ function paintHedge(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, leaf: Spr
 
 /* ------------------------------------------------------------------ the plots, the road, the lane */
 
-function grassWash(ctx: CanvasRenderingContext2D, rnd: Rand, poly: number[], cols: string[], a: number): void {
-  ctx.globalCompositeOperation = 'multiply';
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = rgba(cols[i % cols.length]!, a);
-    tracePoly(ctx, deform(poly, rnd, 2, 0.008));
-    ctx.fill();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-}
-
-function paintPlots(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
-  // new grass from the hedge to the lane
-  grassWash(ctx, rnd, [v.x0, HEDGE_Y + 2, v.x1, HEDGE_Y + 2, v.x1, LANE.y0 + 4, v.x0, LANE.y0 + 4], ['#C4DC86', '#B2D078', '#D2E296'], 0.3);
-  const soft = new SoftLayer(v.x0, HEDGE_Y, v.x1 - v.x0, LANE.y0 - HEDGE_Y + 10, 0.5);
-  for (let i = 0; i < 40; i++) {
-    bloom(soft.ctx, rnd.range(v.x0, v.x1), rnd.range(HEDGE_Y + 6, LANE.y0), rnd.range(20, 70), rnd.range(4, 10), rnd.pick(['#A8C870', '#C2D884', '#94B862', '#D6E09A']), 0.18, rnd, 3);
-  }
-  soft.draw(ctx, 1, 'multiply');
-  // the building site: trodden earth and sand along the front of each house, scuffed into the grass
-  for (const id of LOANS) {
-    const W = HOUSE[id].wall;
-    const earth = blobPoly((W.x0 + W.x1) / 2, GROUND_Y + 16, (W.x1 - W.x0) / 2 + 30, 20, rnd, 22, 0.12);
-    for (const [c, a] of [['#E2CDA6', 0.5], ['#D4B88E', 0.3], ['#EAD8B6', 0.3]] as const) {
-      ctx.fillStyle = rgba(c, a);
-      tracePoly(ctx, deform(earth, rnd, 3, 0.05));
-      ctx.fill();
-    }
-    // the earth is darker and damper close under the wall
-    ctx.fillStyle = rgba('#A88A66', 0.16);
-    tracePoly(ctx, deform(blobPoly((W.x0 + W.x1) / 2, GROUND_Y + 6, (W.x1 - W.x0) / 2 + 12, 7, rnd, 18, 0.1), rnd, 2, 0.04));
-    ctx.fill();
-    // footprints and barrow ruts in the earth
-    for (let k = 0; k < 40; k++) {
-      ctx.fillStyle = rgba('#7A5A3E', rnd.range(0.08, 0.2));
-      ctx.beginPath();
-      ctx.ellipse(rnd.range(W.x0 - 30, W.x1 + 30), rnd.range(GROUND_Y + 4, GROUND_Y + 44), rnd.range(1, 2.6), rnd.range(0.4, 0.9), rnd.range(-0.4, 0.4), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // the path from the gate to the door: packed earth, a little worn edge
-    const door = HOUSE[id].door;
-    const gate = GATE[id];
-    const dx = (door.x0 + door.x1) / 2;
-    const gx = (gate.x0 + gate.x1) / 2;
-    const path: number[] = [];
-    const n = 10;
-    for (let k = 0; k <= n; k++) {
-      const t = k / n;
-      const y = GROUND_Y + 8 + (FENCE_Y - GROUND_Y - 8) * t;
-      const x = dx + (gx - dx) * (t * t * (3 - 2 * t));
-      path.push(x - 10 - t * 4, y);
-    }
-    for (let k = n; k >= 0; k--) {
-      const t = k / n;
-      const y = GROUND_Y + 8 + (FENCE_Y - GROUND_Y - 8) * t;
-      const x = dx + (gx - dx) * (t * t * (3 - 2 * t));
-      path.push(x + 10 + t * 4, y);
-    }
-    ctx.fillStyle = rgba('#E6D4B0', 0.55);
-    tracePoly(ctx, deform(path, rnd, 2, 0.03));
-    ctx.fill();
-    ctx.fillStyle = rgba('#C8AE86', 0.18);
-    tracePoly(ctx, deform(path, rnd, 2, 0.05));
-    ctx.fill();
-  }
-  // tufts of new grass over the plots (fewer on the earth)
-  for (let i = 0; i < 260; i++) {
-    const x = rnd.range(v.x0, v.x1);
-    const y = rnd.range(HEDGE_Y + 8, LANE.y0 - 2);
-    const onEarth = LOANS.some((id) => x > HOUSE[id].wall.x0 - 34 && x < HOUSE[id].wall.x1 + 34 && y < GROUND_Y + 40);
-    if (onEarth && rnd.chance(0.85)) continue;
-    grassTuft(ctx, x, y, rnd.range(2.4, 5) * (0.6 + (y - HEDGE_Y) / 300), rnd, 0.7, ['#9DC25C', '#6E9A48', '#B6D26A', '#82AE4E']);
-  }
-}
-
-function paintRoad(ctx: CanvasRenderingContext2D, rnd: Rand): void {
-  // the road comes down from the village through the hedge gap and meets the lane, widening toward us
-  const left: number[] = [];
-  const right: number[] = [];
-  for (let y = ROAD_FAR.y - 6; y <= JUNCTION.y; y += 6) {
-    const h = roadHalf(y);
-    const wob = Math.sin(y / 23) * 1.2;
-    left.push(ROAD_FAR.x - h + wob, y);
-    right.unshift(ROAD_FAR.x + h + wob, y);
-  }
-  const poly = [...left, ...right];
-  for (const [c, a] of [['#E4D2AC', 0.6], ['#D2BA90', 0.3], ['#EADCBC', 0.3]] as const) {
-    ctx.fillStyle = rgba(c, a);
-    tracePoly(ctx, deform(poly, rnd, 2, 0.02));
-    ctx.fill();
-  }
-  // two cart ruts and a grass crown between them
-  for (const side of [-1, 1]) {
-    const pts: number[] = [];
-    for (let y = ROAD_FAR.y; y <= JUNCTION.y; y += 5) pts.push(ROAD_FAR.x + side * roadHalf(y) * 0.45 + Math.sin(y / 23) * 1.2 + rnd.range(-0.3, 0.3), y);
-    ctx.fillStyle = rgba('#9E8260', 0.2);
-    ribbon(ctx, pts, 1.2, 0.4);
-  }
-  for (let y = ROAD_FAR.y + 6; y < JUNCTION.y - 8; y += rnd.range(5, 10)) {
-    grassTuft(ctx, ROAD_FAR.x + Math.sin(y / 23) * 1.2 + rnd.range(-1, 1), y, rnd.range(2, 4) * (0.6 + (y - ROAD_FAR.y) / 200), rnd, 0.6, ['#9DC25C', '#82AE4E']);
-  }
-}
-
-function paintLane(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
-  const y0 = LANE.y0;
-  const y1 = LANE.y1;
-  const top: number[] = [];
-  const bot: number[] = [];
-  for (let x = v.x0; x <= v.x1 + 10; x += 10) {
-    top.push(x, y0 + Math.sin(x / 61) * 1.5 + rnd.range(-0.4, 0.4));
-    bot.unshift(x, y1 + Math.sin(x / 47 + 1) * 1.8 + rnd.range(-0.4, 0.4));
-  }
-  const poly = [...top, ...bot];
-  for (const [c, a] of [['#E2CEA6', 0.62], ['#D0B68C', 0.3], ['#ECDCBA', 0.3]] as const) {
-    ctx.fillStyle = rgba(c, a);
-    tracePoly(ctx, deform(poly, rnd, 2, 0.006));
-    ctx.fill();
-  }
-  // the light falls from the upper left: the far edge of the lane is in the verge's shade
-  const g = ctx.createLinearGradient(0, y0, 0, y0 + 10);
-  g.addColorStop(0, 'rgba(90,80,70,0.14)');
-  g.addColorStop(1, 'rgba(90,80,70,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(v.x0, y0, v.x1 - v.x0, 10);
-  // the ruts of the carts that come and go
-  for (const ry of [CART_RUT_A, CART_RUT_B]) {
-    const pts: number[] = [];
-    for (let x = v.x0; x <= v.x1; x += 8) pts.push(x, ry + Math.sin(x / 37) * 0.8 + rnd.range(-0.3, 0.3));
-    ctx.fillStyle = rgba('#8A6C4C', 0.2);
-    ribbon(ctx, pts, 2, 0.3);
-    ctx.fillStyle = rgba('#FFF4DC', 0.16);
-    ribbon(ctx, pts.map((p, i) => (i % 2 ? p - 1.6 : p)), 0.8, 0.3);
-  }
-  // puddles holding the sky
-  for (const p of [{ x: 96, y: 596, w: 26 }, { x: 352, y: 590, w: 18 }, { x: 690, y: 598, w: 30 }, { x: 948, y: 588, w: 16 }]) {
-    const poly2 = blobPoly(p.x, p.y, p.w, p.w * 0.22, rnd, 16, 0.18);
-    ctx.fillStyle = 'rgba(150,180,214,0.5)';
-    tracePoly(ctx, poly2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,252,240,0.4)';
-    ribbon(ctx, [p.x - p.w * 0.5, p.y - p.w * 0.05, p.x, p.y - p.w * 0.09, p.x + p.w * 0.35, p.y - p.w * 0.04], 0.9, 0.6);
-    ctx.strokeStyle = 'rgba(90,76,62,0.3)';
-    ctx.lineWidth = 0.5;
-    tracePoly(ctx, poly2);
-    ctx.stroke();
-  }
-  // pebbles
-  for (let i = 0; i < 70; i++) {
-    ctx.fillStyle = rgba(rnd.pick(['#8E8478', '#A89A86', '#6E6458']), rnd.range(0.3, 0.6));
-    ctx.beginPath();
-    ctx.ellipse(rnd.range(v.x0, v.x1), rnd.range(y0 + 4, y1 - 2), rnd.range(0.5, 1.4), rnd.range(0.3, 0.8), 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/** the two ruts along the lane (the carts' wheels run in them) */
-export const CART_RUT_A = 568;
-export const CART_RUT_B = 586;
-
 function paintVerges(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
-  // the near verge below the lane, to the bottom of the picture
   const ny0 = LANE.y1;
-  grassWash(ctx, rnd, [v.x0, ny0 - 2, v.x1, ny0 - 2, v.x1, v.y1, v.x0, v.y1], ['#B6D47A', '#A2C66C', '#C8DC8A'], 0.34);
-  // the front verge between the fence and the lane
-  grassWash(ctx, rnd, [v.x0, FENCE_Y - 4, v.x1, FENCE_Y - 4, v.x1, LANE.y0 + 2, v.x0, LANE.y0 + 2], ['#B2D076', '#C4DA88'], 0.2);
-  for (let i = 0; i < 160; i++) {
-    const x = rnd.range(v.x0, v.x1);
-    const y = rnd.range(ny0 + 2, v.y1);
-    grassTuft(ctx, x, y, rnd.range(4, 9), rnd, 1, ['#9DC25C', '#6E9A48', '#B6D26A', '#4E7E3A']);
-  }
-  for (let i = 0; i < 60; i++) grassTuft(ctx, rnd.range(v.x0, v.x1), rnd.range(FENCE_Y + 2, LANE.y0 + 2), rnd.range(3, 6), rnd, 0.8);
+  void v;
   // daffodils in drifts along both verges (never where the road comes through), primroses among them
   const drift = (cx: number, cy: number, n: number, spread: number, h: number) => {
     for (let k = 0; k < n; k++) {

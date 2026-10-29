@@ -9,7 +9,7 @@ import { makeCanvas, rgba, tracePoly, deform } from '../../scene/watercolor';
 import { mix, ribbon } from '../../river/scene/boatInk';
 import { blobPoly } from '../../river/scene/paint';
 import { BENCH, FENCE_Y, GATE, HOUSE, JUNCTION, STACK, TALLY, type Pt } from './geom';
-import { roadHalf } from './world';
+import { roadHalf } from './ground';
 import type { LoanId } from '../types';
 
 const INK = '#3B2A22';
