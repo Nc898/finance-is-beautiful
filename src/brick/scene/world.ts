@@ -8,7 +8,7 @@
  * Translucent washes lit from the upper left, paper tooth, a few broken ink lines. The two houses are reserved
  * (left as paper) so their pencil drawings sit on clean paper.
  */
-import { Rand } from '../../scene/prng';
+import { Rand, clamp } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
 import { SoftLayer, bloom, flowerDab } from '../../river/scene/paint';
 import { mix } from '../../river/scene/boatInk';
@@ -83,7 +83,8 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
   paintCopses(ctx, rnd, v, leaf, blossom);
   await tick();
   if (!check()) return null;
-  paintVillage(ctx, rnd);
+  // the village has its own seed, so painting anything before it differently never moves a house
+  paintVillage(ctx, new Rand(70111));
   paintHedge(ctx, rnd, v, leaf, blossom);
   await tick();
   if (!check()) return null;
@@ -128,41 +129,55 @@ export async function buildWorld(cam: Camera, check: () => boolean): Promise<Wor
 function paintHills(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
   const y0 = 200;
   const y1 = HEDGE_Y + 10;
-  const X = xs(v.x0, v.x1, 18);
+  const X = xs(v.x0, v.x1, 16);
   const soft = new SoftLayer(v.x0, y0, v.x1 - v.x0, y1 - y0, 0.45);
-  const range = (ridge: (x: number) => number, base: number, color: string, a: number, crisp: number) => {
+  const range = (ridge: (x: number) => number, color: string, a: number, crisp: number, pool: number) => {
     const pts: number[] = [];
     for (const x of X) pts.push(x, ridge(x));
-    for (let i = X.length - 1; i >= 0; i--) pts.push(X[i]!, base);
+    for (let i = X.length - 1; i >= 0; i--) pts.push(X[i]!, y1);
     const top = Math.min(...X.map(ridge));
     soft.ctx.clearRect(v.x0, y0, v.x1 - v.x0, y1 - y0);
-    const g = soft.ctx.createLinearGradient(0, top, 0, base);
-    g.addColorStop(0, rgba(color, a));
-    g.addColorStop(0.6, rgba(color, a * 0.7));
-    g.addColorStop(1, rgba(color, a * 0.25));
+    const g = soft.ctx.createLinearGradient(0, top, 0, y1);
+    g.addColorStop(0, rgba(color, a * 0.95));
+    g.addColorStop(0.45, rgba(color, a * 0.75));
+    g.addColorStop(1, rgba(color, a * 0.3));
     soft.ctx.fillStyle = g;
     for (let i = 0; i < 2; i++) {
       tracePoly(soft.ctx, deform(pts, rnd, 2, 0.012));
       soft.ctx.fill();
     }
     soft.draw(ctx, 1, 'multiply');
+    // a second, crisper pass that is strongest at the ridge (the edge a painter leaves where the wash dried)
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = rgba(color, a * crisp * 0.5);
+    const g2 = ctx.createLinearGradient(0, top, 0, top + 40);
+    g2.addColorStop(0, rgba(color, a * crisp));
+    g2.addColorStop(1, rgba(color, a * crisp * 0.25));
+    ctx.fillStyle = g2;
     tracePoly(ctx, deform(pts, rnd, 3, 0.02));
     ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = rgba(mix(color, '#3A3A5A', 0.4), 0.12 + crisp * 0.06);
+    // the pigment pooled along the ridge, broken
+    ctx.strokeStyle = rgba(mix(color, '#4A4A6A', 0.3), pool);
     ctx.lineWidth = 0.8;
-    ctx.setLineDash([36, 6, 14, 4]);
+    ctx.setLineDash([40, 8, 16, 6]);
     ctx.beginPath();
-    X.forEach((x, i) => (i ? ctx.lineTo(x, ridge(x) + 0.6) : ctx.moveTo(x, ridge(x) + 0.6)));
+    X.forEach((x, i) => (i ? ctx.lineTo(x, ridge(x) + 0.7 + rnd.range(-0.3, 0.3)) : ctx.moveTo(x, ridge(x) + 0.7)));
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.strokeStyle = 'rgba(255,250,228,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    X.forEach((x, i) => (i ? ctx.lineTo(x, ridge(x) + 2.2) : ctx.moveTo(x, ridge(x) + 2.2)));
-    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  };
+  // the light and the shade on the slopes: the sun is upper left, so a slope rising to the right faces it (lit,
+  // warm) and one falling to the right faces away (shaded, cool), softest in the far range
+  const slopes = (ridge: (x: number) => number, shade: string, a: number, depth: number, sun: number) => {
+    for (const lit of [false, true]) {
+      soft.ctx.clearRect(v.x0, y0, v.x1 - v.x0, y1 - y0);
+      for (let x = v.x0; x < v.x1; x += rnd.range(14, 24)) {
+        const d = ridge(x + 12) - ridge(x - 12);
+        if (Math.abs(d) < 0.8 || d < 0 !== lit) continue;
+        const k = clamp(Math.abs(d) / 6, 0.3, 1);
+        bloom(soft.ctx, x, ridge(x) + depth * 0.45, rnd.range(16, 30), depth * 0.5, lit ? LIT : shade, (lit ? sun : a) * k, rnd, 3);
+      }
+      soft.draw(ctx, 1, lit ? 'source-over' : 'multiply');
+    }
   };
   const blooms = (ridge: (x: number) => number, n: number, cols: string[], a: number, rx: [number, number], ry: [number, number], dy: [number, number]) => {
     soft.ctx.clearRect(v.x0, y0, v.x1 - v.x0, y1 - y0);
@@ -172,40 +187,107 @@ function paintHills(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
     }
     soft.draw(ctx, 1, 'multiply');
   };
-  range(ridgeFar, y1, '#A9AED6', 0.3, 0.55);
-  blooms(ridgeFar, 10, ['#B8B4DC', '#A2B6DA', '#C2C8E0'], 0.12, [50, 140], [6, 14], [8, 24]);
+  // farthest: hazy blue-violet with a touch of rose, bleeding into the sky
+  range(ridgeFar, '#A8AAD6', 0.3, 0.5, 0.08);
+  blooms(ridgeFar, 12, ['#C0AED8', '#9DB0DA', '#B6B6DA', '#CFB0C6'], 0.14, [50, 140], [7, 15], [6, 26]);
+  slopes(ridgeFar, '#8A88B8', 0.12, 30, 0.1);
   haze(ctx, v, y0 + 60, y1, 0.3);
-  range(ridgeMid, y1, '#96B0B4', 0.3, 0.6);
-  blooms(ridgeMid, 14, ['#A8C08C', '#B4C894', '#9CB4B8', '#C2CC96'], 0.14, [40, 110], [6, 12], [6, 20]);
-  haze(ctx, v, y0 + 80, y1, 0.26);
-  range(ridgeNear, y1, '#A2BE7E', 0.34, 0.7);
-  blooms(ridgeNear, 16, ['#B8D284', '#9CBA6E', '#C8D88E', '#A8C27A', '#D2D68C'], 0.16, [36, 110], [5, 11], [4, 18]);
+  // middle: a cooler blue-green, the first fields and woods just showing
+  range(ridgeMid, '#9CB2B8', 0.3, 0.55, 0.09);
+  blooms(ridgeMid, 16, ['#A8C08C', '#B4C894', '#9CB4B8', '#C2CC96', '#A4AEC8'], 0.15, [40, 110], [6, 12], [6, 20]);
+  slopes(ridgeMid, '#7E9AA4', 0.14, 26, 0.12);
+  patchwork(ctx, rnd, v, ridgeMid, [8, 16, 26], ['#B4CA8E', '#C4D29A', '#A8C084', '#C8C0A0'], 0.2, '#7C9A7A', 0.3, 0.9);
+  haze(ctx, v, y0 + 80, y1, 0.24);
+  // nearer: fresh spring green, sun on the slopes facing it
+  range(ridgeNear, '#A6C080', 0.34, 0.62, 0.1);
+  blooms(ridgeNear, 18, ['#B8D284', '#9CBA6E', '#C8D88E', '#A8C27A', '#D2D68C'], 0.16, [36, 110], [5, 11], [4, 18]);
+  slopes(ridgeNear, '#6E9060', 0.16, 30, 0.2);
+}
+
+const LIT = '#FFF6D8';
+
+/**
+ * Fields on a slope, in rows following the ridge (`offs`: each row's top below the ridge, the last is the bottom):
+ * each field its own wash (fresh grass, young corn, pale meadow, ploughed earth with its furrows, now and then a
+ * blaze of rapeseed), the hedgerows between them dotted in with small dabs, and a hedgerow tree here and there.
+ */
+function patchwork(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, ridge: (x: number) => number, offs: number[], cols: string[], a: number, hedge: string, hedgeA: number, dab: number): void {
+  for (let r = 0; r < offs.length - 1; r++) {
+    let x = v.x0 - rnd.range(0, 60);
+    while (x < v.x1) {
+      const w = rnd.range(46, 110) * (0.8 + r * 0.2);
+      const t0 = rnd.range(-0.05, 0.05);
+      const t1 = t0 + rnd.range(-0.03, 0.03);
+      const top = (xx: number) => ridge(xx) + offs[r]! + (xx - x) * t0;
+      const bot = (xx: number) => ridge(xx) + offs[r + 1]! + (xx - x) * t1;
+      const poly: number[] = [];
+      for (let xx = x; xx <= x + w; xx += 8) poly.push(xx, top(xx));
+      poly.push(x + w, top(x + w));
+      poly.push(x + w, bot(x + w));
+      for (let xx = x + w; xx >= x; xx -= 8) poly.push(xx, bot(xx));
+      const kind = rnd.next();
+      const col = kind < 0.06 ? '#F0D648' : kind < 0.16 ? '#C4A07A' : rnd.pick(cols);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = rgba(col, a * (kind < 0.06 ? 2.4 : rnd.range(0.8, 1.3)));
+      tracePoly(ctx, deform(poly, rnd, 2, 0.03));
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // ploughed: the furrows, following the field's top edge
+      if (kind >= 0.06 && kind < 0.16) {
+        ctx.strokeStyle = rgba('#8A6A4A', a * 1.2);
+        ctx.lineWidth = 0.35;
+        const h = bot(x + w / 2) - top(x + w / 2);
+        for (let f = 1; f < 5; f++) {
+          ctx.beginPath();
+          for (let xx = x + 2; xx <= x + w - 2; xx += 6) {
+            const y = top(xx) + (h * f) / 5;
+            if (xx === x + 2) ctx.moveTo(xx, y);
+            else ctx.lineTo(xx, y);
+          }
+          ctx.stroke();
+        }
+      }
+      // the hedgerows: along the field's bottom and down its left side, dotted in
+      const dabs = (pts: Array<[number, number]>) => {
+        for (const [hx, hy] of pts) {
+          if (rnd.chance(0.12)) continue;
+          ctx.fillStyle = rgba(rnd.pick([hedge, mix(hedge, '#3E5A3A', 0.3), mix(hedge, '#A8C080', 0.3)]), hedgeA * rnd.range(0.7, 1.2));
+          ctx.beginPath();
+          ctx.ellipse(hx, hy, dab * rnd.range(0.8, 1.4), dab * rnd.range(0.5, 0.9), 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      };
+      const along: Array<[number, number]> = [];
+      for (let xx = x; xx <= x + w; xx += dab * 2.2) along.push([xx, bot(xx)]);
+      dabs(along);
+      const down: Array<[number, number]> = [];
+      for (let yy = top(x); yy <= bot(x); yy += dab * 1.6) down.push([x, yy]);
+      dabs(down);
+      // a hedgerow tree: a round crown, lit on its upper left
+      if (rnd.chance(0.3)) {
+        const tx = x + rnd.range(0, w);
+        const ty = bot(tx);
+        const tr = dab * rnd.range(2.4, 3.6);
+        ctx.fillStyle = rgba(mix(hedge, '#3E5A3A', 0.35), hedgeA * 1.6);
+        ctx.beginPath();
+        ctx.ellipse(tx, ty - tr * 0.8, tr, tr * 0.85, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = rgba('#DCE8A8', hedgeA * 1.1);
+        ctx.beginPath();
+        ctx.ellipse(tx - tr * 0.3, ty - tr * 1.1, tr * 0.5, tr * 0.38, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      x += w;
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ fields and copses */
 
 function paintFields(ctx: CanvasRenderingContext2D, rnd: Rand, v: View): void {
-  // a patchwork on the nearer slope: fresh grass, young corn, a ploughed field or two, the hedgerows between
-  for (let i = 0; i < 54; i++) {
-    const x = rnd.range(v.x0, v.x1);
-    const y = rnd.range(ridgeNear(x) + 6, HEDGE_Y - 8);
-    const w = rnd.range(30, 90);
-    const h = rnd.range(3, 8);
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = rgba(rnd.pick(['#C8DC8C', '#B2CE78', '#D8E2A0', '#A6C474', '#C9B48C', '#BEC88A']), rnd.range(0.12, 0.24));
-    tracePoly(ctx, deform([x, y, x + w * 0.5, y - h * 0.35, x + w, y - h * 0.2, x + w * 0.95, y + h, x + w * 0.5, y + h * 1.1, x + w * 0.05, y + h], rnd, 2, 0.06));
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
-    if (rnd.chance(0.5)) {
-      ctx.strokeStyle = rgba('#5E7A44', rnd.range(0.16, 0.28));
-      ctx.lineWidth = rnd.range(0.5, 1);
-      ctx.beginPath();
-      ctx.moveTo(x, y + h);
-      ctx.quadraticCurveTo(x + w * 0.5, y + h * 1.2 + rnd.range(-1, 1), x + w, y + h * 1.05);
-      ctx.stroke();
-    }
-  }
-  haze(ctx, v, ridgeNear(500) - 10, HEDGE_Y, 0.08);
+  // the near slope: rows of fields from the ridge down to the hedge, bigger as they come nearer
+  patchwork(ctx, rnd, v, ridgeNear, [10, 24, 42, 66, 96], ['#C8DC8C', '#B2CE78', '#D8E2A0', '#A6C474', '#BEC88A', '#D4DC9C'], 0.3, '#5E7E46', 0.5, 1.3);
+  haze(ctx, v, ridgeNear(500) - 10, HEDGE_Y, 0.06);
 }
 
 function pick(sp: Sprites, rnd: Rand, tones: SpriteKind[]) {
@@ -214,19 +296,31 @@ function pick(sp: Sprites, rnd: Rand, tones: SpriteKind[]) {
 }
 
 function paintCopses(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, leaf: Sprites, blossom: Sprites): void {
-  // far: a band of small pale clumps along the middle ridge, veiled
+  // far: small woods on the middle range, in clusters spilling down its slopes, veiled
   const band = makeCanvas(ctx.canvas.width, ctx.canvas.height);
   const b = band.getContext('2d')!;
   b.setTransform(ctx.getTransform());
-  for (let x = v.x0; x < v.x1; x += rnd.range(12, 24)) {
-    if (Math.sin(x / 80 + 1.2) + 0.5 * Math.sin(x / 29) < -0.25) continue;
-    const bl = rnd.chance(0.12);
-    drawClump(b, pick(bl ? blossom : leaf, rnd, ['lit', 'mid', 'gold', 'shade']), x, ridgeMid(x) + rnd.range(3, 9), rnd.range(14, 22), rnd.chance(0.5));
-  }
+  const wood = (ridge: (x: number) => number, n: [number, number], size: [number, number], down: number, blossomChance: number, tones: SpriteKind[]) => {
+    for (let x = v.x0 + rnd.range(-30, 30); x < v.x1 + 40; x += rnd.range(60, 150)) {
+      const k = rnd.int(n[0], n[1]);
+      const spread = rnd.range(14, 40);
+      const pts: Array<[number, number]> = [];
+      for (let i = 0; i < k; i++) {
+        const cx = x + rnd.gauss() * spread;
+        pts.push([cx, ridge(cx) + Math.abs(rnd.gauss()) * down + rnd.range(1, 5)]);
+      }
+      pts.sort((p, q) => p[1] - q[1]);
+      for (const [cx, cy] of pts) {
+        const bl = rnd.chance(blossomChance);
+        drawClump(b, pick(bl ? blossom : leaf, rnd, bl ? ['lit', 'gold', 'mid'] : tones), cx, cy, rnd.range(size[0], size[1]) * (0.85 + (cy - ridge(cx)) / 60), rnd.chance(0.5));
+      }
+    }
+  };
+  wood(ridgeMid, [3, 9], [12, 20], 10, 0.1, ['lit', 'mid', 'gold', 'shade']);
   b.save();
   b.setTransform(1, 0, 0, 1, 0, 0);
   b.globalCompositeOperation = 'source-atop';
-  b.fillStyle = rgba(PAPER, 0.5);
+  b.fillStyle = rgba(PAPER, 0.48);
   b.fillRect(0, 0, band.width, band.height);
   b.fillStyle = 'rgba(152,168,214,0.18)';
   b.fillRect(0, 0, band.width, band.height);
@@ -235,20 +329,14 @@ function paintCopses(ctx: CanvasRenderingContext2D, rnd: Rand, v: View, leaf: Sp
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(band, 0, 0);
   ctx.restore();
-  // near: copses along the front ridge, a white blossom tree here and there
+  // near: copses along the front ridge and down its slopes, a white blossom tree here and there
   b.setTransform(1, 0, 0, 1, 0, 0);
   b.clearRect(0, 0, band.width, band.height);
   b.setTransform(ctx.getTransform());
-  for (let x = v.x0; x < v.x1; x += rnd.range(10, 20)) {
-    const patch = Math.sin(x / 70 + 0.4) + 0.55 * Math.sin(x / 27 + 2.3) + 0.25;
-    if (patch < -0.1) continue;
-    const bl = rnd.chance(0.16);
-    const base = ridgeNear(x) + rnd.range(2, 10);
-    drawClump(b, pick(bl ? blossom : leaf, rnd, bl ? ['lit', 'gold', 'mid'] : ['lit', 'mid', 'shade', 'gold']), x, base, rnd.range(22, 36), rnd.chance(0.5));
-  }
+  wood(ridgeNear, [4, 12], [18, 30], 16, 0.16, ['lit', 'mid', 'shade', 'gold']);
   b.setTransform(1, 0, 0, 1, 0, 0);
   b.globalCompositeOperation = 'source-atop';
-  b.fillStyle = rgba(PAPER, 0.22);
+  b.fillStyle = rgba(PAPER, 0.2);
   b.fillRect(0, 0, band.width, band.height);
   b.globalCompositeOperation = 'source-over';
   ctx.save();
@@ -271,10 +359,11 @@ interface Cottage {
 function paintVillage(ctx: CanvasRenderingContext2D, rnd: Rand): void {
   // a cluster of roofs on the rising ground behind the plots, the church tower among them; farther = smaller, paler
   const homes: Cottage[] = [];
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 14; i++) {
     const y = rnd.range(338, 392);
     const k = 0.5 + (y - 338) / 120;
-    const x = rnd.range(330, 700);
+    // between the blossom tree and the right-hand house, where it can be seen
+    const x = rnd.range(508, 640);
     homes.push({ x, y, w: rnd.range(26, 44) * k, h: rnd.range(10, 16) * k, roof: rnd.range(9, 15) * k, slate: rnd.chance(0.35) });
   }
   homes.sort((a, b) => a.y - b.y);
