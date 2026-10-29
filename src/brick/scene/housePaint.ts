@@ -8,10 +8,16 @@
  * - the finished house: the wall, then what goes in later: the sash windows and the door in their reveals, the
  *   shadow under the eaves, the clay-tile roof, the chimney with its pots, the gutter and downpipe.
  * Light from the upper left on both houses (shading is never mirrored); only the plan is mirrored for house B.
+ * Painted as the vine's cottages are (vine/scene/cottageWash.ts): a broad wash of the wall's or the roof's colour
+ * first, so each reads as one mass, then a brick or a tile stated only where the eye goes (the corners, round the
+ * openings, the foot of the wall, under the eaves, the shaded right) and lost in the sunlit upper left; a few
+ * backruns where the washes dried, and the paper's grain over all.
  */
 import { Rand, clamp, makeNoise2D } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
 import { mix, ribbon } from '../../river/scene/boatInk';
+import { applyTooth, blobPoly, paperTooth } from '../../river/scene/paint';
+import { backrun } from '../../vine/scene/cottageWash';
 import { ACCENT, BRICK_L, COURSE_H, GROUND_Y, HOUSE, type Rect } from './geom';
 import { RIDGE_Y, housePlan, type HousePlan } from './housePlan';
 import type { LoanId } from '../types';
@@ -67,43 +73,117 @@ function lightAt(id: LoanId): (x: number, y: number) => number {
   };
 }
 
+/**
+ * How much of a brick or tile is stated (0 lost in the light .. 1 fully stated): high at the wall's corners, round
+ * the openings, along the foot and under the eaves, and toward the shaded right; low in the sunlit upper left. On
+ * the roof: stated along the eaves, the hips and to the right, lost high on the left. Broken up by noise so the edge
+ * between stated and lost wanders.
+ */
+function detailAt(id: LoanId, roof = false): (x: number, y: number) => number {
+  const H = HOUSE[id];
+  const W = H.wall;
+  const R = H.roof;
+  const plan = housePlan(id);
+  const nz = makeNoise2D(id === 'a' ? 8803 : 8807);
+  const near = (x: number, y: number, r: Rect, pad: number): number => {
+    const dx = Math.max(r.x0 - x, 0, x - r.x1);
+    const dy = Math.max(r.y0 - y, 0, y - r.y1);
+    return clamp(1 - Math.hypot(dx, dy) / pad, 0, 1);
+  };
+  return (x, y) => {
+    let d: number;
+    if (roof) {
+      const u = (x - R.x0) / (R.x1 - R.x0);
+      const low = clamp((y - (R.eaveY - 26)) / 26, 0, 1);
+      const t = (R.eaveY - y) / (R.eaveY - R.ridgeY);
+      const xl = R.x0 + (R.ridgeX0 - R.x0) * t;
+      const xr = R.x1 - (R.x1 - R.ridgeX1) * t;
+      const hip = clamp(1 - Math.min(x - xl, xr - x) / 26, 0, 1);
+      d = 0.12 + 0.55 * low + 0.45 * hip + 0.35 * clamp((u - 0.4) / 0.6, 0, 1);
+    } else {
+      const u = (x - W.x0) / (W.x1 - W.x0);
+      const corner = clamp(1 - Math.min(x - W.x0, W.x1 - x) / 34, 0, 1);
+      let open = 0;
+      for (const o of plan.openings) open = Math.max(open, near(x, y, o.cut, 16));
+      const foot = clamp((y - (GROUND_Y - 34)) / 34, 0, 1);
+      const eave = clamp(1 - (y - W.y0) / 22, 0, 1);
+      const shade = clamp((u - 0.5) / 0.5, 0, 1);
+      d = 0.14 + 0.7 * corner + 0.5 * open + 0.5 * foot + 0.3 * eave + 0.35 * shade;
+    }
+    d += (nz(x * 0.024, y * 0.032) - 0.5) * 0.75;
+    return clamp(d, 0, 1);
+  };
+}
+
+/** a broad, mottled colour field for a wash (wet in wet: the colours drift into each other) */
+function washField(seed: number, cols: string[]): (x: number, y: number) => string {
+  const n1 = makeNoise2D(seed);
+  const n2 = makeNoise2D(seed + 3);
+  return (x, y) => {
+    const a = n1(x * 0.011, y * 0.016);
+    const b = n2(x * 0.03, y * 0.04);
+    const t = clamp(a * 0.75 + b * 0.25, 0, 0.999) * (cols.length - 1);
+    const i = Math.floor(t);
+    return mix(cols[i]!, cols[i + 1]!, t - i);
+  };
+}
+
+/** the paper's grain over a region of the current clip: the wash thins on the peaks, pigment settles in the valleys */
+function grain(ctx: CanvasRenderingContext2D, pigment: string, x: number, y: number, w: number, h: number, lift: number, gran: number): void {
+  const q = ctx.getTransform().a;
+  applyTooth(ctx, paperTooth(pigment, 192, 517), x, y, w, h, Math.max(1, q * 1.1), lift, gran);
+}
+
 /* ------------------------------------------------------------------ the wall */
 
-function paintBrick(ctx: CanvasRenderingContext2D, rnd: Rand, r: Rect, lit: number, header: boolean): void {
+function paintBrick(ctx: CanvasRenderingContext2D, rnd: Rand, r: Rect, lit: number, header: boolean, vis = 1): void {
   const x0 = r.x0 + 0.55;
   const x1 = r.x1 - 0.55;
   const y0 = r.y0 + 0.6;
   const y1 = r.y1 - 0.55;
   if (x1 - x0 < 1.2) return;
+  const v = clamp(vis, 0, 1);
   let base = header ? rnd.pick(HEADERS) : rnd.pick(BRICKS);
   base = mix(base, '#E9A57C', lit * 0.38);
-  const poly = deform(rr(x0, y0, x1, y1, rnd, 0.22), rnd, 1, 0.04);
-  // two uneven glazes
-  ctx.fillStyle = rgba(base, 0.62 + rnd.range(-0.08, 0.1));
+  const dk = mix(base, SHADE, 0.55);
+  // the joint under the brick: where the eye reads a course from, even where the brick itself is lost
+  ctx.fillStyle = rgba(mix(base, SHADE, 0.62), 0.14 + 0.3 * v);
+  ribbon(ctx, [x0 + 0.4, y1 + 0.3, (x0 + x1) / 2, y1 + 0.45 + rnd.range(-0.15, 0.15), x1 - 0.2, y1 + 0.25], 0.5 + 0.35 * v, 0.85);
+  if (v < 0.12) return;
+  const poly = deform(rr(x0, y0, x1, y1, rnd, 0.3), rnd, 2, 0.05);
+  // two uneven glazes, as strong as the brick is stated
+  ctx.fillStyle = rgba(base, (0.22 + 0.5 * v) * rnd.range(0.85, 1.12));
   tracePoly(ctx, poly);
   ctx.fill();
-  ctx.fillStyle = rgba(mix(base, rnd.pick(['#D88A5E', '#8E4032', '#C4704C', '#A86048']), 0.5), 0.22);
-  tracePoly(ctx, deform(poly, rnd, 1, 0.08));
+  ctx.fillStyle = rgba(mix(base, rnd.pick(['#D88A5E', '#8E4032', '#C4704C', '#A86048']), 0.5), 0.1 + 0.16 * v);
+  tracePoly(ctx, deform(poly, rnd, 1, 0.09));
   ctx.fill();
-  // the pigment pools along the lower edge and the shaded right; the light lifts off the top
-  const dk = mix(base, SHADE, 0.55);
-  ctx.fillStyle = rgba(dk, 0.32 + (1 - lit) * 0.2);
+  // the wet edge where the glaze dried, then the pigment pooled along the lower edge and the shaded right
+  if (v > 0.4) {
+    ctx.strokeStyle = rgba(dk, 0.06 + 0.16 * v);
+    ctx.lineWidth = 0.35;
+    tracePoly(ctx, poly);
+    ctx.stroke();
+  }
+  ctx.fillStyle = rgba(dk, (0.18 + (1 - lit) * 0.16) * v);
   ribbon(ctx, [x0 + 0.6, y1 - 0.35, (x0 + x1) / 2, y1 - 0.25, x1 - 0.3, y1 - 0.4], 0.75, 0.9);
-  ctx.fillStyle = rgba(dk, 0.2 + (1 - lit) * 0.15);
-  ribbon(ctx, [x1 - 0.35, y0 + 0.5, x1 - 0.25, (y0 + y1) / 2, x1 - 0.35, y1 - 0.3], 0.5, 0.9);
+  if (v > 0.35) {
+    ctx.fillStyle = rgba(dk, (0.12 + (1 - lit) * 0.12) * v);
+    ribbon(ctx, [x1 - 0.35, y0 + 0.5, x1 - 0.25, (y0 + y1) / 2, x1 - 0.35, y1 - 0.3], 0.5, 0.9);
+  }
   if (rnd.chance(0.55)) {
-    ctx.fillStyle = rgba(LIGHT, 0.18 + lit * 0.3);
+    ctx.fillStyle = rgba(LIGHT, (0.14 + lit * 0.26) * (0.5 + 0.5 * v));
     ribbon(ctx, [x0 + 0.8, y0 + 0.45, x0 + (x1 - x0) * rnd.range(0.3, 0.6), y0 + 0.4], 0.45, 0.9);
   }
-  // a burnt end now and then, a speck or two of grit
-  if (!header && rnd.chance(0.12)) {
+  // a burnt end now and then, a speck or two of grit (only where stated)
+  if (!header && v > 0.5 && rnd.chance(0.12)) {
     const e = rnd.chance(0.5) ? x0 : x1 - 3.2;
-    ctx.fillStyle = rgba('#5E2E2C', 0.3);
-    tracePoly(ctx, rr(e, y0 + 0.3, e + 3.2, y1 - 0.3, rnd, 0.3));
+    ctx.fillStyle = rgba('#5E2E2C', 0.22);
+    tracePoly(ctx, deform(rr(e, y0 + 0.3, e + 3.2, y1 - 0.3, rnd, 0.3), rnd, 1, 0.08));
     ctx.fill();
   }
-  if (rnd.chance(0.5)) {
-    ctx.fillStyle = rgba(rnd.chance(0.5) ? '#5A2A26' : '#F6E2C8', 0.4);
+  if (v > 0.45 && rnd.chance(0.5)) {
+    ctx.fillStyle = rgba(rnd.chance(0.5) ? '#5A2A26' : '#F6E2C8', 0.35);
     ctx.fillRect(rnd.range(x0 + 1, x1 - 1), rnd.range(y0 + 0.8, y1 - 0.8), 0.45, 0.35);
   }
 }
@@ -114,9 +194,21 @@ function paintStoneBlock(ctx: CanvasRenderingContext2D, rnd: Rand, r: Rect, lit:
   ctx.fillStyle = rgba(base, 0.85);
   tracePoly(ctx, poly);
   ctx.fill();
-  ctx.fillStyle = rgba('#C4B08C', 0.3);
+  ctx.fillStyle = rgba('#C4B08C', 0.26);
   tracePoly(ctx, deform(poly, rnd, 1, 0.05));
   ctx.fill();
+  // a mottle of ochre and grey where the wash dried unevenly
+  ctx.save();
+  tracePoly(ctx, poly);
+  ctx.clip();
+  for (let i = 0; i < 3; i++) {
+    const cx = rnd.range(r.x0, r.x1);
+    const cy = rnd.range(r.y0, r.y1);
+    ctx.fillStyle = rgba(rnd.pick(['#BFA77E', '#A8A090', '#D4BC92']), 0.2);
+    tracePoly(ctx, deform(blobPoly(cx, cy, rnd.range(4, 10), rnd.range(2, 4), rnd, 10, 0.3), rnd, 1, 0.1));
+    ctx.fill();
+  }
+  ctx.restore();
   // the sill's front edge and the lintel's soffit are in shade
   const dk = mix(base, SHADE, 0.5);
   if (kind === 'sill') {
@@ -141,7 +233,7 @@ function paintStoneBlock(ctx: CanvasRenderingContext2D, rnd: Rand, r: Rect, lit:
     ctx.fillStyle = rgba(dk, 0.4);
     ctx.fillRect(r.x0 + 0.6, r.y1 - 1.3, r.x1 - r.x0 - 1.2, 0.9);
   }
-  ctx.strokeStyle = rgba(INK, 0.3);
+  ctx.strokeStyle = rgba(INK, 0.16);
   ctx.lineWidth = 0.35;
   tracePoly(ctx, poly);
   ctx.stroke();
@@ -154,22 +246,30 @@ export function paintWallSprite(id: LoanId, q: number): HTMLCanvasElement {
   const H = HOUSE[id];
   const rnd = new Rand(id === 'a' ? 5501 : 5507);
   const lit = lightAt(id);
-  // the lime mortar: a pale warm wash where the brickwork goes, darker in the joints' shade toward the right
+  const det = detailAt(id);
+  const field = washField(id === 'a' ? 3301 : 3307, ['#C98A66', '#B8603F', '#C46E4A', '#A9533E', '#CC7E58', '#B35A44']);
+  // the ground wash: the brickwork as one warm mass, the lime of the joints showing only where the wall is stated
+  // (in the light it is all one wash, as a painter leaves it)
   for (const u of plan.units) {
-    if (u.stage === 1) continue;
-    if (u.kind !== 'brick') continue;
+    if (u.stage === 1 || u.kind !== 'brick') continue;
     const r = u.rects[0]!;
-    const l = lit(r.x0, r.y0);
-    ctx.fillStyle = rgba(mix('#E4D3B8', '#BFAE98', 1 - l), 0.62);
+    const cx = (r.x0 + r.x1) / 2;
+    const cy = (r.y0 + r.y1) / 2;
+    const l = lit(cx, cy);
+    const d = det(cx, cy);
+    const c = mix(mix(field(cx, cy), '#F0C8A0', l * 0.45), mix('#E4D3B8', '#C9B49C', 1 - l), 0.22 + 0.4 * d);
+    ctx.fillStyle = rgba(c, 0.8);
     ctx.fillRect(r.x0 - 0.05, r.y0 - 0.05, r.x1 - r.x0 + 0.1, r.y1 - r.y0 + 0.1);
   }
-  // the bricks (every fifth course a few darker headers, as in a garden-wall bond)
+  // the bricks (every fifth course a few darker headers, as in a garden-wall bond), each as stated as its place
   plan.units.forEach((u, i) => {
     if (u.stage === 1 || u.kind !== 'brick') return;
     const r = u.rects[0]!;
     const course = Math.round((GROUND_Y - r.y1) / COURSE_H);
     const header = r.x1 - r.x0 < BRICK_L * 0.62 ? rnd.chance(0.5) : course % 5 === 2 && i % 2 === 0 && rnd.chance(0.6);
-    paintBrick(ctx, rnd, r, lit((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), header);
+    const cx = (r.x0 + r.x1) / 2;
+    const cy = (r.y0 + r.y1) / 2;
+    paintBrick(ctx, rnd, r, lit(cx, cy), header, det(cx, cy));
   });
   // stone
   for (const u of plan.units) {
@@ -183,9 +283,9 @@ export function paintWallSprite(id: LoanId, q: number): HTMLCanvasElement {
   ctx.clip();
   const W = H.wall;
   const g = ctx.createLinearGradient(W.x0, W.y0, W.x1, W.y1);
-  g.addColorStop(0, 'rgba(255,226,180,0.14)');
-  g.addColorStop(0.5, 'rgba(255,226,180,0)');
-  g.addColorStop(1, 'rgba(70,44,64,0.16)');
+  g.addColorStop(0, 'rgba(255,230,190,0.2)');
+  g.addColorStop(0.45, 'rgba(255,226,180,0)');
+  g.addColorStop(1, 'rgba(70,44,64,0.2)');
   ctx.fillStyle = g;
   ctx.fillRect(W.x0, W.y0, W.x1 - W.x0, W.y1 - W.y0);
   const damp = ctx.createLinearGradient(0, GROUND_Y - 18, 0, GROUND_Y);
@@ -193,16 +293,18 @@ export function paintWallSprite(id: LoanId, q: number): HTMLCanvasElement {
   damp.addColorStop(1, 'rgba(80,60,50,0.18)');
   ctx.fillStyle = damp;
   ctx.fillRect(W.x0, GROUND_Y - 18, W.x1 - W.x0, 18);
-  // a couple of soft blooms where the wash pooled
-  for (let i = 0; i < 6; i++) {
-    const x = rnd.range(W.x0, W.x1);
-    const y = rnd.range(W.y0, W.y1);
-    const b = ctx.createRadialGradient(x, y, 0, x, y, rnd.range(14, 34));
-    b.addColorStop(0, rgba(rnd.pick(['#9C4A3A', '#C9845A', '#7E4A52']), 0.09));
-    b.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = b;
-    ctx.fillRect(x - 40, y - 40, 80, 80);
+  // the light lifted out of the wash in the upper left (blotted while wet), and backruns where it pooled
+  for (let i = 0; i < 5; i++) {
+    const x = W.x0 + (W.x1 - W.x0) * rnd.range(0.02, 0.45);
+    const y = W.y0 + (W.y1 - W.y0) * rnd.range(0.05, 0.55);
+    ctx.fillStyle = rgba(LIGHT, 0.12);
+    tracePoly(ctx, deform(blobPoly(x, y, rnd.range(16, 34), rnd.range(10, 20), rnd, 14, 0.3), rnd, 2, 0.08));
+    ctx.fill();
   }
+  for (let i = 0; i < 7; i++) {
+    backrun(ctx, rnd.range(W.x0, W.x1), rnd.range(W.y0, W.y1), rnd.range(10, 26), rnd.range(7, 16), rnd.pick(['#9C4A3A', '#C9845A', '#7E4A52', '#B86A4A']), 0.22, rnd);
+  }
+  grain(ctx, '#5A3028', W.x0, W.y0 - 4, W.x1 - W.x0, W.y1 - W.y0 + 8, 0.1, 0.18);
   ctx.restore();
   return cv;
 }
@@ -214,31 +316,38 @@ function paintSash(ctx: CanvasRenderingContext2D, rnd: Rand, w: Rect, upper: boo
   const x1 = w.x1;
   const y0 = w.y0;
   const y1 = w.y1;
-  // the glass: the sky reflected, darker in the lower right, a pale diagonal sheen
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  g.addColorStop(0, 'rgba(150,176,196,0.9)');
-  g.addColorStop(0.55, 'rgba(92,112,138,0.92)');
-  g.addColorStop(1, 'rgba(58,66,90,0.95)');
-  ctx.fillStyle = g;
-  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-  // net curtains or a drawn-back curtain inside, faint
-  ctx.fillStyle = rgba(upper ? '#E8E0D4' : '#D9C9B2', 0.32);
-  ctx.fillRect(x0 + 1.5, y0 + 1.5, (x1 - x0) * 0.22, y1 - y0 - 3);
-  ctx.fillRect(x1 - 1.5 - (x1 - x0) * 0.22, y0 + 1.5, (x1 - x0) * 0.22, y1 - y0 - 3);
+  // the glass, wet in wet: the sky reflected, the room's dark coming down from the head into it, one soft lifted sheen
   ctx.save();
   ctx.beginPath();
   ctx.rect(x0, y0, x1 - x0, y1 - y0);
   ctx.clip();
-  ctx.fillStyle = 'rgba(240,248,255,0.32)';
-  for (const off of [0.18, 0.44]) {
-    const sx = x0 + (x1 - x0) * off;
-    tracePoly(ctx, [sx, y0, sx + 6, y0, sx - 22, y1, sx - 28, y1]);
+  ctx.fillStyle = rgba(mix('#A9C2D2', '#8EA6BC', rnd.next()), 0.92);
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = rgba(rnd.pick(['#5E6C88', '#66728E', '#56607C']), 0.16);
+    tracePoly(ctx, deform(blobPoly(rnd.range(x0, x1), y0 + (y1 - y0) * rnd.range(0, 0.5), (x1 - x0) * rnd.range(0.3, 0.55), (y1 - y0) * rnd.range(0.2, 0.35), rnd, 14, 0.3), rnd, 2, 0.1));
     ctx.fill();
   }
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, 'rgba(46,48,72,0.42)');
+  g.addColorStop(0.35, 'rgba(46,48,72,0.08)');
+  g.addColorStop(1, 'rgba(46,48,72,0.22)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  // net curtains inside, faint
+  ctx.fillStyle = rgba(upper ? '#E8E0D4' : '#D9C9B2', 0.26);
+  tracePoly(ctx, deform(rr(x0 + 1.5, y0 + 1.5, x0 + 1.5 + (x1 - x0) * 0.22, y1 - 1.5, rnd, 0.4), rnd, 1, 0.05));
+  ctx.fill();
+  tracePoly(ctx, deform(rr(x1 - 1.5 - (x1 - x0) * 0.22, y0 + 1.5, x1 - 1.5, y1 - 1.5, rnd, 0.4), rnd, 1, 0.05));
+  ctx.fill();
+  ctx.fillStyle = 'rgba(244,250,255,0.22)';
+  const sx = x0 + (x1 - x0) * rnd.range(0.2, 0.4);
+  tracePoly(ctx, deform([sx, y0, sx + 9, y0, sx - 18, y1, sx - 27, y1], rnd, 2, 0.06));
+  ctx.fill();
   ctx.restore();
   // the painted timber: frame, meeting rail, glazing bars (six over six), paper white with a cool shade
-  const frame = 'rgba(250,246,236,0.96)';
-  const shade = 'rgba(150,150,166,0.6)';
+  const frame = 'rgba(248,243,230,0.93)';
+  const shade = 'rgba(140,140,160,0.45)';
   const bar = 1.1;
   const midY = (y0 + y1) / 2;
   ctx.fillStyle = frame;
@@ -256,12 +365,12 @@ function paintSash(ctx: CanvasRenderingContext2D, rnd: Rand, w: Rect, upper: boo
   for (const t of [1 / 3, 2 / 3]) ctx.fillRect(x0 + (x1 - x0) * t + bar / 2 - 0.2, y0, 0.35, y1 - y0);
   // the reveal's shadow: the top and the right side of the opening are in the shade of the brick
   ctx.fillStyle = 'rgba(60,36,40,0.42)';
-  tracePoly(ctx, [x0 - 3, y0 - 3, x1 + 3, y0 - 3, x1 + 3, y1, x1 - 0.5, y1, x1 - 0.5, y0 + 1.6, x0, y0 + 1.6]);
+  tracePoly(ctx, deform([x0 - 3, y0 - 3, x1 + 3, y0 - 3, x1 + 3, y1, x1 - 0.5, y1, x1 - 0.5, y0 + 1.6, x0, y0 + 1.6], rnd, 1, 0.02));
   ctx.fill();
-  ctx.strokeStyle = rgba(INK, 0.5);
+  ctx.strokeStyle = rgba(INK, 0.28);
   ctx.lineWidth = 0.4;
-  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-  void rnd;
+  tracePoly(ctx, rr(x0, y0, x1, y1, rnd, 0.25));
+  ctx.stroke();
 }
 
 function paintDoor(ctx: CanvasRenderingContext2D, rnd: Rand, d: Rect, accent: string): void {
@@ -287,7 +396,7 @@ function paintDoor(ctx: CanvasRenderingContext2D, rnd: Rand, d: Rect, accent: st
   ctx.fillRect(x0, d.y0 + fan - 1.2, x1 - x0, 2.4);
   // the door leaf: four panels, the accent colour laid as two glazes, lit at the upper left
   const ly0 = d.y0 + fan + 1.2;
-  const leaf = deform(rr(x0 + 0.4, ly0, x1 - 0.4, d.y1, rnd, 0.15), rnd, 1, 0.02);
+  const leaf = deform(rr(x0 + 0.4, ly0, x1 - 0.4, d.y1, rnd, 0.15), rnd, 1, 0.006);
   ctx.fillStyle = rgba(accent, 0.88);
   tracePoly(ctx, leaf);
   ctx.fill();
@@ -320,7 +429,12 @@ function paintDoor(ctx: CanvasRenderingContext2D, rnd: Rand, d: Rect, accent: st
   ctx.fillStyle = 'rgba(60,36,40,0.45)';
   tracePoly(ctx, [x0 - 3, d.y0 - 3, x1 + 3, d.y0 - 3, x1 + 3, d.y1, x1 - 0.4, d.y1, x1 - 0.4, d.y0 + 1.5, x0, d.y0 + 1.5]);
   ctx.fill();
-  ctx.strokeStyle = rgba(INK, 0.55);
+  ctx.save();
+  tracePoly(ctx, leaf);
+  ctx.clip();
+  backrun(ctx, (x0 + x1) / 2 + rnd.range(-3, 3), ly0 + (d.y1 - ly0) * rnd.range(0.3, 0.7), (x1 - x0) * 0.3, (d.y1 - ly0) * 0.18, accent, 0.4, rnd);
+  ctx.restore();
+  ctx.strokeStyle = rgba(INK, 0.32);
   ctx.lineWidth = 0.45;
   tracePoly(ctx, leaf);
   ctx.stroke();
@@ -340,11 +454,25 @@ function paintDoor(ctx: CanvasRenderingContext2D, rnd: Rand, d: Rect, accent: st
 function paintRoof(ctx: CanvasRenderingContext2D, rnd: Rand, plan: HousePlan, id: LoanId): void {
   const R = HOUSE[id].roof;
   const nz = makeNoise2D(id === 'a' ? 6601 : 6607);
-  // under the tiles a warm ground wash so the gaps read as shadow, not paper
+  const det = detailAt(id, true);
+  const field = washField(id === 'a' ? 6621 : 6627, ['#C47A52', '#B4613F', '#C98A60', '#A85A40', '#BE6E48', '#9E5A48']);
   const roofPoly = [R.x0, R.eaveY, R.ridgeX0, R.ridgeY, R.ridgeX1, R.ridgeY, R.x1, R.eaveY];
-  ctx.fillStyle = rgba('#8A4A36', 0.55);
+  ctx.save();
   tracePoly(ctx, roofPoly);
-  ctx.fill();
+  ctx.clip();
+  // the ground wash, laid tile by tile (each tile's place carries its share), wet in wet: terracotta drifting into
+  // umber and a touch of violet, paler in the sun up on the left
+  for (const u of plan.units) {
+    if (u.stage !== 1 || u.kind !== 'tile') continue;
+    const r = u.rects[0]!;
+    const cx = (r.x0 + r.x1) / 2;
+    const cy = (r.y0 + r.y1) / 2;
+    const u01 = (cx - R.x0) / (R.x1 - R.x0);
+    const v01 = (R.eaveY - cy) / (R.eaveY - R.ridgeY);
+    const lit = clamp(0.5 - 0.35 * u01 + 0.25 * v01 + (nz(cx * 0.03, cy * 0.05) - 0.5) * 0.4, 0, 1);
+    ctx.fillStyle = rgba(mix(field(cx, cy), '#ECB088', lit * 0.4), 0.88);
+    ctx.fillRect(r.x0 - 0.1, r.y0 - 0.1, r.x1 - r.x0 + 0.2, r.y1 - r.y0 + 0.2);
+  }
   for (const u of plan.units) {
     if (u.stage !== 1 || u.kind !== 'tile') continue;
     const r = u.rects[0]!;
@@ -352,79 +480,99 @@ function paintRoof(ctx: CanvasRenderingContext2D, rnd: Rand, plan: HousePlan, id
     const x1 = r.x1 - 0.3;
     const y0 = r.y0;
     const y1 = r.y1;
+    const cx = (x0 + x1) / 2;
+    const v = det(cx, (y0 + y1) / 2);
     const u01 = (r.x0 - R.x0) / (R.x1 - R.x0);
     const v01 = (R.eaveY - r.y1) / (R.eaveY - R.ridgeY);
     const lit = clamp(0.5 - 0.35 * u01 + 0.25 * v01 + (nz(r.x0 * 0.03, r.y0 * 0.05) - 0.5) * 0.4, 0, 1);
     const base = mix(rnd.pick(TILES), '#EAA77A', lit * 0.4);
-    // a tile hangs from the row above: its bottom edge rounded a little, its lower part catching the light less
-    const poly = deform([x0, y0, x1, y0, x1, y1 - 1, (x0 + x1) / 2, y1 + 0.3, x0, y1 - 1], rnd, 1, 0.04);
-    ctx.fillStyle = rgba(base, 0.82);
+    const dk = mix(base, SHADE, 0.5);
+    // the course line: the shadow under the row above, always there (it is what reads as a tiled roof)
+    ctx.fillStyle = rgba(dk, 0.3 + 0.3 * v);
+    ribbon(ctx, [x0 - 0.2, y1 - 0.6, cx, y1 - 0.25 + rnd.range(-0.2, 0.2), x1 + 0.2, y1 - 0.6], 0.8 + 0.5 * v, 0.85);
+    // the butt joint to the next tile: a short stroke, lost where the roof is in the sun
+    if (rnd.chance(0.35 + 0.6 * v)) {
+      ctx.fillStyle = rgba(dk, 0.12 + 0.25 * v);
+      ribbon(ctx, [x1 - 0.2, y0 + 0.8 + rnd.range(0, 1.5), x1 - 0.1, y1 - 0.8], 0.45, 0.9);
+    }
+    if (v < 0.1) continue;
+    // the tile's own glaze, as stated as its place
+    const poly = deform([x0, y0, x1, y0, x1, y1 - 0.8, cx, y1 - 0.1, x0, y1 - 0.8], rnd, 1, 0.05);
+    ctx.fillStyle = rgba(base, (0.18 + 0.45 * v) * rnd.range(0.7, 1.2));
     tracePoly(ctx, poly);
     ctx.fill();
-    ctx.fillStyle = rgba(mix(base, SHADE, 0.5), 0.35);
-    ribbon(ctx, [x0 + 0.5, y1 - 0.6, (x0 + x1) / 2, y1, x1 - 0.5, y1 - 0.6], 0.8, 0.9);
-    ctx.fillStyle = rgba(mix(base, SHADE, 0.45), 0.28);
-    ctx.fillRect(x1 - 0.7, y0, 0.7, y1 - y0 - 0.6);
+    // the light caught on the tile's lower lip
+    if (rnd.chance(0.4 + 0.4 * v)) {
+      ctx.fillStyle = rgba(LIGHT, 0.12 + 0.2 * v);
+      ribbon(ctx, [x0 + 0.8, y1 - 1.6, cx, y1 - 1.3, x1 - 1.2, y1 - 1.6], 0.45, 0.9);
+    }
     // lichen and moss here and there (more toward the shaded right and the lower rows)
-    if (rnd.chance(0.06 + 0.08 * (1 - v01))) {
-      ctx.fillStyle = rgba(rnd.pick(['#A8A86A', '#C8BE7E', '#7E8A50']), 0.5);
-      ctx.beginPath();
-      ctx.ellipse(rnd.range(x0 + 1, x1 - 1), rnd.range(y0 + 1, y1 - 1), rnd.range(0.8, 2), rnd.range(0.5, 1.2), 0, 0, Math.PI * 2);
+    if (rnd.chance((0.06 + 0.08 * (1 - v01)) * v)) {
+      ctx.fillStyle = rgba(rnd.pick(['#A8A86A', '#C8BE7E', '#7E8A50']), 0.45);
+      tracePoly(ctx, deform(blobPoly(rnd.range(x0 + 1, x1 - 1), rnd.range(y0 + 1, y1 - 1), rnd.range(0.8, 2), rnd.range(0.5, 1.2), rnd, 8, 0.3), rnd, 1, 0.1));
       ctx.fill();
     }
   }
-  // the ridge tiles: half-round, darker, a lit top
+  // broad washes over the whole roof: light along the upper left, shade at the lower right; backruns; the grain
+  const g = ctx.createLinearGradient(R.x0, R.ridgeY, R.x1, R.eaveY);
+  g.addColorStop(0, 'rgba(255,230,190,0.24)');
+  g.addColorStop(0.5, 'rgba(255,230,190,0)');
+  g.addColorStop(1, 'rgba(60,36,56,0.22)');
+  ctx.fillStyle = g;
+  ctx.fillRect(R.x0, R.ridgeY, R.x1 - R.x0, R.eaveY - R.ridgeY);
+  // the hipped ends: lit on the left, in shade on the right
+  ctx.fillStyle = 'rgba(255,236,200,0.16)';
+  tracePoly(ctx, deform([R.x0, R.eaveY, R.ridgeX0, R.ridgeY, R.ridgeX0 + 10, R.ridgeY, R.x0 + 18, R.eaveY], rnd, 1, 0.03));
+  ctx.fill();
+  ctx.fillStyle = 'rgba(60,34,48,0.2)';
+  tracePoly(ctx, deform([R.x1, R.eaveY, R.ridgeX1, R.ridgeY, R.ridgeX1 - 10, R.ridgeY, R.x1 - 18, R.eaveY], rnd, 1, 0.03));
+  ctx.fill();
+  for (let i = 0; i < 6; i++) {
+    backrun(ctx, rnd.range(R.x0 + 30, R.x1 - 30), rnd.range(R.ridgeY + 8, R.eaveY - 6), rnd.range(14, 30), rnd.range(6, 12), rnd.pick(['#9E5038', '#C98A60', '#7E4A58']), 0.24, rnd);
+  }
+  grain(ctx, '#5A3028', R.x0, R.ridgeY, R.x1 - R.x0, R.eaveY - R.ridgeY, 0.08, 0.18);
+  ctx.restore();
+  // the ridge: one roll of half-round tiles laid end to end, a lit top, a faint joint between each
   for (const u of plan.units) {
     if (u.kind !== 'ridge') continue;
     const r = u.rects[0]!;
-    const poly = deform([r.x0, r.y1, r.x0 + 1, r.y0 + 3, (r.x0 + r.x1) / 2, r.y0 + 1, r.x1 - 1, r.y0 + 3, r.x1, r.y1], rnd, 1, 0.04);
-    ctx.fillStyle = rgba('#8E4632', 0.9);
-    tracePoly(ctx, poly);
+    const top = r.y0 + 2;
+    ctx.fillStyle = rgba('#94503A', 0.88);
+    tracePoly(ctx, deform([r.x0 - 0.2, r.y1, r.x0 - 0.2, top + 0.6, (r.x0 + r.x1) / 2, top, r.x1 + 0.2, top + 0.6, r.x1 + 0.2, r.y1], rnd, 1, 0.02));
     ctx.fill();
-    ctx.fillStyle = rgba('#E59A6E', 0.45);
-    ribbon(ctx, [r.x0 + 1.5, r.y0 + 2.8, (r.x0 + r.x1) / 2, r.y0 + 1.6, r.x1 - 1.5, r.y0 + 2.8], 0.8, 0.9);
+    ctx.fillStyle = rgba('#E8A478', 0.4);
+    ribbon(ctx, [r.x0, top + 1.1, (r.x0 + r.x1) / 2, top + 0.8, r.x1, top + 1.1], 0.7, 0.9);
+    ctx.fillStyle = rgba('#5A2E2C', 0.3);
+    ctx.fillRect(r.x1 - 0.3, top + 0.8, 0.5, r.y1 - top - 1);
   }
-  // broad washes over the whole roof: light along the upper left, shade at the lower right and under the ridge
-  ctx.save();
-  tracePoly(ctx, roofPoly);
-  ctx.clip();
-  const g = ctx.createLinearGradient(R.x0, R.ridgeY, R.x1, R.eaveY);
-  g.addColorStop(0, 'rgba(255,230,190,0.2)');
-  g.addColorStop(0.55, 'rgba(255,230,190,0)');
-  g.addColorStop(1, 'rgba(60,36,56,0.2)');
-  ctx.fillStyle = g;
-  ctx.fillRect(R.x0, R.ridgeY, R.x1 - R.x0, R.eaveY - R.ridgeY);
-  ctx.restore();
-  // the hipped ends are in shade on the right, lit on the left
-  ctx.fillStyle = 'rgba(255,236,200,0.14)';
-  tracePoly(ctx, [R.x0, R.eaveY, R.ridgeX0, R.ridgeY, R.ridgeX0 + 8, R.ridgeY, R.x0 + 14, R.eaveY]);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(60,34,48,0.2)';
-  tracePoly(ctx, [R.x1, R.eaveY, R.ridgeX1, R.ridgeY, R.ridgeX1 - 8, R.ridgeY, R.x1 - 14, R.eaveY]);
-  ctx.fill();
-  // the ink of the roof: broken lines at the eaves, the hips and the ridge
-  ctx.strokeStyle = rgba(INK, 0.5);
-  ctx.lineWidth = 0.55;
-  ctx.beginPath();
-  ctx.moveTo(R.x0, R.eaveY);
-  ctx.lineTo(R.ridgeX0, RIDGE_Y);
-  ctx.lineTo(R.ridgeX1, RIDGE_Y);
-  ctx.lineTo(R.x1, R.eaveY);
-  ctx.stroke();
+  // the ink of the roof: light, broken lines down the hips
+  ctx.strokeStyle = rgba(INK, 0.3);
+  ctx.lineWidth = 0.5;
+  for (const [ax, ay, bx, by] of [[R.x0, R.eaveY, R.ridgeX0, RIDGE_Y], [R.x1, R.eaveY, R.ridgeX1, RIDGE_Y]] as const) {
+    let t = 0;
+    while (t < 1) {
+      const t1 = Math.min(1, t + rnd.range(0.15, 0.4));
+      ctx.beginPath();
+      ctx.moveTo(ax + (bx - ax) * t, ay + (by - ay) * t);
+      ctx.lineTo(ax + (bx - ax) * t1 + rnd.range(-0.2, 0.2), ay + (by - ay) * t1);
+      ctx.stroke();
+      t = t1 + rnd.range(0.02, 0.08);
+    }
+  }
 }
 
 function paintChimney(ctx: CanvasRenderingContext2D, rnd: Rand, plan: HousePlan, lit: (x: number, y: number) => number): void {
   // the stack's mortar first, solid, so the roof never shows through its brickwork
   {
     const c = plan.chim;
-    ctx.fillStyle = rgba('#D9C6AA', 0.97);
+    ctx.fillStyle = rgba('#C99A7C', 0.97);
     ctx.fillRect(c.x0, c.shaftTop, c.x1 - c.x0, c.base - c.shaftTop + 6);
   }
   for (const u of plan.units) {
     if (u.stage !== 2) continue;
     const r = u.rects[0]!;
     if (u.kind === 'brick') {
-      paintBrick(ctx, rnd, { x0: r.x0, x1: r.x1, y0: r.y0, y1: Math.min(r.y1, r.y0 + COURSE_H) }, lit(r.x0, r.y0) * 0.7, false);
+      paintBrick(ctx, rnd, { x0: r.x0, x1: r.x1, y0: r.y0, y1: Math.min(r.y1, r.y0 + COURSE_H) }, lit(r.x0, r.y0) * 0.7, false, 0.75);
     } else if (u.kind === 'cap') {
       // the oversailing courses of the cap
       ctx.fillStyle = rgba('#A84E38', 0.9);
