@@ -622,6 +622,16 @@ export function paintFinishedSprite(id: LoanId, q: number, wall: HTMLCanvasEleme
   const rnd = new Rand(id === 'a' ? 6101 : 6113);
   const lit = lightAt(id);
   for (const o of plan.openings) {
+    // the reveal: the brick returning into the opening, in shade (the jamb on the left catches a little light)
+    const c = o.cut;
+    const w = o.win;
+    ctx.fillStyle = rgba(mix('#A9533E', SHADE, 0.3), 0.88);
+    ctx.beginPath();
+    ctx.rect(c.x0, c.y0, c.x1 - c.x0, c.y1 - c.y0);
+    ctx.rect(w.x0, w.y0, w.x1 - w.x0, w.y1 - w.y0);
+    ctx.fill('evenodd');
+    ctx.fillStyle = rgba(mix('#C46B46', '#E9A57C', 0.3), 0.7);
+    ctx.fillRect(c.x0, w.y0, w.x0 - c.x0, c.y1 - w.y0);
     if (o.door) paintDoor(ctx, rnd, o.win, ACCENT[id]);
     else paintSash(ctx, rnd, o.win, o.win.y1 < GROUND_Y - 100);
   }
@@ -755,19 +765,33 @@ export function paintPencilSprite(id: LoanId, q: number): HTMLCanvasElement {
   return cv;
 }
 
-/** the house's outline as it stands finished (walls, roof, chimney), world units: the paper is kept white inside it */
+/**
+ * The house's outline as it stands finished (walls, roof, chimney, pots), world units: the paper is kept white inside
+ * it. Drawn a little inside what the painting covers (the walls' edges, the ridge, the stack, the cap, each pot), so
+ * no sliver of reserved paper is left showing round the finished house.
+ */
 export function silhouette(id: LoanId): number[][] {
   const H = HOUSE[id];
   const W = H.wall;
   const R = H.roof;
-  const c = housePlan(id).chim;
-  return [
-    [W.x0 - 1, GROUND_Y + 1, W.x0 - 1, R.eaveY, R.x0 + 1, R.eaveY + 3, R.x0 + 4, R.eaveY - 1, R.ridgeX0 + 5, RIDGE_Y - 9, R.ridgeX1 - 5, RIDGE_Y - 9, R.x1 - 4, R.eaveY - 1, R.x1 - 1, R.eaveY + 3, W.x1 + 1, R.eaveY, W.x1 + 1, GROUND_Y + 1],
-    [c.x0 - 6, c.base, c.x0 - 6, c.capTop - 1, c.x1 + 6, c.capTop - 1, c.x1 + 6, c.base],
-    // each pot, closely
-    ...[-6.5, 6.5].map((dx) => {
-      const m = (c.x0 + c.x1) / 2 + dx;
-      return [m - 5.5, c.capTop, m - 5.5, c.potTop - 1, m + 5.5, c.potTop - 1, m + 5.5, c.capTop];
-    }),
+  const plan = housePlan(id);
+  const c = plan.chim;
+  const e = 0.6;
+  const out: number[][] = [
+    [W.x0 + e, GROUND_Y - 0.5, W.x0 + e, R.eaveY, R.x0 + 1, R.eaveY + 2, R.x0 + 4, R.eaveY - 1, R.ridgeX0 + 5, RIDGE_Y - 7.4, R.ridgeX1 - 5, RIDGE_Y - 7.4, R.x1 - 4, R.eaveY - 1, R.x1 - 1, R.eaveY + 2, W.x1 - e, R.eaveY, W.x1 - e, GROUND_Y - 0.5],
+    // the stack (only as wide as its brickwork)
+    [c.x0 + e, c.base, c.x0 + e, c.shaftTop, c.x1 - e, c.shaftTop, c.x1 - e, c.base],
   ];
+  for (const u of plan.units) {
+    const r = u.rects[0]!;
+    if (u.kind === 'cap') out.push([r.x0 + e, r.y1, r.x0 + e, r.y0 + e, r.x1 - e, r.y0 + e, r.x1 - e, r.y1]);
+    else if (u.kind === 'pot') {
+      // the pot as paintChimney paints it (tapered, with a rim), drawn in a little
+      const cx = (r.x0 + r.x1) / 2;
+      const w = (r.x1 - r.x0 - 2) * 0.9;
+      const y0 = r.y0 + 6.6;
+      out.push([cx - w * 0.42, r.y1, cx - w * 0.5, y0 + 2, cx - w * 0.56, y0, cx + w * 0.56, y0, cx + w * 0.5, y0 + 2, cx + w * 0.42, r.y1]);
+    }
+  }
+  return out;
 }
