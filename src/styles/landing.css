@@ -76,10 +76,19 @@ ul {
   background: none;
   color: var(--ink);
   cursor: pointer;
-  transition: color 0.2s ease;
+  /* it draws its own pressed and open states, so no grey tap flash on touch */
+  -webkit-tap-highlight-color: transparent;
+  transition-property: color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
 }
 .site-menu[data-open='1'] .menu-button {
   color: var(--emerald-deep);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .menu-button:not(:disabled):active {
+    scale: 0.96;
+  }
 }
 .menu-icon {
   display: block;
@@ -94,16 +103,25 @@ ul {
   padding: 12px 16px 14px;
   /* a small patch of watercolor wash, not a card: a ragged edge, the pigment pooled darker at its rim */
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60' preserveAspectRatio='none'%3E%3Cfilter id='r' x='-10%' y='-10%' width='120%' height='120%'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03' numOctaves='2' seed='11'/%3E%3CfeDisplacementMap in='SourceGraphic' scale='6'/%3E%3C/filter%3E%3Cfilter id='b' x='-30%' y='-30%' width='160%' height='160%'%3E%3CfeGaussianBlur stdDeviation='5'/%3E%3C/filter%3E%3Cg filter='url(%23r)'%3E%3Cpath d='M9 12C30 5 78 4 109 9c6 10 7 30 2 41-28 6-72 7-101 2C4 41 4 22 9 12z' fill='%23ece0c6' fill-opacity='.9' stroke='%239a8a70' stroke-opacity='.16' stroke-width='1'/%3E%3C/g%3E%3Cg filter='url(%23b)'%3E%3Cellipse cx='48' cy='26' rx='34' ry='13' fill='%23f9f2e4' fill-opacity='.75'/%3E%3Cellipse cx='88' cy='40' rx='20' ry='9' fill='%23ddcfb2' fill-opacity='.45'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  /* closing is quicker than opening and only fades (the menu opens and closes often, as the cursor passes) */
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-4px);
-  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+  transition: opacity 100ms ease-out, visibility 0s linear 100ms;
 }
 .site-menu[data-open='1'] .menu-list {
   opacity: 1;
   visibility: visible;
-  transform: none;
-  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
+  transition: opacity 150ms ease-out, visibility 0s;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .site-menu[data-open='1'] .menu-list {
+    translate: 0 0;
+    transition: opacity 150ms ease-out, translate 150ms ease-out, visibility 0s;
+  }
+  .site-menu:not([data-open='1']) .menu-list {
+    translate: 0 -4px;
+    transition: opacity 100ms ease-out, translate 0s linear 100ms, visibility 0s linear 100ms;
+  }
 }
 .menu-list a {
   display: block;
@@ -118,21 +136,25 @@ ul {
 .menu-list a > span {
   padding-bottom: 2px;
   background: linear-gradient(currentColor, currentColor) 0 100% / 0 1.2px no-repeat;
-  transition: background-size 0.3s ease;
 }
-.menu-list a:hover,
+@media (prefers-reduced-motion: no-preference) {
+  .menu-list a > span {
+    transition: background-size 150ms ease-out;
+  }
+}
 .menu-list a:focus-visible {
   color: var(--emerald-deep);
 }
-.menu-list a:hover > span,
 .menu-list a:focus-visible > span {
   background-size: 100% 1.2px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .menu-list,
-  .site-menu[data-open='1'] .menu-list {
-    transform: none;
-    transition: none;
+/* only where there is a real hover: on touch a tapped link would keep its hover look */
+@media (hover: hover) {
+  .menu-list a:hover {
+    color: var(--emerald-deep);
+  }
+  .menu-list a:hover > span {
+    background-size: 100% 1.2px;
   }
 }
 
