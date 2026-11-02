@@ -25,6 +25,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         main: 'index.html',
+        about: 'about.html',
         timeToGrow: 'time-to-grow.html',
         againstTheCurrent: 'against-the-current.html',
         nipItInTheBud: 'nip-it-in-the-bud.html',

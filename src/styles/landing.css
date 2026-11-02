@@ -58,6 +58,80 @@ ul {
   outline-offset: 2px;
 }
 
+/* ---------- Site menu (top right): opens on hover, focus or a tap ---------- */
+
+.site-menu {
+  position: absolute;
+  z-index: 10;
+  top: 22px;
+  right: 28px;
+  /* the open list hangs from the button with no gap, so the cursor never leaves the menu on its way down */
+  padding-bottom: 8px;
+}
+
+.menu-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(251, 246, 234, 0.72);
+  color: var(--ink);
+  font: 500 15px / 1 var(--sans);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.site-menu[data-open='1'] .menu-button {
+  background: rgba(251, 246, 234, 0.95);
+}
+.menu-icon {
+  width: 20px;
+  height: 14px;
+}
+
+.menu-list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  box-shadow: 0 10px 30px rgba(47, 42, 34, 0.14), 0 0 0 1px var(--rule);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+}
+.site-menu[data-open='1'] .menu-list {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
+}
+.menu-list a {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 9px;
+  color: var(--ink);
+  font: 400 18px / 1.3 var(--serif);
+  text-decoration: none;
+}
+.menu-list a:hover,
+.menu-list a:focus-visible {
+  background: rgba(30, 127, 92, 0.08);
+  color: var(--emerald-deep);
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-list,
+  .site-menu[data-open='1'] .menu-list {
+    transform: none;
+    transition: none;
+  }
+}
+
 /* ---------- Hero ---------- */
 
 .hero {
@@ -133,11 +207,13 @@ html[data-ready] .grove {
 /* text is cheap to draw, so it stays fully hidden (only the canvases pre-render at 1%) */
 .hero-title,
 .hero-sub,
+.site-menu,
 .demos,
 .closing,
 .foot {
   opacity: 0;
 }
+html[data-ready] .site-menu,
 html[data-ready] .demos,
 html[data-ready] .closing,
 html[data-ready] .foot {

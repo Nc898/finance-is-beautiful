@@ -1,0 +1,79 @@
+/* About page: the landing page's paper, ink and type. A skeleton for now: a way home, the title, room for the text. */
+:root {
+  --paper: #fbf6ea;
+  --ink: #2f2a22;
+  --muted: #574e40;
+  --muted-soft: #6b6152;
+  --emerald: #1e7f5c;
+  --emerald-deep: #14573f;
+  --serif-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, serif;
+  --serif: 'Libre Caslon Text', Georgia, 'Times New Roman', serif;
+  --sans: 'Figtree Variable', 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font: 400 16px/1.5 var(--sans);
+  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--emerald);
+  outline-offset: 2px;
+}
+
+.about-top {
+  padding: 26px 32px;
+}
+.about-home {
+  font: 400 22px / 1.2 var(--serif-display);
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.about-home:hover {
+  color: var(--emerald-deep);
+}
+
+.about {
+  flex: 1;
+  width: min(720px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 64px 0 96px;
+}
+.about-title {
+  margin: 0;
+  font: 400 clamp(56px, 7vw, 88px) / 1.05 var(--serif-display);
+  letter-spacing: 0.012em;
+}
+.about-body {
+  margin-top: 40px;
+}
+
+.about-foot {
+  padding: 0 32px 48px;
+  text-align: center;
+}
+.about-foot p {
+  margin: 0;
+  font: 400 14px / 1.4 var(--sans);
+  letter-spacing: 0.02em;
+  color: var(--muted-soft);
+}

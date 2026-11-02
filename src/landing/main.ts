@@ -20,6 +20,38 @@ const reveal = () => {
 };
 window.setTimeout(reveal, 6000);
 
+/* ---------- the site menu: opens while the cursor is over it (or it has focus, or on a tap), closes as it leaves ---------- */
+
+const menu = document.getElementById('site-menu') as HTMLElement;
+const menuButton = document.getElementById('menu-button') as HTMLButtonElement;
+const setMenu = (open: boolean) => {
+  menu.dataset.open = open ? '1' : '';
+  menuButton.setAttribute('aria-expanded', String(open));
+};
+menu.addEventListener('pointerenter', (e) => {
+  if (e.pointerType === 'mouse') setMenu(true);
+});
+menu.addEventListener('pointerleave', (e) => {
+  if (e.pointerType === 'mouse') setMenu(false);
+});
+// a tap (or a click with the keyboard) toggles it; a mouse has already opened it by hovering
+menuButton.addEventListener('click', (e) => {
+  const mouse = e.detail > 0 && (e as PointerEvent).pointerType === 'mouse';
+  if (!mouse) setMenu(menu.dataset.open !== '1');
+});
+menu.addEventListener('focusout', (e) => {
+  if (!menu.contains(e.relatedTarget as Node | null)) setMenu(false);
+});
+menu.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && menu.dataset.open === '1') {
+    setMenu(false);
+    menuButton.focus();
+  }
+});
+document.addEventListener('pointerdown', (e) => {
+  if (menu.dataset.open === '1' && !menu.contains(e.target as Node)) setMenu(false);
+});
+
 /* ---------- demonstrations list (data driven) ---------- */
 
 const ARROW =
