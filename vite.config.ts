@@ -31,6 +31,7 @@ export default defineConfig({
         nipItInTheBud: 'nip-it-in-the-bud.html',
         onARoll: 'on-a-roll.html',
         brickByBrick: 'brick-by-brick.html',
+        lowHangingFruit: 'low-hanging-fruit.html',
         riverSceneTest: 'river-scene-test.html',
         slice: 'slice.html',
         sceneTest: 'scene-test.html',
