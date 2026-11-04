@@ -445,8 +445,10 @@ class PickerImpl implements Picker {
   }
   private slotStand(): { x: number; y: number; yaw: number } {
     const s = this.slotPt();
-    // beside it on the inner side (nothing is planted there yet), a little in front: the basket tips out to the side
-    const x = s.x + this.dirIn * 12;
+    // beside it on the outer side, a little in front, facing in: the basket tips out to the side at its foot, and
+    // the picker stays clear of the farmer's crown even at the innermost slots (the outer neighbour, planted
+    // earlier, stands a whole gap away)
+    const x = s.x - this.dirIn * 12;
     const y = s.y + 5;
     return { x, y, yaw: Math.atan2((s.y + 1 - y) / KAPPA, s.x - x) };
   }

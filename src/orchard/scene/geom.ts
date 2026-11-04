@@ -71,10 +71,17 @@ export const ROWS = 6;
 export const COLS = 6;
 /** the depth of each row of slots, back (first planted) to front */
 export const ROW_Y = [344, 368, 393, 419, 446, 474] as const;
-/** the slots' x on A's side, outer to inner (odd rows are set half a gap inward, in quincunx, as orchards are
- *  planted: each crown then stands in the gap between the two in front of it, never stacked on one) */
-const COL_X = [70, 126, 182, 238, 294, 350] as const;
-const STAGGER = 28;
+/**
+ * The slots' lattice on A's side, as laid out in the front row: the outer end, the gap between trees, and odd rows set
+ * half a gap inward (in quincunx, as orchards are planted: each crown stands in the gap between the two in front of
+ * it, never stacked on one). Rows farther back are foreshortened by depthScale toward LATTICE.vx, as the trees
+ * themselves are, so the plot narrows toward the back and its inner edge steps out from under the farmer's crown: a
+ * picker tipping at any slot, even the innermost of the back row, stays in view below the old tree's leaf. (The
+ * crown's lower edge, in the band a standing picker fills, reaches out to about x 281 at the back row, 299 and 312 at
+ * the next two, and 363 at the front three, where the low bough's leaf hangs.)
+ */
+const LATTICE = { outer: 56, gap: 49, vx: 130 } as const;
+const FRONT_DS = depthScale(ROW_Y[ROWS - 1]);
 
 /**
  * Every slot of each orchard in planting order: slot k is row ⌊k / COLS⌋ (from the back), column k mod COLS (from
@@ -83,7 +90,13 @@ const STAGGER = 28;
  */
 export const SLOTS: Record<PickerId, Pt[]> = (() => {
   const a: Pt[] = [];
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) a.push({ x: COL_X[c] + (r % 2 ? STAGGER : 0), y: ROW_Y[r] });
+  for (let r = 0; r < ROWS; r++) {
+    const k = depthScale(ROW_Y[r]) / FRONT_DS;
+    for (let c = 0; c < COLS; c++) {
+      const x = LATTICE.outer + (r % 2 ? LATTICE.gap / 2 : 0) + c * LATTICE.gap;
+      a.push({ x: LATTICE.vx + (x - LATTICE.vx) * k, y: ROW_Y[r] });
+    }
+  }
   return { a, b: a.map(mirror) };
 })();
 

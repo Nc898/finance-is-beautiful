@@ -105,6 +105,29 @@ interface Hanging {
   /** growth per second, and whether it grows on the crew's clock (a round's ripening) or the wall clock */
   rate: number;
   crew: boolean;
+  /** how far the twig is drawn down (0 a short shoot hanging easy … 1 down to the fruit): it follows the fruit
+   *  over a moment, so a twig whose apple is picked or falls springs back up rather than vanishing */
+  sag: number;
+}
+
+/** a pendant twig with no fruit on it hangs this far (world units at its depth) below the bough */
+const TWIG_EASY = 7;
+/** how quickly a twig follows its fruit, down when one sets and back up when it goes (s) */
+const TWIG_TAU = 0.16;
+const BARK = '96,72,46';
+const BARK_LIT = '201,165,122';
+
+/** the twig's end (where the fruit's stalk meets it) at sag s, as a screen point (x, screen y) */
+function twigEnd(p: HangPlace, s: number): { x: number; y: number; drop: number } {
+  const k = depthScale(p.at.y);
+  const sx0 = p.stem.x;
+  const sy0 = p.stem.y - p.stem.h;
+  const sx1 = p.at.x + p.sway * 0.25;
+  const sy1 = p.at.y - p.at.h - APPLE_R * k - 3.4 * k;
+  const easy = Math.min(TWIG_EASY * k, sy1 - sy0);
+  const ex = sx0 + (sx1 - sx0) * (0.35 + 0.65 * s);
+  const ey = sy0 + easy + (sy1 - sy0 - easy) * s;
+  return { x: ex, y: ey, drop: sy1 - ey };
 }
 
 export class LowFruit {
@@ -115,7 +138,7 @@ export class LowFruit {
   constructor(id: PickerId) {
     this.id = id;
     this.places = hangPlaces(id);
-    for (let i = 0; i < NPOS; i++) this.hang.push({ grow: 0, rate: 0, crew: true });
+    for (let i = 0; i < NPOS; i++) this.hang.push({ grow: 0, rate: 0, crew: true, sag: 0 });
   }
 
   /** an apple hangs at place i (growing or grown) */
@@ -150,18 +173,94 @@ export class LowFruit {
       const h = this.hang[i]!;
       h.grow = ripe(i) ? 1 : 0;
       h.rate = 0;
+      h.sag = h.grow;
     }
   }
 
   update(crewDt: number, wallDt: number): void {
+    const follow = 1 - Math.exp(-Math.max(0, wallDt) / TWIG_TAU);
     for (const h of this.hang) {
-      if (h.rate <= 0) continue;
-      h.grow = Math.min(1, h.grow + h.rate * (h.crew ? crewDt : wallDt));
-      if (h.grow >= 1) h.rate = 0;
+      if (h.rate > 0) {
+        h.grow = Math.min(1, h.grow + h.rate * (h.crew ? crewDt : wallDt));
+        if (h.grow >= 1) h.rate = 0;
+      }
+      const want = h.grow > 0 || h.rate > 0 ? 1 : 0;
+      h.sag += (want - h.sag) * follow;
+      if (Math.abs(want - h.sag) < 1e-3) h.sag = want;
     }
   }
 
-  /** the hanging apples (each on a short stalk with a leaf or two) as one item at the bough's depth (in front of the branch) */
+  /** a twig's curve now: from where it leaves the wood (the bough, or for every second place its neighbour's twig,
+   *  so the fruit hangs in twos on forked spurs) down to its end */
+  private twigCurve(i: number): { x0: number; y0: number; cx: number; cy: number; e: { x: number; y: number } } {
+    const p = this.places[i]!;
+    const h = this.hang[i]!;
+    const k = depthScale(p.at.y);
+    let x0 = p.stem.x;
+    // (it starts a little up inside the bough's leaf, so it grows out of the wood rather than off its edge)
+    let y0 = p.stem.y - p.stem.h - 1.2 * k;
+    if (i % 2 === 1) {
+      const q = this.twigCurve(i - 1);
+      const t = 0.42;
+      x0 = (1 - t) * (1 - t) * q.x0 + 2 * (1 - t) * t * q.cx + t * t * q.e.x;
+      y0 = (1 - t) * (1 - t) * q.y0 + 2 * (1 - t) * t * q.cy + t * t * q.e.y;
+    }
+    const e = twigEnd(p, h.sag);
+    // bowed a little to one side by its sway, and less as the fruit pulls it straight
+    const cx = (x0 + e.x) / 2 + p.sway * (1.1 - 0.5 * h.sag);
+    const cy = (y0 + e.y) / 2;
+    return { x0, y0, cx, cy, e };
+  }
+
+  /** one pendant twig down to where its fruit's stalk meets it, with a leaf or two along it */
+  private drawTwig(ctx: CanvasRenderingContext2D, i: number): void {
+    const p = this.places[i]!;
+    const k = depthScale(p.at.y) * (i % 2 ? 0.8 : 1);
+    const { x0, y0, cx, cy, e } = this.twigCurve(i);
+    const line = (w: number, style: string, dx: number) => {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = w * k;
+      ctx.beginPath();
+      ctx.moveTo(x0 + dx, y0);
+      ctx.quadraticCurveTo(cx + dx, cy, e.x + dx, e.y);
+      ctx.stroke();
+    };
+    // the wood tapers: a thicker upper half, then the fine end; a lit edge toward the sun (upper left)
+    ctx.save();
+    ctx.lineCap = 'round';
+    line(0.5, `rgba(${BARK},0.82)`, 0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(Math.min(x0, e.x) - 4 * k, y0 - 2 * k, Math.abs(e.x - x0) + 8 * k, (cy - y0) + 2 * k);
+    ctx.clip();
+    line(0.8, `rgba(${BARK},0.78)`, 0);
+    ctx.restore();
+    line(0.18, `rgba(${BARK_LIT},0.6)`, -0.2 * k);
+    ctx.restore();
+    // a leaf or two along it, the upper one lighter (nearer the light), turned out and down from the twig
+    const at = (t: number) => ({
+      x: (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * e.x,
+      y: (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * e.y,
+    });
+    const leaves = i % 2 ? [0.55] : i % 4 === 0 ? [0.3, 0.68] : [0.36];
+    for (let j = 0; j < leaves.length; j++) {
+      const q = at(leaves[j]!);
+      const side = (i + j) % 2 ? 1 : -1;
+      const ang = Math.PI / 2 - side * (0.95 + 0.2 * j);
+      ctx.fillStyle = j === 0 ? 'rgba(146,156,76,0.88)' : 'rgba(104,126,62,0.88)';
+      ctx.beginPath();
+      ctx.ellipse(q.x + Math.cos(ang) * 1.9 * k, q.y + Math.sin(ang) * 1.9 * k, 2.4 * k, 1 * k, ang, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(64,74,36,0.35)';
+      ctx.lineWidth = 0.14 * k;
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y);
+      ctx.lineTo(q.x + Math.cos(ang) * 3.8 * k, q.y + Math.sin(ang) * 3.8 * k);
+      ctx.stroke();
+    }
+  }
+
+  /** the hanging apples, each on its pendant twig from the bough, as one item at the bough's depth (in front of the branch) */
   item(spr: () => AppleSprites | null): Item {
     return {
       // (just in front of the tree's own sprays of leaf along the bough, BOUGH.y + 0.5)
@@ -172,14 +271,18 @@ export class LowFruit {
           const p = this.places[i]!;
           const k = depthScale(p.at.y);
           const g = this.hang[i]!.grow;
+          // the twig is the tree's: it hangs there whether or not it bears an apple just now
+          this.drawTwig(ctx, i);
           // swelling: small and green, then full and red, hanging from its stalk
           const size = 0.35 + 0.65 * sstep(g / 0.8);
           const r = APPLE_R * size * k;
           if (g <= 0) continue;
-          const top = p.at.y - p.at.h - APPLE_R * k;
-          // a short stalk up into a little leafy spur (the shoots and leaf above are the tree's own)
-          const sx = p.at.x + p.sway * 0.25;
-          const sy = top - 3.4 * k;
+          // the stalk's top is the twig's end; while the twig is still settling the apple rides up with it
+          const e = twigEnd(p, this.hang[i]!.sag);
+          const top = p.at.y - p.at.h - APPLE_R * k - e.drop;
+          // a short stalk up into a little leafy spur where it meets the twig
+          const sx = e.x;
+          const sy = e.y;
           // (the spur fades in as the fruit sets, and goes with it)
           ctx.globalAlpha = sstep(g / 0.3);
           for (let j = 0; j < 3; j++) {
@@ -192,13 +295,14 @@ export class LowFruit {
           ctx.strokeStyle = 'rgba(96,76,44,0.85)';
           ctx.lineWidth = 0.32 * k;
           ctx.beginPath();
+          const ax = p.at.x + (e.x - (p.at.x + p.sway * 0.25));
           ctx.moveTo(sx, sy);
-          ctx.quadraticCurveTo(p.at.x + p.sway * 0.1, top - 1.4 * k, p.at.x, top + 0.4 * k);
+          ctx.quadraticCurveTo(ax + p.sway * 0.1, top - 1.4 * k, ax, top + 0.4 * k);
           ctx.stroke();
           ctx.globalAlpha = 1;
           if (!s) continue;
           const st = Math.min(RIPE - 1, Math.floor(clamp((g - 0.15) / 0.8, 0, 1) * (RIPE - 1) + 0.5));
-          drawApple(ctx, s.ripe[st]!, p.at.x, top + r, r);
+          drawApple(ctx, s.ripe[st]!, ax, top + r, r);
         }
       },
     };
@@ -210,7 +314,9 @@ export class LowFruit {
     const g = this.hang[i]!.grow;
     const size = 0.35 + 0.65 * sstep(g / 0.8);
     const k = depthScale(p.at.y);
-    return { x: p.at.x, y: p.at.y, h: p.at.h + APPLE_R * k * (1 - size) };
+    // (raised by however far its twig has still to come down: the same place the apple is drawn)
+    const e = twigEnd(p, this.hang[i]!.sag);
+    return { x: p.at.x + (e.x - (p.at.x + p.sway * 0.25)), y: p.at.y, h: p.at.h + APPLE_R * k * (1 - size) + e.drop };
   }
 }
 

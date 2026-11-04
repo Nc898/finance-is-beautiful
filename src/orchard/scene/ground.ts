@@ -26,12 +26,29 @@ export interface GroundView {
 /** the farm's boundary hedge behind the orchards: the meadow starts here */
 export const HEDGE_Y = 326;
 
-/** each picker's plot of mown grass (world rect) */
+/** each picker's plot of mown grass: its bounding world rect (the plot itself narrows toward the back, plotSpan) */
 export const PLOT: Record<PickerId, { x0: number; x1: number; y0: number; y1: number }> = (() => {
   const xs = SLOTS.a.map((p) => p.x);
   const a = { x0: Math.min(...xs) - 38, x1: Math.max(...xs) + 24, y0: ROW_Y[0] - 10, y1: ROW_Y[ROW_Y.length - 1] + 16 };
   return { a, b: { x0: WORLD.width - a.x1, x1: WORLD.width - a.x0, y0: a.y0, y1: a.y1 } };
 })();
+
+/** A's plot edges at the back (the two back rows) and the front (the two front rows): the slots are foreshortened
+ *  toward the back, so the plot is a trapezoid whose inner edge steps out from under the farmer's crown */
+const PLOT_EDGES = (() => {
+  const n = SLOTS.a.length;
+  const back = SLOTS.a.slice(0, 12).map((p) => p.x);
+  const front = SLOTS.a.slice(n - 12).map((p) => p.x);
+  return { back: { x0: Math.min(...back) - 38, x1: Math.max(...back) + 24 }, front: { x0: Math.min(...front) - 38, x1: Math.max(...front) + 24 } };
+})();
+
+/** the plot's x extent at depth y */
+export function plotSpan(id: PickerId, y: number): { x0: number; x1: number } {
+  const t = Math.min(1, Math.max(0, (y - ROW_Y[0]) / (ROW_Y[ROW_Y.length - 1] - ROW_Y[0])));
+  const x0 = PLOT_EDGES.back.x0 + (PLOT_EDGES.front.x0 - PLOT_EDGES.back.x0) * t;
+  const x1 = PLOT_EDGES.back.x1 + (PLOT_EDGES.front.x1 - PLOT_EDGES.back.x1) * t;
+  return id === 'a' ? { x0, x1 } : { x0: WORLD.width - x1, x1: WORLD.width - x0 };
+}
 
 /** the worn path's centre line (it wanders a little) and its half width */
 export const pathY = (x: number): number => (PATH.y0 + PATH.y1) / 2 + 2.2 * Math.sin(x / 83 + 0.6) + 1.2 * Math.sin(x / 31);
@@ -58,7 +75,8 @@ function inPlot(x: number, y: number, pad = 0): PickerId | null {
   const m = (edgeNoise(x * 0.045, y * 0.06) - 0.5) * 30;
   for (const id of PICKERS) {
     const P = PLOT[id];
-    if (x > P.x0 - pad + m && x < P.x1 + pad - m && y > P.y0 - pad + m * 0.35 && y < P.y1 + pad - m * 0.35) return id;
+    const S = plotSpan(id, y);
+    if (x > S.x0 - pad + m && x < S.x1 + pad - m && y > P.y0 - pad + m * 0.35 && y < P.y1 + pad - m * 0.35) return id;
   }
   return null;
 }
@@ -245,8 +263,9 @@ export function paintPlots(ctx: CanvasRenderingContext2D, rnd: Rand): void {
     for (let y = P.y0 + 2, k = 0; y < P.y1; k++) {
       const h = 4.5 + (y - P.y0) * 0.05;
       const pts: Pt[] = [];
-      const xa = P.x0 + rnd.range(-6, 22);
-      const xb = P.x1 - rnd.range(-6, 22);
+      const S = plotSpan(id, y);
+      const xa = S.x0 + rnd.range(-6, 22);
+      const xb = S.x1 - rnd.range(-6, 22);
       for (let x = xa; x <= xb; x += 12) pts.push([x, y + h / 2 + Math.sin(x / 47 + k) * 0.5]);
       const pale = k % 2 === 0;
       ctx.globalCompositeOperation = pale ? 'source-over' : 'multiply';
@@ -257,7 +276,8 @@ export function paintPlots(ctx: CanvasRenderingContext2D, rnd: Rand): void {
     // the rows of slots: a faint line of grass left a little longer where the trees will stand
     for (const ry of ROW_Y) {
       const pts: Pt[] = [];
-      for (let x = P.x0 + 4; x <= P.x1 - 4; x += 10) pts.push([x, ry + Math.sin(x / 33 + ry) * 0.4]);
+      const S = plotSpan(id, ry);
+      for (let x = S.x0 + 4; x <= S.x1 - 4; x += 10) pts.push([x, ry + Math.sin(x / 33 + ry) * 0.4]);
       const k = 0.6 + (ry - HEDGE_Y) / 300;
       ctx.globalCompositeOperation = 'multiply';
       brushBand(ctx, pts, (t) => 2.2 * k * fade(t), '#8E9E58', 0.14, rnd, { layers: 2, bristles: 3, bristleAlpha: 0.1, amp: 0.03 });
