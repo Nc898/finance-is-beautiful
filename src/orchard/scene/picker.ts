@@ -32,13 +32,31 @@ const STEP = 1 / 60;
  *  picker's clock runs CREW_TIME times the wall clock, at other speeds in proportion (as Brick by Brick's crew) */
 const PACE_1X = 0.12;
 const CREW_TIME = 1.9;
+/** ...but a walk is walked in real time (at 1x): the clock eases down to WALK_TIME while the picker walks, over
+ *  WALK_EASE seconds, so the steps come at a person's cadence (a sped-up walk reads as a scurry, however good the
+ *  poses), while the work at either end keeps the crew's briskness */
+const WALK_TIME = 1;
+const WALK_EASE = 0.35;
 /** apples in a full basket (the larger picker's month of own + match) */
 const FULL = 20;
-/** a long walk is a brisk one: the pace it settles into (true units a crew second at the reference depth, longer
- *  strides than the measured stroll rather than quicker ones), its ease in and out, and the distance below which a
- *  walk is just walked */
-const BRISK_V = 66;
-const BRISK_A = 70;
+/** a long walk is a brisk one: the pace it settles into (true units a second at the reference depth), its ease in and
+ *  out, and the distance below which a walk is just walked. 55 units is 1.84 leg lengths a second, a little brisker
+ *  than the captured walk the gait is measured from (CMU 07_01, 1.70): 0.94 of a leg a step, 118 a minute (any brisker
+ *  and the legs no longer reach from the measured hip height, and the hips start to sink at each step again) */
+const BRISK_V = 55;
+const BRISK_A = 36;
+/** the radius a long walk's corners are rounded to (true units: about a stride and a half) */
+const CORNER_R = 45;
+/** a walker turns at most about 100 degrees a second while walking on (radians a second); the lead measures each bend
+ *  over TURN_WINDOW of its way and looks TURN_LOOK ahead to slow for it in time, never below TURN_VMIN (a slow walk,
+ *  about the captured slow walk's pace: slower, the steps grow long in time and the hips sink through each) */
+const TURN_RATE = 1.8;
+const TURN_WINDOW = 20;
+const TURN_LOOK = 60;
+const TURN_VMIN = 32;
+/** how far along its way the body looks for the way to face (true units: about a stride) */
+const FACE_AHEAD = 30;
+const FACE_LEAD = 0.45;
 const BRISK_MIN = 70;
 const HANDOVER = 50;
 /** the most a basket shows (heaped) */
@@ -377,6 +395,8 @@ class PickerImpl implements Picker {
   /** a brisk walk's lead along the route (true units), and the step length in use */
   private lead: { pts: Array<{ x: number; d: number }>; L: number; s: number; v: number } | null = null;
   private stepH = STEP;
+  /** how far the clock has eased toward walking time (0 working … 1 walking) */
+  private walkClock = 0;
   private leadDone = false;
 
   constructor(id: PickerId) {
@@ -486,6 +506,33 @@ class PickerImpl implements Picker {
     this.leadDone = false;
   }
 
+  /** the segment of a lead's route at distance s along it, and how far into it */
+  private leadSeg(ld: { pts: Array<{ x: number; d: number }> }, s: number): { a: { x: number; d: number }; b: { x: number; d: number }; u: number } {
+    let s0 = s;
+    let i = 1;
+    for (; i < ld.pts.length - 1; i++) {
+      const seg = Math.hypot(ld.pts[i]!.x - ld.pts[i - 1]!.x, ld.pts[i]!.d - ld.pts[i - 1]!.d);
+      if (s0 <= seg) break;
+      s0 -= seg;
+    }
+    const a = ld.pts[i - 1]!;
+    const b = ld.pts[i]!;
+    const seg = Math.hypot(b.x - a.x, b.d - a.d) || 1;
+    return { a, b, u: Math.min(1, Math.max(0, s0 / seg)) };
+  }
+
+  /** the way a lead's route runs at distance s along it */
+  private leadYaw(ld: { pts: Array<{ x: number; d: number }> }, s: number): number {
+    const { a, b } = this.leadSeg(ld, s);
+    return Math.atan2(b.d - a.d, b.x - a.x);
+  }
+
+  /** the point at distance s along a lead's route */
+  private leadAt(ld: { pts: Array<{ x: number; d: number }> }, s: number): { x: number; d: number } {
+    const { a, b, u } = this.leadSeg(ld, s);
+    return { x: a.x + (b.x - a.x) * u, d: a.d + (b.d - a.d) * u };
+  }
+
   /**
    * Walk the route: a long way at a brisk pace (the gait follows a lead moving along the route, easing in and out,
    * so the strides lengthen), the last few strides and short walks as the measured walk, ending facing `finalYaw`.
@@ -495,7 +542,9 @@ class PickerImpl implements Picker {
     if (!this.lead && this.route.length && !f.walking) {
       const fr = f.frame();
       const raw = [{ x: fr.x, d: fr.y / KAPPA }, ...this.route.map((p) => ({ x: p.x, d: p.y / KAPPA }))];
-      // round each corner into two gentler bends, so the body turns with the way (never more than a walk can turn)
+      // round each corner into a smooth bend a stride and a half in radius, so the body turns with the way over two or
+      // three steps, as a walker does (a corner turned within one step left the planted foot half a leg out to the
+      // side of the new way, and the hips dropped to push off from it)
       const pts = [raw[0]!];
       for (let i = 1; i < raw.length - 1; i++) {
         const a = raw[i - 1]!;
@@ -503,15 +552,33 @@ class PickerImpl implements Picker {
         const c = raw[i + 1]!;
         const la = Math.hypot(p.x - a.x, p.d - a.d) || 1;
         const lc = Math.hypot(c.x - p.x, c.d - p.d) || 1;
-        const r = Math.min(12, la * 0.45, lc * 0.45);
+        const r = Math.min(CORNER_R, la * 0.45, lc * 0.45);
         const pin = { x: p.x - ((p.x - a.x) / la) * r, d: p.d - ((p.d - a.d) / la) * r };
         const pout = { x: p.x + ((c.x - p.x) / lc) * r, d: p.d + ((c.d - p.d) / lc) * r };
-        pts.push(pin, { x: (pin.x + pout.x) / 2 * 0.5 + p.x * 0.5, d: (pin.d + pout.d) / 2 * 0.5 + p.d * 0.5 }, pout);
+        for (let j = 0; j <= 8; j++) {
+          const u = j / 8;
+          const w0 = (1 - u) * (1 - u);
+          const w1 = 2 * (1 - u) * u;
+          const w2 = u * u;
+          pts.push({ x: w0 * pin.x + w1 * p.x + w2 * pout.x, d: w0 * pin.d + w1 * p.d + w2 * pout.d });
+        }
       }
       pts.push(raw[raw.length - 1]!);
+      // and smooth the whole way (corner cutting), so a short leg's bend is spread over its neighbours too
+      let sm = pts;
+      for (let it = 0; it < 2; it++) {
+        const nx = [sm[0]!];
+        for (let j = 0; j < sm.length - 1; j++) {
+          const p = sm[j]!;
+          const q = sm[j + 1]!;
+          nx.push({ x: 0.75 * p.x + 0.25 * q.x, d: 0.75 * p.d + 0.25 * q.d }, { x: 0.25 * p.x + 0.75 * q.x, d: 0.25 * p.d + 0.75 * q.d });
+        }
+        nx.push(sm[sm.length - 1]!);
+        sm = nx;
+      }
       let L = 0;
-      for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.d - pts[i - 1]!.d);
-      if (L > BRISK_MIN && !this.leadDone) this.lead = { pts, L, s: 0, v: 0 };
+      for (let i = 1; i < sm.length; i++) L += Math.hypot(sm[i]!.x - sm[i - 1]!.x, sm[i]!.d - sm[i - 1]!.d);
+      if (L > BRISK_MIN && !this.leadDone) this.lead = { pts: sm, L, s: 0, v: 0 };
     }
     const ld = this.lead;
     if (ld) {
@@ -532,8 +599,16 @@ class PickerImpl implements Picker {
         const seg = Math.hypot(b.x - a.x, b.d - a.d) || 1;
         const hx = (b.x - a.x) / seg;
         const hd = (b.d - a.d) / seg;
-        const yaw = Math.atan2(hd, hx);
         const fr = f.frame();
+        // the body faces where its next strides go (the chord to a point a little way on), not the way the route runs
+        // under it this instant: it sets off already facing past a bend that comes soon after the start, and turns
+        // into each bend over the steps before it rather than all in one
+        const ahead = this.leadAt(ld, Math.min(ld.L, ld.s + FACE_AHEAD * depthScale(fr.y)));
+        const here = this.leadAt(ld, ld.s);
+        const way = Math.atan2(hd, hx);
+        const chord = Math.hypot(ahead.x - here.x, ahead.d - here.d) > 1 ? Math.atan2(ahead.d - here.d, ahead.x - here.x) : way;
+        // (but never more than FACE_LEAD off the way the steps go: further, and it walks crabwise, its legs spread)
+        const yaw = way + clamp(wrapPi(chord - way), -FACE_LEAD, FACE_LEAD);
         if (!f.walking && Math.abs(wrapPi(yaw - f.yaw.v)) > 0.5) {
           // face the way first (a turn through the three-quarter view), then set off
           f.face(yaw);
@@ -542,13 +617,24 @@ class PickerImpl implements Picker {
         const k = depthScale(fr.y);
         const vMax = BRISK_V * k;
         // (easing toward the measured walk's pace by the hand-over)
-        const want = Math.min(vMax, 32 * k + Math.sqrt(2 * BRISK_A * k * Math.max(0, left - HANDOVER * k)));
+        let want = Math.min(vMax, 32 * k + Math.sqrt(2 * BRISK_A * k * Math.max(0, left - HANDOVER * k)));
+        // and slowing for the bends ahead, so the way never turns quicker than a walker turns (TURN_RATE), with room
+        // to slow down before each: the body turns with its lead, and a lead taken round a bend at full pace swung it
+        // round faster than its feet could follow
+        const W = TURN_WINDOW * k;
+        for (let e = 0; e <= TURN_LOOK * k; e += 6 * k) {
+          const sA = Math.min(ld.L, ld.s + e);
+          const turn = Math.abs(wrapPi(this.leadYaw(ld, Math.min(ld.L, sA + W / 2)) - this.leadYaw(ld, Math.max(0, sA - W / 2))));
+          if (turn < 1e-3) continue;
+          const vt = Math.max(TURN_VMIN * k, (TURN_RATE * W) / turn);
+          want = Math.min(want, Math.sqrt(vt * vt + 2 * BRISK_A * k * e));
+        }
         const h = this.stepH;
         ld.v = ld.v < want ? Math.min(want, ld.v + BRISK_A * k * h) : want;
         ld.s = Math.min(ld.L, ld.s + ld.v * h);
         const x = a.x + hx * Math.min(seg, s0);
         const d = a.d + hd * Math.min(seg, s0);
-        f.follow(x, d * KAPPA, hx * ld.v, hd * ld.v * KAPPA, yaw);
+        f.follow(x, d * KAPPA, hx * ld.v, hd * ld.v * KAPPA, Math.atan2(hd, hx), yaw);
         return false;
       }
       // there: any last adjustment and the facing as an ordinary walk
@@ -588,7 +674,11 @@ class PickerImpl implements Picker {
     }
     this.settledKey = '';
     // the picker's clock: brisk at 1x, in proportion to the playback speed (normal pace to finish a round when paused)
-    const rate = it.pace > 0 ? CREW_TIME * (it.pace / PACE_1X) : CREW_TIME;
+    // (walking: the phases that go somewhere, and any steps the body is taking; eased, so time never jumps)
+    const walkingNow = this.fig.walking || this.phase === 'toFill' || this.phase === 'toBough' || this.phase === 'toSlot' || this.phase === 'toSeat';
+    this.walkClock += ((walkingNow ? 1 : 0) - this.walkClock) * (1 - Math.exp(-wall / WALK_EASE));
+    const own = CREW_TIME + (WALK_TIME - CREW_TIME) * this.walkClock;
+    const rate = it.pace > 0 ? own * (it.pace / PACE_1X) : own;
     const dt = Math.min(wall * rate, 0.6);
     const n = Math.max(1, Math.ceil(dt / STEP - 1e-6));
     for (let i = 0; i < n; i++) this.step(dt / n, it);

@@ -339,6 +339,12 @@ export class Gait {
   private turnClock = 0;
   /** walk in step with this (null: not following); set by the director every frame */
   follow: FollowGoal | null = null;
+  /** following: the step time (s) for a speed (units/s, against the figure's size); null for followStepTime. A
+   *  figure may bring its own, measured, law (how much of a quicker walk comes from cadence rather than stride) */
+  followLaw: ((v: number) => number) | null = null;
+  /** the longest step it may take, following or walking to a spot (units, against the figure's size); null for no limit but
+   *  the gait's own. A walker who has fallen behind takes quicker steps, not ones longer than the legs reach */
+  stepMax: number | null = null;
   /** the plan under way is a follow plan (two steps ahead, never ending at rest) */
   private followPlan = false;
   /** the followed spot's lead ahead of the pelvis along the heading, and its lateral error */
@@ -509,7 +515,7 @@ export class Gait {
       let X = frontS;
       let foot: 0 | 1 = rearFoot.i;
       for (let j = 1; j <= k; j++) {
-        X += clamp((total * r[j - 1]!) / rs, 2.2, mo ? 56 : 48);
+        X += clamp((total * r[j - 1]!) / rs, 2.2, Math.min(mo ? 56 : 48, this.stepMax === null ? Infinity : this.stepMax * this.k));
         const T = mo ? (j === 1 ? (moving ? ts : ts + 0.06) : j === k ? ts + 0.03 : ts) : j === 1 ? (moving ? TS : 0.5) : j === k ? 0.47 : TS;
         steps.push({ foot, s: X, T });
         foot = foot === 0 ? 1 : 0;
@@ -571,7 +577,7 @@ export class Gait {
     const f = this.follow!;
     const v = Math.max(0, f.vx * f.hx + f.vd * f.hd);
     // (the cadence for this speed relative to the figure's size)
-    const T = followStepTime(v / this.k);
+    const T = (this.followLaw ?? followStepTime)(v / this.k);
     const Lnom = clamp(v * T, 5 * this.k, FOLLOW_L_MAX * this.k);
     const T1 = moving ? T : T * 0.92;
     // the spot the pelvis should be at when the step lands, and the line to it
@@ -603,6 +609,7 @@ export class Gait {
     let L = 0.5 * Lnom + (alongU - sFront);
     const Lmax = FOLLOW_L_MAX * this.k;
     L = clamp(L, Math.max(2.2 * this.k, 0.3 * Lnom), moving ? Math.min(Lmax, 1.4 * Lnom + 6 * this.k) : Math.min(Lmax, 1.3 * Lnom + 6 * this.k));
+    if (this.stepMax !== null) L = Math.min(L, this.stepMax * this.k);
     const sLand = sFront + L;
     const sNext = sLand + Math.max(Lnom, 2.2 * this.k);
     this.steps = [

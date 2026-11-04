@@ -24,13 +24,45 @@ const PI = Math.PI;
 /** rig units to world units at the reference depth: the pickers are FIGURE_H tall, the gardener's rig 122 */
 export const UNIT = FIGURE_H / 122;
 const CROUCH_DROP = 24;
-const WALK_DROP = 3.5;
+/**
+ * The walk's carriage, fitted to the same capture (CMU 07_01) by the knee's bend over the cycle, the pelvis's bob and
+ * where the feet land under it (rig units, or leg lengths where said):
+ *  - WALK_DROP: the hips walk this much below their standing height (it was 3.5, and with the old reach the stance
+ *    knee never got below 30 degrees and bent to 55 as the foot trailed: a crouching walk; the subject's straightens
+ *    to a degree or two before the heel lifts)
+ *  - WALK_REACH: how straight a leg may get while walking (leg lengths): all the way, as a walker's stance leg does
+ *    (standing and stepping in place keep the rig's own DIM.LMAX)
+ *  - WALK_LEAD: the pelvis carried ahead of the feet (leg lengths): a walker's feet are on average 0.09 of a leg
+ *    behind the hips (the trailing leg pushes from well back, the leading foot lands nearer under the body). Without
+ *    it the leading foot struck half a leg ahead and the hips were pulled down to reach it at every step
+ * With these the stance knee runs 29, 28, 24, 19 degrees through stance (the subject: 31, 22, 15, 1), the swing knee
+ * peaks at 64 (66), the pelvis bobs 0.049 of a leg (0.054) and never sinks below the measured bob by more than 0.01.
+ */
+const WALK_DROP = 1.5;
+const WALK_REACH = 1;
+const WALK_LEAD = 0.09;
 const ARM = 49;
 const TORSO_W = 9.4;
 const TORSO_D = 8;
 const WALK_TURN = 2.0;
 
 const mk = (): IK3Out => ({ joint: [0, 0, 0], end: [0, 0, 0], reach: true });
+
+/**
+ * The picker's step time for a speed when it walks with a lead (the gait's follow), from the same capture as the walk
+ * curves (CMU subject 07): trial 01, a brisk walk, is 1.70 leg lengths a second in 0.54 s steps (0.92 of a leg each);
+ * trial 04, a slow walk, 1.16 legs a second in 0.72 s steps (0.84). Between them the step time goes as speed^-0.76, so
+ * a quicker walk is mostly quicker steps and only a little longer ones. (The gait's own law, speed^-0.42, lengthens
+ * the stride far faster: at a brisk pace it asked for 1.15 legs a step, more than the legs reach at the walk's hip
+ * height, and the hips sank at every double support.) Speeds are the gait's, against the figure's size: a leg is
+ * 57 rig units, 54.2 of the gait's units.
+ */
+const GAIT_LEG = 54.2;
+const CMU_WALK = { v: 1.7 * GAIT_LEG, T: 0.54, a: 0.76 } as const;
+/** the longest step (leg lengths) the picker takes, however far it has fallen behind: about what the legs reach from
+ *  the walk's hip height with the trailing heel up (the subject's brisk steps are 0.92) */
+const STEP_MAX = 0.98;
+const followLaw = (v: number): number => clamp(CMU_WALK.T * Math.pow(CMU_WALK.v / Math.max(v, 1), CMU_WALK.a), 0.42, 0.9);
 
 /** a point in the world: x, depth y, and h above the ground */
 export interface W3 {
@@ -140,6 +172,9 @@ export class Figure {
     this.id = id;
     this.seed = seed;
     this.gait = new Gait(x, y / KAPPA, yaw);
+    this.gait.followLaw = followLaw;
+    // (catching up with its lead round a bend it once stepped 1.2 legs, and the hips fell to half their height)
+    this.gait.stepMax = STEP_MAX * GAIT_LEG;
     this.yaw.snap(yaw);
     this.solve();
   }
@@ -263,9 +298,10 @@ export class Figure {
 
   /** walk in step with a moving place (FOLLOW, here a brisk walk's lead): its position and velocity in world units,
    *  heading as `yaw` */
-  follow(x: number, y: number, vx: number, vy: number, yaw: number): void {
+  follow(x: number, y: number, vx: number, vy: number, yaw: number, face: number = yaw): void {
     this.followGoal = { x, d: y / KAPPA, vx, vd: vy / KAPPA, hx: Math.cos(yaw), hd: Math.sin(yaw) };
-    this.yawWant = yaw;
+    // (the way the steps go is the way it is led; the body may face a little ahead of it, into a coming bend)
+    this.yawWant = face;
     // (the body turns with the way it is led, round a bend in the route, as it does on an ordinary walk)
     this.yawTrack = true;
     this.following = true;
@@ -449,7 +485,7 @@ export class Figure {
     const wH = Math.max(this.wHold[0].v, this.wHold[1].v);
     const idleShift = (0.7 * Math.sin(this.clock * 0.55 + this.seed) + 0.3 * Math.sin(this.clock * 1.31 + 2)) * calm * (1 - sigma) * (1 - wH * 0.6);
     const sitBack = this.sitBack * sstep(sigma / 0.8);
-    const shiftA = 0.35 * idleShift - sitBack;
+    const shiftA = 0.35 * idleShift - sitBack + wa * WALK_LEAD * LEG;
     const shiftB = this.sway.x + 1.0 * idleShift + wa * cyc(WALK_SWAY, phi) * LEG;
     const ho: V3 = [fP[0] * shiftA + lP[0] * shiftB, fP[1] * shiftA + lP[1] * shiftB, 0];
     const A: [V3, V3] = [[0, 0, 0], [0, 0, 0]];
@@ -458,12 +494,13 @@ export class Figure {
       A[i] = [(f.x - gp.px) / S, (f.d - gp.pd) / S, f.h + this.footLift[i]!.x];
     }
     let H0 = 1e9;
+    const R = lerp(DIM.LMAX, WALK_REACH * LEG, wa);
     for (let i = 0; i < 2; i++) {
       const sg = i === 0 ? 1 : -1;
       const hx = ho[0] + lP[0] * sg * DIM.HIPW;
       const hz = ho[1] + lP[1] * sg * DIM.HIPW;
       const dh = Math.hypot(A[i]![0] - hx, A[i]![1] - hz);
-      const need = A[i]![2] + Math.sqrt(Math.max(1, DIM.LMAX * DIM.LMAX - dh * dh));
+      const need = A[i]![2] + Math.sqrt(Math.max(1, R * R - dh * dh));
       H0 = H0 > 1e8 ? need : softMin(H0, need, 1.2);
     }
     const crouch = this.crouchS.x * CROUCH_DROP;

@@ -103,10 +103,13 @@ depth sorting, crewArt's costume sprites; import what is generic, copy and adapt
   crates. The free fruit on each side ripens with each round (offer); A picks only half of it, and the rest drops
   into the grass and lies there browning and fading over about a year (WINDFALL): **the free money left on the
   branch**. B's grass stays clear.
-- At 1x the 30 years pass in 30 s, so the picker's round (about 18 s at 1x: it picks from about 6 s into a play and
-  tips at about 14 s) shows where the money goes rather than
-  carrying every dollar; the money plants the trees (a seedling comes up at the slot the picker last tipped at, or
-  nearby in the same row). The picker's clock runs at the playback speed; at high speeds it works without pause.
+- At 1x the 30 years pass in 30 s, so the picker's round (about 30 to 43 s at 1x, by how far the slot is: it picks
+  from about 10 s into a play and tips at 20 to 29 s) shows where the money goes rather than carrying every dollar.
+  The walking is at a person's pace and cadence (the gait measured from CMU 07_01: a brisk walk of about 0.94 of a leg
+  a step at 118 steps a minute, the pelvis carried ahead of the feet and the stance leg straightening as the subject's
+  does); only the work at either end keeps the crew's quicker clock. The money plants the trees (a seedling comes up
+  at the slot the picker last tipped at, or nearby in the same row). The picker's clock runs at the playback speed;
+  at high speeds it works without pause.
 - At the end both put the basket down, sit on their upturned crates, take an apple, and look up at their orchards.
 - Animation quality bar (non-negotiable, as the vine, the snow and the brick): never teleport or snap a pose; every
   transition blended over at least 0.25 s; a proper gait with no foot sliding; turning through a three-quarter view;
