@@ -2,3 +2,24 @@ node_modules
 dist
 test-results
 playwright-report
+
+# verification screenshots kept out of the repo
+/docs/screens/brick/
+/docs/screens/landing/landing-vine.png
+/docs/screens/orchard-trees/
+/docs/screens/ttg-age35-loupe.png
+/docs/screens/ttg-start-closeup.png
+/docs/screens/vine-gardener/check-carry.png
+/docs/screens/vine-gardener/check-rake-walk.png
+/docs/screens/vine-gardener/check-turns.png
+/docs/screens/vine-gardener/cottages-before-after.png
+/docs/screens/vine-gardener/garden-walls.png
+/docs/screens/vine-gardener/grass-seam-before-after.png
+/docs/screens/vine-gardener/labels-with-interest.png
+/docs/screens/vine-gardener/rake-compare.webm
+/docs/screens/vine-gardener/speed-slider.png
+/docs/screens/vine-gardener/turn-rake-compare.webm
+/docs/screens/vine-gardener/walk-compare-2.webm
+/docs/screens/vine-gardener/walk-compare.webm
+/docs/screens/vine-gardener/walls-shortened.png
+/docs/screens/vine-gardener/wide-3840.png
