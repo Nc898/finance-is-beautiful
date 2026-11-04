@@ -638,6 +638,56 @@ html[data-ready] .hero-sub {
   width: 100%;
 }
 
+/* ---------- The orchard's entry: harvest ochre, a twig hung with golden and red apples for a rule, a late-summer wash ---------- */
+
+/* the twig for the rule (a golden apple and a red one in turn: the savings and the match), a warm wash behind the painting */
+.demo-item[data-theme='orchard'] {
+  position: relative;
+  isolation: isolate;
+  border-top: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='14' viewBox='0 0 72 14'%3E%3Cpath d='M0 3.2c9-.9 17 .7 26-.2s18-1 27 .1 13 .3 19-.1' fill='none' stroke='%236b4a2a' stroke-opacity='.55' stroke-width='.9' stroke-linecap='round'/%3E%3Cpath d='M14 3.1c.6 1.4.4 2.6-.2 3.7M49 3.2c-.5 1.3-.3 2.5.3 3.6' fill='none' stroke='%236b4a2a' stroke-opacity='.5' stroke-width='.6'/%3E%3Ccircle cx='13.7' cy='9.4' r='2.9' fill='%23d9ae3a' fill-opacity='.8'/%3E%3Ccircle cx='12.8' cy='8.5' r='.8' fill='%23f6e3a0' fill-opacity='.8'/%3E%3Ccircle cx='49.4' cy='9.3' r='2.9' fill='%23b83a2c' fill-opacity='.72'/%3E%3Ccircle cx='48.5' cy='8.4' r='.8' fill='%23e98a74' fill-opacity='.75'/%3E%3Cpath d='M30 3c2.4-2.6 6-2.6 7.6-.9-2.3 1.9-5.1 2.3-7.6.9z' fill='%236f8a3a' fill-opacity='.55'/%3E%3Cpath d='M63 3.1c1.8 1.9 1.6 4.4.4 5.6-1.6-1.4-1.6-3.7-.4-5.6z' fill='%236f8a3a' fill-opacity='.5'/%3E%3C/svg%3E")
+    0 0 / 72px 14px repeat-x;
+}
+.demo-item[data-theme='orchard']::before {
+  content: '';
+  position: absolute;
+  inset: 4% 34% 0 -6%;
+  z-index: -1;
+  background:
+    radial-gradient(48% 52% at 42% 55%, rgba(226, 184, 92, 0.16), transparent 72%),
+    radial-gradient(32% 40% at 70% 30%, rgba(184, 70, 52, 0.08), transparent 70%),
+    radial-gradient(30% 34% at 18% 78%, rgba(140, 160, 80, 0.13), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.demo[data-theme='orchard'] {
+  --accent: #8a5a12;
+  --accent-deep: #5e3d0a;
+  padding-top: 30px;
+}
+
+/* a row of little apples for an underline: they are set out under the words while hovered */
+.demo[data-theme='orchard'] .demo-cta > span {
+  position: relative;
+  background: none;
+}
+.demo[data-theme='orchard'] .demo-cta > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 0;
+  height: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='6' viewBox='0 0 14 6'%3E%3Ccircle cx='3.4' cy='3.3' r='2.3' fill='%23d9ae3a' stroke='%238a5a12' stroke-width='.5'/%3E%3Ccircle cx='10.4' cy='3.3' r='2.3' fill='%23b83a2c' stroke='%236e2018' stroke-width='.5'/%3E%3C/svg%3E")
+    0 0 / 14px 6px repeat-x;
+  transition: width 0.6s cubic-bezier(0.3, 0.6, 0.2, 1);
+}
+.demo[data-theme='orchard']:hover .demo-cta > span::after,
+.demo[data-theme='orchard']:focus-visible .demo-cta > span::after {
+  width: 100%;
+}
+
 /* ---------- Closing and footer ---------- */
 
 .closing {

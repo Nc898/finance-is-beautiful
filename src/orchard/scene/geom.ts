@@ -70,10 +70,11 @@ export const WINDFALL = bothRect({ x0: 384, x1: 470, y0: 486, y1: 518 });
 export const ROWS = 6;
 export const COLS = 6;
 /** the depth of each row of slots, back (first planted) to front */
-export const ROW_Y = [354, 374, 396, 420, 446, 474] as const;
-/** the slots' x on A's side, outer to inner (odd rows are set half a gap inward, as orchards are planted) */
+export const ROW_Y = [344, 368, 393, 419, 446, 474] as const;
+/** the slots' x on A's side, outer to inner (odd rows are set half a gap inward, in quincunx, as orchards are
+ *  planted: each crown then stands in the gap between the two in front of it, never stacked on one) */
 const COL_X = [70, 126, 182, 238, 294, 350] as const;
-const STAGGER = 14;
+const STAGGER = 28;
 
 /**
  * Every slot of each orchard in planting order: slot k is row ⌊k / COLS⌋ (from the back), column k mod COLS (from
@@ -88,11 +89,11 @@ export const SLOTS: Record<PickerId, Pt[]> = (() => {
 
 /**
  * The young trees' sizes: a tree of size 1 (the largest any tree reaches, YoungTree.size) stands TREE_MAX.h tall
- * (ground to crown top) with a crown TREE_MAX.w across, at depth FIGURE_REF_Y (scaled by depthScale). About 3.4 m:
+ * (ground to crown top) with a crown TREE_MAX.w across, at depth FIGURE_REF_Y (scaled by depthScale). About 2.9 m:
  * an apple tree on a dwarfing rootstock in its prime. Crown area is proportional to size, so a size-0.25 tree is
  * half as tall and half as wide. The crowns of neighbours touch and overlap a little when grown, as in a real orchard.
  */
-export const TREE_MAX = { h: 124, w: 92 } as const;
+export const TREE_MAX = { h: 106, w: 96 } as const;
 
 /** the path along the front of both orchards, where the pickers walk between the crates and the farmer's tree */
 export const PATH = { y0: 498, y1: 530 } as const;

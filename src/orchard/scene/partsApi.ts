@@ -86,8 +86,8 @@ export interface PickerIntent {
   picked: number;
   /** the slot to tip at (SLOTS[id][planting]) or −1 (then it tips at the first slot) */
   planting: number;
-  /** work: rounds per second wanted (about 0.12 at 1x, × speed, capped by a brisk walk); 0 finishes the round and
-   *  waits at the crates. */
+  /** work: rounds per second wanted (about 0.12 at 1x, × speed, capped by a brisk walk); 0 (paused) holds the
+   *  picker where it is, so a scrubbed, placed moment stays as placed. */
   pace: number;
   /** months passing per second (0 when paused): the low fruit ripens with the months, so the windfalls keep pace
    *  with the money even when the picker cannot. */

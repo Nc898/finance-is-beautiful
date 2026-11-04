@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="Two apple pickers on the same pay, with the same match from work. One saves 3% and leaves half the free fruit to fall; the other saves 6% and picks it all. Every basket is planted, and the orchards grow with the years." />
+<title>Low-Hanging Fruit</title>
+</head>
+<body>
+<!-- loader: Low-Hanging Fruit -->
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two young apple orchards on a farm, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="plate" id="plate-a" data-picker="a">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">A</span><span class="sr-only">Picker A, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-worth"></p>
+          <p class="plate-missed" hidden></p>
+        </div>
+        <div class="plate" id="plate-b" data-picker="b">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">B</span><span class="sr-only">Picker B, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-worth"></p>
+          <p class="plate-missed" hidden></p>
+        </div>
+        <div class="plate plate-ghost" id="plate-ghost" aria-hidden="true">
+          <p class="plate-id"><span class="roundel">A</span><span class="plate-name">Saves 12.5%</span></p>
+          <p class="plate-terms">$10,417 a month + $4,167 match</p>
+          <p class="plate-worth">Worth $55,555,555</p>
+          <p class="plate-missed">$2,222,222 left on the branch</p>
+        </div>
+        <div class="diff" id="diff" hidden>
+          <p class="diff-label" id="diff-label"></p>
+          <p class="diff-value" id="diff-value"></p>
+          <p class="diff-sub" id="diff-sub"></p>
+        </div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0, month 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="Low-Hanging Fruit, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Low-Hanging Fruit</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play</span>
+          </button>
+
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="360" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field wide" data-field="salary">
+            <label for="f-salary">Pay ($ a year)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease pay">−</button>
+              <input id="f-salary" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-salary" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase pay">+</button>
+            </div>
+            <p class="field-error" id="err-salary" hidden></p>
+          </div>
+
+          <div class="field" data-field="years">
+            <label for="f-years">Years</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease years">−</button>
+              <input id="f-years" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-years" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase years">+</button>
+            </div>
+            <p class="field-error" id="err-years" hidden></p>
+          </div>
+
+          <div class="field" data-field="growth">
+            <label for="f-growth">Growth (% a year)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease growth">−</button>
+              <input id="f-growth" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-growth" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase growth">+</button>
+            </div>
+            <p class="field-error" id="err-growth" hidden></p>
+          </div>
+
+          <fieldset class="set">
+            <legend>The match</legend>
+            <div class="set-fields">
+              <div class="field" data-field="rate">
+                <label for="f-rate">Match (% of each $1)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease the match">−</button>
+                  <input id="f-rate" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-rate" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase the match">+</button>
+                </div>
+                <p class="field-error" id="err-rate" hidden></p>
+              </div>
+              <div class="field" data-field="limit">
+                <label for="f-limit">Up to (% of pay)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease the match limit">−</button>
+                  <input id="f-limit" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-limit" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase the match limit">+</button>
+                </div>
+                <p class="field-error" id="err-limit" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="set picker-set" data-picker="a">
+            <legend><span class="roundel" aria-hidden="true">A</span>Picker A</legend>
+            <div class="field" data-field="a.save">
+              <label for="f-a-save"><span class="sr-only">Picker A </span>Saves (% of pay)</label>
+              <div class="stepper">
+                <button type="button" class="step" data-dir="-1" aria-label="Decrease what picker A saves">−</button>
+                <input id="f-a-save" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-a-save" />
+                <button type="button" class="step" data-dir="1" aria-label="Increase what picker A saves">+</button>
+              </div>
+              <p class="field-error" id="err-a-save" hidden></p>
+            </div>
+          </fieldset>
+
+          <fieldset class="set picker-set" data-picker="b">
+            <legend><span class="roundel" aria-hidden="true">B</span>Picker B</legend>
+            <div class="field" data-field="b.save">
+              <label for="f-b-save"><span class="sr-only">Picker B </span>Saves (% of pay)</label>
+              <div class="stepper">
+                <button type="button" class="step" data-dir="-1" aria-label="Decrease what picker B saves">−</button>
+                <input id="f-b-save" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-b-save" />
+                <button type="button" class="step" data-dir="1" aria-label="Increase what picker B saves">+</button>
+              </div>
+              <p class="field-error" id="err-b-save" hidden></p>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: the same pay every year (no raises), money saved and matched monthly, and steady growth, with no fees, taxes or vesting rules. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">Each month</h2>
+            <p class="formula-lead">Saved = pay ÷ 12 × the share saved. Match = pay ÷ 12 × the match × the share saved, counted up to the limit. Left on the branch = the match on offer, less the match taken.</p>
+            <div class="formula-set" data-picker="a">
+              <p class="formula-who"><span class="roundel" aria-hidden="true">A</span>Picker A</p>
+              <p class="formula"><span class="formula-k">Saved</span><span data-cell="a.ownFormula"></span></p>
+              <p class="formula"><span class="formula-k">Match</span><span data-cell="a.matchFormula"></span></p>
+              <p class="formula"><span class="formula-k">Left</span><span data-cell="a.missedFormula"></span></p>
+            </div>
+            <div class="formula-set" data-picker="b">
+              <p class="formula-who"><span class="roundel" aria-hidden="true">B</span>Picker B</p>
+              <p class="formula"><span class="formula-k">Saved</span><span data-cell="b.ownFormula"></span></p>
+              <p class="formula"><span class="formula-k">Match</span><span data-cell="b.matchFormula"></span></p>
+              <p class="formula"><span class="formula-k">Left</span><span data-cell="b.missedFormula"></span></p>
+            </div>
+            <p class="formula-lead">Then value = value × (1 + <span data-cell="growth">7%</span> ÷ 12) + saved + match: the growth first, then the month's money.</p>
+
+            <h2 class="how-h">The whole time</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-all">
+                <caption class="sr-only">Each picker from start to finish</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name">Picker A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name">Picker B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Saved each month</th><td data-cell="a.own"></td><td data-cell="b.own"></td></tr>
+                  <tr><th scope="row">Match each month</th><td data-cell="a.match"></td><td data-cell="b.match"></td></tr>
+                  <tr><th scope="row">Match left each month</th><td data-cell="a.missed"></td><td data-cell="b.missed"></td></tr>
+                  <tr><th scope="row">Months</th><td data-cell="a.months"></td><td data-cell="b.months"></td></tr>
+                  <tr><th scope="row">Saved in all</th><td data-cell="a.ownTotal"></td><td data-cell="b.ownTotal"></td></tr>
+                  <tr><th scope="row">Match in all</th><td data-cell="a.matchTotal"></td><td data-cell="b.matchTotal"></td></tr>
+                  <tr><th scope="row">Match left in all</th><td data-cell="a.missedTotal"></td><td data-cell="b.missedTotal"></td></tr>
+                  <tr class="strong"><th scope="row">Worth at the end</th><td data-cell="a.final"></td><td data-cell="b.final"></td></tr>
+                  <tr><th scope="row">The savings grew to</th><td data-cell="a.ownGrew"></td><td data-cell="b.ownGrew"></td></tr>
+                  <tr class="strong"><th scope="row">The match grew to</th><td data-cell="a.matchGrew"></td><td data-cell="b.matchGrew"></td></tr>
+                  <tr><th scope="row">The match left would have grown to</th><td data-cell="a.missedGrew"></td><td data-cell="b.missedGrew"></td></tr>
+                  <tr><th scope="row">Growth passes what was put in</th><td data-cell="a.pass"></td><td data-cell="b.pass"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">At <span id="how-age">year 0, month 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-now">
+                <caption class="sr-only">Each picker at the current month</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name2">Picker A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name2">Picker B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Worth</th><td data-cell="a.worth"></td><td data-cell="b.worth"></td></tr>
+                  <tr><th scope="row">Saved so far</th><td data-cell="a.ownSoFar"></td><td data-cell="b.ownSoFar"></td></tr>
+                  <tr><th scope="row">Match so far</th><td data-cell="a.matchSoFar"></td><td data-cell="b.matchSoFar"></td></tr>
+                  <tr><th scope="row">Left on the branch so far</th><td data-cell="a.missedSoFar"></td><td data-cell="b.missedSoFar"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">Worth, year by year</h2>
+            <div class="table-wrap">
+              <table class="compare yearly" id="yearly">
+                <caption class="sr-only">What each picker's savings are worth at the end of each year</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Year</th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name3">Picker A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name3">Picker B</span></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <ul class="conventions">
+              <li>Each month the savings grow by the yearly growth ÷ 12, then the month's savings and match go in.</li>
+              <li>Golden apples and golden trees are each picker's own savings. Red apples and red trees are the match from work, picked from the farmer's tree. Every tree holds the same money when planted, so the orchards compare directly.</li>
+              <li>The fruit that falls is the match left untaken: work offers it, but only on money saved.</li>
+              <li>The same pay every year (no raises), money saved and matched monthly, and steady growth, with no fees, taxes or vesting rules. Real plans vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Saving at work</p>
+      <h2 class="intro-title" id="intro-title">Low-Hanging Fruit</h2>
+      <p class="intro-lede" id="intro-lede">The same pay and the same match from work. What does saving 3% instead of 6% leave behind?</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>Each picker's own savings are <strong>golden apples</strong>, from the crates.</li>
+        <li>The employer's match is the <strong>farmer's red apples</strong>: half a basket for every basket saved, up to 6% of pay.</li>
+        <li>Every basket is <strong>planted</strong>. The orchard is the savings, and each tree grows with the years.</li>
+      </ul>
+      <h3 class="intro-h">Two pickers</h3>
+      <ul class="intro-list">
+        <li><strong>A saves 3% of pay</strong> (left) and picks only half the free fruit. The rest falls.</li>
+        <li><strong>B saves 6%</strong> (right) and picks it all, but takes home $150 less a month.</li>
+        <li>Both earn the same, so the orchards compare directly.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change the pay, the match and what each saves in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/orchard/main.ts"></script>
+</body>
+</html>

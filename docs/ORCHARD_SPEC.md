@@ -63,7 +63,8 @@ Composition (world 1000 × 640, geometry fixed in geom.ts; read its header first
   (a lean, a split, lichen), a broad crown of deep late-summer leaf heavy with red apples (many small translucent
   dabs, highlights, darker undersides), and its **low boughs** reaching out to either side over the grass (BOUGH),
   bending under the fruit, low enough for anyone to pick. A ladder leans against it (LADDER), a prop.
-- The pickers' orchards (SLOTS): two plots of grass mown between the rows, the young trees on their stakes. Before
+- The pickers' orchards (SLOTS): two plots of grass mown between the rows, the young trees on their stakes, planted
+  in quincunx (each row set half a gap across from the one in front) so the crowns never stack. Before
   the first tree, the empty slots are just grass with the row lines faintly mown.
 - The path (PATH) along the front of both orchards to the farmer's tree, worn in the grass. At each outer front
   corner the picker's stack of wooden crates of golden apples (CRATES; stencilled in its accent colour) and an
@@ -102,7 +103,8 @@ depth sorting, crewArt's costume sprites; import what is generic, copy and adapt
   crates. The free fruit on each side ripens with each round (offer); A picks only half of it, and the rest drops
   into the grass and lies there browning and fading over about a year (WINDFALL): **the free money left on the
   branch**. B's grass stays clear.
-- At 1x the 30 years pass in 30 s, so the picker's round (about 8 s at 1x) shows where the money goes rather than
+- At 1x the 30 years pass in 30 s, so the picker's round (about 18 s at 1x: it picks from about 6 s into a play and
+  tips at about 14 s) shows where the money goes rather than
   carrying every dollar; the money plants the trees (a seedling comes up at the slot the picker last tipped at, or
   nearby in the same row). The picker's clock runs at the playback speed; at high speeds it works without pause.
 - At the end both put the basket down, sit on their upturned crates, take an apple, and look up at their orchards.

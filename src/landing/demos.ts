@@ -11,8 +11,9 @@ export interface Demo {
   href: string;
   /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the vine's
    *  autumn rust, tendrils and falling leaves, the snow's winter blue, snowflakes and birds on the rule, or the
-   *  bricks' deep red, a course of bricks for the rule and a blossom wash. */
-  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick';
+   *  bricks' deep red, a course of bricks for the rule and a blossom wash, or the orchard's harvest ochre, a twig
+   *  hung with golden and red apples for the rule and a late-summer wash. */
+  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard';
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -115,6 +116,18 @@ async function paintBrickByBrick(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
+/** Low-Hanging Fruit, late in the run: baked from the real scene (scripts/bake-orchard-preview.mjs), as the brick is. */
+async function paintLowHangingFruit(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-orchard.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 export const DEMOS: Demo[] = [
   {
     slug: 'time-to-grow',
@@ -155,5 +168,13 @@ export const DEMOS: Demo[] = [
     href: './brick-by-brick.html',
     theme: 'brick',
     paintPreview: paintBrickByBrick,
+  },
+  {
+    slug: 'low-hanging-fruit',
+    title: 'Low-Hanging Fruit',
+    summary: 'Two pickers, the same pay and the same match from work, saving 3% or 6%.',
+    href: './low-hanging-fruit.html',
+    theme: 'orchard',
+    paintPreview: paintLowHangingFruit,
   },
 ];
