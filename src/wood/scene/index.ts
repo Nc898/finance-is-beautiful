@@ -39,7 +39,7 @@ export function createWoodScene(canvas: HTMLCanvasElement): WoodSceneAPI {
   let fringe: HTMLCanvasElement | null = null;
   let piles: Record<FundId, Woodpile> | null = null;
   let sprites: Sprites | null = null;
-  let ghost: { cv: HTMLCanvasElement; ctx: CanvasRenderingContext2D; m: number; px: number } | null = null;
+  let ghost: { cv: HTMLCanvasElement; ctx: CanvasRenderingContext2D; rim: HTMLCanvasElement; m: number; px: number } | null = null;
   const painters: Record<FundId, TreePainter> = { a: new TreePainter(getModel(TREE_SEED)), b: new TreePainter(getModel(TREE_SEED)) };
   const ghostPainter = new TreePainter(getModel(TREE_SEED));
   const twigs: Record<FundId, Twigs> = { a: new Twigs(311), b: new Twigs(313) };
@@ -87,7 +87,7 @@ export function createWoodScene(canvas: HTMLCanvasElement): WoodSceneAPI {
       const gw = Math.ceil(2 * HALF * TREE_K * c.s * c.dpr);
       const gh = Math.ceil((TREE_H + PAD_TOP) * TREE_K * c.s * c.dpr);
       const gcv = makeCanvas(gw, gh);
-      ghost = { cv: gcv, ctx: gcv.getContext('2d')!, m: -1, px: c.s * c.dpr * TREE_K };
+      ghost = { cv: gcv, ctx: gcv.getContext('2d')!, rim: makeCanvas(gw, gh), m: -1, px: c.s * c.dpr * TREE_K };
       if (!readyDone) {
         readyDone = true;
         resolveReady();
@@ -121,6 +121,27 @@ export function createWoodScene(canvas: HTMLCanvasElement): WoodSceneAPI {
     g.fillStyle = 'rgba(140,150,190,0.16)';
     g.fillRect(0, 0, cv.width, cv.height);
     g.globalCompositeOperation = 'source-over';
+    // a fine ink contour round the ghost's silhouette, so it reads as the tree it would have been rather than one
+    // more tree in the wood: the silhouette in ink, nudged a pixel each way, minus the silhouette itself
+    const rim = ghost.rim;
+    const r = rim.getContext('2d')!;
+    r.globalCompositeOperation = 'source-over';
+    r.clearRect(0, 0, rim.width, rim.height);
+    const d = Math.max(1, Math.round(cam.dpr));
+    for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) r.drawImage(cv, dx, dy);
+    r.globalCompositeOperation = 'source-in';
+    r.fillStyle = 'rgba(70,74,110,0.5)';
+    r.fillRect(0, 0, rim.width, rim.height);
+    r.globalCompositeOperation = 'destination-out';
+    r.drawImage(cv, 0, 0);
+    // broken like a dry pen: a few soft gaps across the line
+    r.fillStyle = 'rgba(0,0,0,0.55)';
+    for (let i = 0; i < 9; i++) {
+      const y = ((i * 0.37 + 0.11) % 1) * rim.height;
+      r.fillRect(0, y, rim.width, rim.height * 0.035);
+    }
+    r.globalCompositeOperation = 'source-over';
+    g.drawImage(rim, 0, 0);
   };
 
   const toScreen = (x: number, y: number): WoodScreenPoint => {

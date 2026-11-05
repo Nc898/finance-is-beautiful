@@ -82,5 +82,5 @@ zooms; extra height goes to the sky.
 ## Not done yet (next steps)
 - A figure (a forester with a pruning saw taking the cut and carrying it to the pile) in the manner of the
   orchard's pickers: the scene works without one, but a figure would match the sister demos' liveliness.
-- An ink outline for the ghost crown, if it reads as a background tree for some viewers.
+- (Done: the ghost crown has a fine, broken ink contour so it reads as the no-fee tree, not a tree in the wood.)
 - Laptop and reduced-motion projects have not been run for this suite; desktop and mobile pass.
