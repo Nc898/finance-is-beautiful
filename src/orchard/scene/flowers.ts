@@ -104,7 +104,8 @@ export function yarrow(ctx: CanvasRenderingContext2D, rnd: Rand, x: number, y: n
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  const R = h * 0.17;
+  // a head is never drawn with a negative radius, whatever size it is asked for
+  const R = Math.max(0, h * 0.17);
   const pink = rnd.chance(0.2);
   for (let i = 0; i < 16; i++) {
     const a = rnd.range(0, Math.PI * 2);
@@ -292,7 +293,11 @@ function drifts(ctx: CanvasRenderingContext2D, rnd: Rand, x0: number, x1: number
 const VERGE: Kind[][] = [['knapweed', 'yarrow'], ['scabious', 'seed'], ['oxeye', 'oxeye', 'yarrow'], ['knapweed', 'poppy'], ['nest', 'seed'], ['scabious', 'knapweed'], ['seed', 'seed', 'dock']];
 
 /** the verges: between the path and the track, along the near side of the track, and the long grass at the front */
-export function paintVerges(ctx: CanvasRenderingContext2D, rnd: Rand, x0: number, x1: number, yBottom: number): void {
+export function paintVerges(ctx: CanvasRenderingContext2D, rnd: Rand, x0: number, x1: number, yBottom0: number): void {
+  // the camera's bottom edge can sit above the track on a very short canvas (a hidden or tiny viewport); the near
+  // verge is then painted just under the track, out of sight, rather than up the picture, where the depth size goes
+  // negative and arc() throws. Every real camera ends well below TRACK.y1 + 12, so this never moves a flower.
+  const yBottom = Math.max(yBottom0, TRACK.y1 + 12);
   // between the path and the track (a strip of long grass with flowers in it)
   drifts(ctx, rnd, x0, x1, 536, TRACK.y0 - 3, VERGE, 0.95, 0.9);
   // the near verge, under the track: thicker, taller, and the long grass standing up out of it
