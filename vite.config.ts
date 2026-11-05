@@ -32,6 +32,7 @@ export default defineConfig({
         onARoll: 'on-a-roll.html',
         brickByBrick: 'brick-by-brick.html',
         lowHangingFruit: 'low-hanging-fruit.html',
+        aLittleOffTheTop: 'a-little-off-the-top.html',
         riverSceneTest: 'river-scene-test.html',
         slice: 'slice.html',
         sceneTest: 'scene-test.html',
