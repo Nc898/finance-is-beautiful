@@ -57,7 +57,7 @@ export class Twigs {
         ground: groundY + r.range(-4, 8),
         age: 0,
         rest: 0,
-        len: r.range(2.6, 4.2),
+        len: r.range(5, 7.5),
         leaf: r.pick(LEAF),
       });
     }
@@ -83,7 +83,7 @@ export class Twigs {
       ctx.rotate(t.a);
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = 'rgba(92,66,42,0.9)';
-      ctx.lineWidth = 0.45;
+      ctx.lineWidth = 0.7;
       ctx.beginPath();
       ctx.moveTo(-t.len / 2, 0);
       ctx.lineTo(t.len / 2, 0);
@@ -95,7 +95,7 @@ export class Twigs {
         [0.5, 1],
       ] as const) {
         ctx.beginPath();
-        ctx.ellipse(px * t.len, side * 1.1, 1.5, 0.75, side * 0.6, 0, Math.PI * 2);
+        ctx.ellipse(px * t.len, side * 1.6, 2.6, 1.25, side * 0.6, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
