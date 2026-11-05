@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="The same savings in two funds that grow alike, one charging a 1% yearly fee and one 0.1%. Each fund is a tree in a bluebell wood; the fee is cut off the top and stacked in a woodpile, and a pale ghost shows the tree it would have been. Over 40 years a 1% fee costs a quarter of everything." />
+<title>A Little Off the Top</title>
+</head>
+<body>
+<!-- loader: A Little Off the Top -->
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Two trees in a bluebell wood, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="plate" id="plate-a" data-loan="a">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">A</span><span class="sr-only">Fund A, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-owed"></p>
+          <p class="plate-interest"></p>
+        </div>
+        <div class="plate" id="plate-b" data-loan="b">
+          <p class="plate-id"><span class="roundel" aria-hidden="true">B</span><span class="sr-only">Fund B, </span><span class="plate-name"></span></p>
+          <p class="plate-terms"></p>
+          <p class="plate-owed"></p>
+          <p class="plate-interest"></p>
+        </div>
+        <div class="plate plate-ghost" id="plate-ghost" aria-hidden="true">
+          <p class="plate-id"><span class="roundel">A</span><span class="plate-name">2.875% fee</span></p>
+          <p class="plate-terms">Worth $12,000,000</p>
+          <p class="plate-owed">$3,000,000 in fees</p>
+          <p class="plate-interest">$13,000,000 lost to the fee</p>
+        </div>
+        <div class="diff" id="diff" hidden>
+          <p class="diff-label" id="diff-label"></p>
+          <p class="diff-value" id="diff-value"></p>
+          <p class="diff-sub" id="diff-sub"></p>
+        </div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Year 0, month 0</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="A Little Off the Top, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>A Little Off the Top</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play</span>
+          </button>
+
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Year 0, month 0</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="480" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <div class="field" data-field="start">
+            <label for="f-start">To start ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease the starting amount">−</button>
+              <input id="f-start" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-start" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase the starting amount">+</button>
+            </div>
+            <p class="field-error" id="err-start" hidden></p>
+          </div>
+          <div class="field" data-field="monthly">
+            <label for="f-monthly">Each month ($)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease the monthly saving">−</button>
+              <input id="f-monthly" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-monthly" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase the monthly saving">+</button>
+            </div>
+            <p class="field-error" id="err-monthly" hidden></p>
+          </div>
+          <div class="field" data-field="years">
+            <label for="f-years">Years</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease the years">−</button>
+              <input id="f-years" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-years" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase the years">+</button>
+            </div>
+            <p class="field-error" id="err-years" hidden></p>
+          </div>
+          <div class="field" data-field="growth">
+            <label for="f-growth">Growth (% a year)</label>
+            <div class="stepper">
+              <button type="button" class="step" data-dir="-1" aria-label="Decrease the yearly growth">−</button>
+              <input id="f-growth" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-growth" />
+              <button type="button" class="step" data-dir="1" aria-label="Increase the yearly growth">+</button>
+            </div>
+            <p class="field-error" id="err-growth" hidden></p>
+          </div>
+          <div class="funds">
+          <fieldset class="loan" data-loan="a">
+            <legend><span class="roundel" aria-hidden="true">A</span>Fund A</legend>
+            <div class="loan-fields">
+              <div class="field" data-field="a.fee">
+                <label for="f-a-fee"><span class="sr-only">Fund A </span>Fee (% a year)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease fund A fee">−</button>
+                  <input id="f-a-fee" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-a-fee" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase fund A fee">+</button>
+                </div>
+                <p class="field-error" id="err-a-fee" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+          <fieldset class="loan" data-loan="b">
+            <legend><span class="roundel" aria-hidden="true">B</span>Fund B</legend>
+            <div class="loan-fields">
+              <div class="field" data-field="b.fee">
+                <label for="f-b-fee"><span class="sr-only">Fund B </span>Fee (% a year)</label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Decrease fund B fee">−</button>
+                  <input id="f-b-fee" type="text" inputmode="decimal" autocomplete="off" aria-describedby="err-b-fee" />
+                  <button type="button" class="step" data-dir="1" aria-label="Increase fund B fee">+</button>
+                </div>
+                <p class="field-error" id="err-b-fee" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+          </div>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Illustration only: the same saving every month, steady growth, the fee taken monthly as a share of the fund, and no taxes or other costs. Real funds and fees vary. This isn't advice.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">Each month</h2>
+            <p class="formula-lead">The fund grows by the yearly growth ÷ 12, then the fee takes the yearly fee ÷ 12 of everything in it, then the month's saving goes in. With no fee the same savings would grow by the first step alone.</p>
+            <p class="formula"><span class="roundel" aria-hidden="true">A</span><span class="sr-only">Fund A: </span><span data-cell="a.formula"></span></p>
+            <p class="formula"><span class="roundel" aria-hidden="true">B</span><span class="sr-only">Fund B: </span><span data-cell="b.formula"></span></p>
+
+            <h2 class="how-h">The whole time</h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-loan">
+                <caption class="sr-only">Each fund from start to finish</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name">Fund A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name">Fund B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Put in</th><td data-cell="a.putin"></td><td data-cell="b.putin"></td></tr>
+                  <tr><th scope="row">With no fee it would be</th><td data-cell="a.ideal"></td><td data-cell="b.ideal"></td></tr>
+                  <tr class="strong"><th scope="row">At the end</th><td data-cell="a.final"></td><td data-cell="b.final"></td></tr>
+                  <tr><th scope="row">Fees paid</th><td data-cell="a.fees"></td><td data-cell="b.fees"></td></tr>
+                  <tr class="strong"><th scope="row">What the fee cost</th><td data-cell="a.cost"></td><td data-cell="b.cost"></td></tr>
+                  <tr><th scope="row">Share of the no-fee value lost</th><td data-cell="a.share"></td><td data-cell="b.share"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">At <span id="how-age">year 0, month 0</span></h2>
+            <div class="table-wrap">
+              <table class="compare" id="compare-now">
+                <caption class="sr-only">Each fund at the current month</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Measure</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name2">Fund A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name2">Fund B</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="strong"><th scope="row">Worth</th><td data-cell="a.worth"></td><td data-cell="b.worth"></td></tr>
+                  <tr><th scope="row">Fees so far</th><td data-cell="a.sofar"></td><td data-cell="b.sofar"></td></tr>
+                  <tr><th scope="row">This month's fee</th><td data-cell="a.monthFee"></td><td data-cell="b.monthFee"></td></tr>
+                  <tr><th scope="row">Less than with no fee</th><td data-cell="a.lost"></td><td data-cell="b.lost"></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">Year by year</h2>
+            <div class="table-wrap">
+              <table class="compare yearly" id="yearly">
+                <caption class="sr-only">What each fund is worth at the end of each year, and the same savings with no fee</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Year</th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">A</span><span class="th-name" data-cell="a.name3">Fund A</span></th>
+                    <th scope="col"><span class="roundel" aria-hidden="true">B</span><span class="th-name" data-cell="b.name3">Fund B</span></th>
+                    <th scope="col">No fee</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <ul class="conventions">
+              <li>The fee is a share of everything in the fund, not of the growth: it is charged in good years and bad, and it grows as the fund grows.</li>
+              <li>What a fee costs is more than the fees paid: every dollar taken would have kept growing too.</li>
+              <li>The painted crown is the money: its area follows the fund's value, on the same scale for both trees. The pale ghost is the same savings with no fee. Each log in a woodpile is the same dollars of fees on both piles.</li>
+              <li>The same saving every month, steady growth, no taxes or other costs. Real funds and fees vary.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Fees</p>
+      <h2 class="intro-title" id="intro-title">A Little Off the Top</h2>
+      <p class="intro-lede" id="intro-lede">The same savings in two funds that grow alike. One charges 1% a year, the other 0.1%. What does a small fee take?</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>Each fund is a <strong>tree</strong>: its painted crown is the money in it.</li>
+        <li>Every month the fee is <strong>cut off the top</strong> and stacked in the <strong>woodpile</strong> beside the tree.</li>
+        <li>The <strong>pale ghost</strong> around each crown is the tree the same savings would grow with no fee at all.</li>
+      </ul>
+      <h3 class="intro-h">Two funds</h3>
+      <ul class="intro-list">
+        <li>Both start with <strong>$10,000</strong> and save <strong>$500 a month</strong> for 40 years, growing 7% a year.</li>
+        <li><strong>Fund A</strong> (left) charges <strong>1%</strong> a year. <strong>Fund B</strong> (right) charges <strong>0.1%</strong>, as many index funds do.</li>
+        <li>Both trees are the same tree, so they compare directly.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change the savings and the fees in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/wood/main.ts"></script>
+</body>
+</html>
