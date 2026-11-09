@@ -1,4 +1,32 @@
-# Handoff — 2026-11-04
+# Handoff — 2026-11-04, with the overnight session of 2026-11-05
+
+## Overnight session (2026-11-05): what is on branches, waiting for review
+
+Nothing was merged. Each branch has a draft PR against `master`.
+
+| Branch | PR | What |
+|---|---|---|
+| `claude/orchard-short-canvas-fix` | Nc898/finance-is-beautiful#1 | Open item 2 below, fixed: the verge's bottom is held under the track and `yarrow()` clamps its radius. A unit test (`tests/orchard/flowers.test.ts`) reproduces the old throw. No pixel changes on any real screen. |
+| `claude/fees-demo` | Nc898/finance-is-beautiful#2 | **A new (seventh) demo, "A Little Off the Top"**, on fund fees. Spec: `docs/WOOD_SPEC.md`. Source `src/wood`, page `a-little-off-the-top.html`, landing entry (theme `wood`), preview `public/assets/preview-wood.webp` (`scripts/bake-wood-preview.mjs`), tests `tests/wood/engine.test.ts` (18) and `tests/e2e/wood.spec.ts` (10 per project; desktop and mobile pass). |
+
+- A preview build of `claude/fees-demo` with the fix merged in was published as a private claude.ai artifact
+  (https://claude.ai/artifact/AYjosHuh5WT3kZTxCBJJof), so the site can be seen without a dev server. It was built
+  with `vite build --base ./`, then the absolute `/assets/` strings in the JS and the inline loader style were
+  rewritten to `./assets/`. If the site is ever deployed under a sub-path, make those paths relative in the source
+  (`src/landing/demos.ts`, `src/landing/main.ts`, `src/shared/loaderHtml.ts`).
+- Open item 1 (round length) is still the user's call. A "shorter routes" branch was not made: it means moving the
+  crates and the seat, which recomposes the scene, and it needs a careful visual pass.
+- `docs/TESTING.md` still describes only Time to Grow's suites; the real suite now has 14 spec files (163 desktop
+  tests on `master`). It needs a rewrite.
+
+### The new demo in one paragraph
+The same savings ($10,000 + $500 a month, 40 years, 7%) in two funds; A charges 1% a year, B 0.1%. Each fund is the
+same tree (Time to Grow's painter, Brick's spring leaf) in a bluebell wood, its crown's area following the money; a
+pale ghost crown behind it is the no-fee tree; the fees are cut off the top (sprigs fall while it plays) and stacked
+log by log in a woodpile. A 1% fee costs $372,030, 25% of the $1,475,521 the savings could have grown to, though
+only $143,218 was ever charged. The app shell is Brick's, adapted; the stylesheet is Brick's, re-inked. Next steps
+for it are listed at the end of `docs/WOOD_SPEC.md` (a forester figure, an ink line for the ghost).
+
 
 For the next session picking up this repo (cloud or local). Read this first, then the spec of the demo you touch
 (`docs/*_SPEC.md`), `docs/NOTES.md` (decisions log, design tokens) and `docs/TESTING.md`.
@@ -16,6 +44,7 @@ vanilla TypeScript, Vitest unit tests, Playwright browser tests. Demos (`src/lan
 | On a Roll | `on-a-roll.html` | `src/snow` | `SNOW_SPEC.md` |
 | Brick by Brick | `brick-by-brick.html` | `src/brick` | `BRICK_SPEC.md` |
 | Low-Hanging Fruit | `low-hanging-fruit.html` | `src/orchard` | `ORCHARD_SPEC.md` |
+| A Little Off the Top (branch `claude/fees-demo`) | `a-little-off-the-top.html` | `src/wood` | `WOOD_SPEC.md` |
 
 ```bash
 npm install

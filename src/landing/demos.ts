@@ -12,8 +12,9 @@ export interface Demo {
   /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the vine's
    *  autumn rust, tendrils and falling leaves, the snow's winter blue, snowflakes and birds on the rule, or the
    *  bricks' deep red, a course of bricks for the rule and a blossom wash, or the orchard's harvest ochre, a twig
-   *  hung with golden and red apples for the rule and a late-summer wash. */
-  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard';
+   *  hung with golden and red apples for the rule and a late-summer wash, or the wood's bluebell indigo, a row of
+   *  cut log ends among bluebells for the rule and a spring-wood wash. */
+  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard' | 'wood';
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -128,6 +129,18 @@ async function paintLowHangingFruit(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
+/** A Little Off the Top at the end: baked from the real scene (scripts/bake-wood-preview.mjs), as the orchard is. */
+async function paintALittleOffTheTop(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-wood.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 export const DEMOS: Demo[] = [
   {
     slug: 'time-to-grow',
@@ -176,5 +189,13 @@ export const DEMOS: Demo[] = [
     href: './low-hanging-fruit.html',
     theme: 'orchard',
     paintPreview: paintLowHangingFruit,
+  },
+  {
+    slug: 'a-little-off-the-top',
+    title: 'A Little Off the Top',
+    summary: 'Two trees, the same savings, and a yearly fee of 1% or 0.1% cut off the top.',
+    href: './a-little-off-the-top.html',
+    theme: 'wood',
+    paintPreview: paintALittleOffTheTop,
   },
 ];
