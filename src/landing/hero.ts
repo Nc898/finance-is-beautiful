@@ -9,6 +9,14 @@ import { ensureSprites, type Sprites } from '../scene/sprites';
 import { HORIZON_UP, applyHeroBackdrop, heroGeometry, type HeroGeometry } from './backdrop';
 import { Aviary } from './birds';
 
+/**
+ * The trees grow in a wave from left to right, each starting a little after its neighbour to the left. When they
+ * all grew at once, every tree was large and still growing in the same moment, and repainting them all each
+ * frame was more than a laptop GPU could keep up with; in a wave only two or three are growing at a time.
+ */
+const WAVE_S = 2.0; // seconds for the wave to cross the whole grove
+const WAVE = (x: number) => Math.round((x - 0.09) * WAVE_S * 100) / 100;
+
 interface GroveTree {
   seed: number;
   /** trunk x as a fraction of the hero width */
@@ -24,17 +32,19 @@ interface GroveTree {
 
 const GROVE: GroveTree[] = [
   // main row: irregular gaps, one pair standing close
-  { seed: 9031, x: 0.09, m: 0.42, bills: 0, delay: 0.14 },
-  { seed: 4242, x: 0.268, m: 0.7, bills: 4, delay: 0.0 },
-  { seed: 1337, x: 0.432, m: 1.0, bills: 12, delay: 0.24 },
-  { seed: 2468, x: 0.66, m: 0.82, bills: 6, delay: 0.08 },
-  { seed: 777, x: 0.878, m: 0.55, bills: 0, delay: 0.4 },
+  { seed: 9031, x: 0.09, m: 0.42, bills: 0, delay: WAVE(0.09) },
+  { seed: 4242, x: 0.268, m: 0.7, bills: 4, delay: WAVE(0.268) },
+  { seed: 1337, x: 0.432, m: 1.0, bills: 12, delay: WAVE(0.432) },
+  { seed: 2468, x: 0.66, m: 0.82, bills: 6, delay: WAVE(0.66) },
+  { seed: 777, x: 0.878, m: 0.55, bills: 0, delay: WAVE(0.878) },
   // far horizon
-  { seed: 5510, x: 0.185, m: 0.4, bills: 0, delay: 0.3, bg: true },
-  { seed: 3307, x: 0.56, m: 0.5, bills: 0, delay: 0.1, bg: true },
-  { seed: 6120, x: 0.775, m: 0.33, bills: 0, delay: 0.45, bg: true },
+  { seed: 5510, x: 0.185, m: 0.4, bills: 0, delay: WAVE(0.185), bg: true },
+  { seed: 3307, x: 0.56, m: 0.5, bills: 0, delay: WAVE(0.56), bg: true },
+  { seed: 6120, x: 0.775, m: 0.33, bills: 0, delay: WAVE(0.775), bg: true },
 ];
 const GROW_S = 1.8;
+/** the grove settles once the last tree of the wave has grown (and its final, cached paint is done) */
+const GROW_END = Math.max(...GROVE.map((t) => t.delay)) + GROW_S + 0.2;
 const START_M = 0.02;
 const smoother = (t: number) => {
   const x = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -257,7 +267,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     const still = reduced();
     // the grow clock starts when the page is revealed (begin()); until then the grove holds as seedlings
     const secs = still ? 99 : t0 < 0 ? 0 : Math.max(0, (now - t0) / 1000);
-    const growing = secs < GROW_S + 0.5;
+    const growing = secs < GROW_END;
     // Trees are repainted only when they change: every frame while growing (far trees every other frame),
     // and once when a bill lands. Wind never repaints a tree: the cached image is bent when drawn (sway()).
     const first = layers.some((L) => L.at < 0);
@@ -265,7 +275,8 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     tick++;
     for (const i of allIdx) {
       const t = GROVE[i]!;
-      const due = first || hot(i) || (growing && !settled[i] && (!t.bg || tick % 2 === 0));
+      // a tree still waiting for the wave holds as a seedling: nothing to repaint until its turn
+      const due = first || hot(i) || (growing && !settled[i] && secs >= t.delay && (!t.bg || tick % 2 === 0));
       if (!due) continue;
       paintLayer(i, now, secs, still);
       // one last paint after its growth window closes, then it is cached for good
@@ -283,7 +294,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       aviary.frame(ctx, now);
       overlayDirty = aviary.busy(now);
     }
-    if (secs > GROW_S + 0.5) {
+    if (secs > GROW_END) {
       grownDone = true;
       resolveGrown();
     }
