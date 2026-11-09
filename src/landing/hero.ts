@@ -150,15 +150,12 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     at: number;
   }
   let layers: Layer[] = [];
-  /** the far horizon trees are composed here, hazed, then laid under the main row at partial alpha */
-  let bgComp: HTMLCanvasElement | null = null;
   const LAYER_UP = 612; // world units above the ground line
   const LAYER_DOWN = 100; // below it (roots)
   const LAYER_W = 620;
 
   /** canvases this hero has put in the page (removed and rebuilt on resize) */
   let domLayers: HTMLCanvasElement[] = [];
-  let farTmp: HTMLCanvasElement | null = null;
   const buildLayers = (g: HeroGeometry) => {
     for (const a of swayAnims) a?.cancel();
     for (const c of domLayers) c.remove();
@@ -172,19 +169,21 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       const up = t.bg ? HORIZON_UP : 0;
       return { cv, cssW, cssH, x: t.x * g.w - cssW / 2, y: g.groundY - (LAYER_UP + up) * g.s, at: -1 };
     });
-    // far trees: hazed together into one static page layer
-    farTmp = document.createElement('canvas');
-    farTmp.width = Math.round(g.w * g.dpr);
-    farTmp.height = Math.round(g.h * g.dpr);
-    bgComp = document.createElement('canvas');
-    bgComp.width = farTmp.width;
-    bgComp.height = farTmp.height;
-    bgComp.className = 'grove grove-far';
-    bgComp.setAttribute('aria-hidden', 'true');
-    bgComp.style.width = `${g.w}px`;
-    bgComp.style.height = `${g.h}px`;
-    canvas.before(bgComp);
-    domLayers.push(bgComp);
+    // Far trees: a page layer each behind the main row, hazed in their own small canvas when painted and paled
+    // by the layer's CSS opacity (the compositor does that for free). They were once hazed together through
+    // two full-screen canvases, which cost about 60 ms a frame on a 2x screen while they grew.
+    for (const i of bgOrder) {
+      const L = layers[i]!;
+      const st = L.cv.style;
+      L.cv.className = 'grove grove-tree grove-far';
+      L.cv.setAttribute('aria-hidden', 'true');
+      st.left = `${L.x}px`;
+      st.top = `${L.y}px`;
+      st.width = `${L.cssW}px`;
+      st.height = `${L.cssH}px`;
+      canvas.before(L.cv);
+      domLayers.push(L.cv);
+    }
     // main trees: one page layer each, smaller trees first so larger crowns overlap them
     for (const i of order) {
       const L = layers[i]!;
@@ -241,6 +240,15 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       sprites!,
     );
     lc.restore();
+    if (t.bg) {
+      // paler and slightly cooler: a paper haze plus a breath of sky over the tree only
+      lc.globalCompositeOperation = 'source-atop';
+      lc.fillStyle = 'rgba(251,246,234,0.34)';
+      lc.fillRect(0, 0, L.cssW, L.cssH);
+      lc.fillStyle = 'rgba(120,165,205,0.12)';
+      lc.fillRect(0, 0, L.cssW, L.cssH);
+      lc.globalCompositeOperation = 'source-over';
+    }
     L.at = now;
   };
 
@@ -255,7 +263,6 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     const first = layers.some((L) => L.at < 0);
     const hot = (i: number) => hotUntil[i]! > now;
     tick++;
-    let bgDirty = first;
     for (const i of allIdx) {
       const t = GROVE[i]!;
       const due = first || hot(i) || (growing && !settled[i] && (!t.bg || tick % 2 === 0));
@@ -263,35 +270,11 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       paintLayer(i, now, secs, still);
       // one last paint after its growth window closes, then it is cached for good
       if (growing && secs > t.delay + GROW_S + 0.1) settled[i] = true;
-      if (t.bg) bgDirty = true;
     }
     if (!growing && !finalPainted) {
       // make sure every tree's cached image is its exact final state
       finalPainted = true;
       for (const i of allIdx) if (!settled[i]) paintLayer(i, now, secs, still);
-      bgDirty = true;
-    }
-    if (bgComp && farTmp && bgDirty) {
-      const bc = farTmp.getContext('2d')!;
-      bc.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
-      bc.globalCompositeOperation = 'source-over';
-      bc.clearRect(0, 0, geo.w, geo.h);
-      for (const i of bgOrder) {
-        const L = layers[i]!;
-        bc.drawImage(L.cv, L.x, L.y, L.cssW, L.cssH);
-      }
-      // paler and slightly cooler: a paper haze plus a breath of sky over the trees only
-      bc.globalCompositeOperation = 'source-atop';
-      bc.fillStyle = 'rgba(251,246,234,0.34)';
-      bc.fillRect(0, 0, geo.w, geo.h);
-      bc.fillStyle = 'rgba(120,165,205,0.12)';
-      bc.fillRect(0, 0, geo.w, geo.h);
-      const fc = bgComp.getContext('2d')!;
-      fc.setTransform(1, 0, 0, 1, 0, 0);
-      fc.clearRect(0, 0, bgComp.width, bgComp.height);
-      fc.globalAlpha = 0.55;
-      fc.drawImage(farTmp, 0, 0);
-      fc.globalAlpha = 1;
     }
     // the overlay canvas only carries birds and falling bills: redraw it only while something is flying
     if (grownDone && !still && (aviary.busy(now) || overlayDirty)) {
@@ -360,7 +343,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       // Make the GPU finish all queued painting now, while only the bare paper is showing: a 1-pixel read
       // from each canvas forces it. Otherwise that work runs when the scene first becomes visible and the
       // reveal stutters.
-      for (const c of [b, canvas, bgComp, ...layers.map((L) => L.cv)]) c?.getContext('2d')?.getImageData(0, 0, 1, 1);
+      for (const c of [b, canvas, ...layers.map((L) => L.cv)]) c.getContext('2d')?.getImageData(0, 0, 1, 1);
       resolveReady();
       kick();
     });

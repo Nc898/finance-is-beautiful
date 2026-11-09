@@ -30,7 +30,7 @@ body {
   flex-direction: column;
   color: var(--ink);
   font: 400 16px/1.5 var(--sans);
-  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  background: var(--paper) url('/assets/paper-tile.webp') repeat;
   -webkit-font-smoothing: antialiased;
 }
 

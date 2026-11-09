@@ -1,6 +1,9 @@
 /**
  * Sprite pool management: procedural generation (async, yields between sprites) with an optional baked atlas
- * loaded from /assets/foliage-atlas.{png,json} (written by scripts/bake-assets.mjs).
+ * loaded from /assets/foliage-atlas.{webp,json}. scripts/bake-assets.mjs writes the atlas as PNG; the page loads
+ * a lossless WebP copy of it (27% smaller, identical pixels). After re-baking, convert it again, for example
+ * with Pillow: Image.open(png).save(webp, 'WEBP', lossless=True, quality=100, method=6, exact=True). The same
+ * goes for paper-tile.png.
  */
 import {
   SPRITE_KINDS, SPRITE_POOL, makeClumpSprite, makeMoundSprite, makePaperTile, makeShadowSprite, makeCanvas, makeUnderSprite,
@@ -70,7 +73,7 @@ async function loadBaked(): Promise<Sprites | null> {
     if (!res.ok) return null;
     const j = (await res.json()) as AtlasJson;
     if (!j || !j.frames || !j.under) return null;
-    const img = await loadImage(`${baseUrl()}assets/foliage-atlas.png`);
+    const img = await loadImage(`${baseUrl()}assets/foliage-atlas.webp`);
     const mk = (f: { x: number; y: number; w: number; h: number }): Spr => ({ src: img, sx: f.x, sy: f.y, sw: f.w, sh: f.h });
     const kinds = {} as Record<SpriteKind, Spr[]>;
     for (const k of SPRITE_KINDS) kinds[k] = (j.frames[k] ?? []).map(mk);
@@ -118,7 +121,7 @@ export function ensurePaperTile(): Promise<HTMLCanvasElement | HTMLImageElement>
   if (!paperPromise) {
     paperPromise = (async () => {
       try {
-        const im = await loadImage(`${baseUrl()}assets/paper-tile.png`);
+        const im = await loadImage(`${baseUrl()}assets/paper-tile.webp`);
         if (im.naturalWidth >= 64) return im;
       } catch {
         /* fall through */

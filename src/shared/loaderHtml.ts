@@ -12,7 +12,7 @@ export const LOADER_HTML = `<style>
     z-index: 1000;
     display: grid;
     place-items: center;
-    background: #fbf6ea url('/assets/paper-tile.png') repeat;
+    background: #fbf6ea url('/assets/paper-tile.webp') repeat;
     color: #2f2a22;
     transition: opacity 0.7s ease 0.15s, visibility 0s linear 0.85s;
   }

@@ -22,6 +22,9 @@ function loaderScreen(): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [loaderScreen()],
   build: {
+    // Vite's hashed files (scripts, styles, fonts) get their own folder so the host can cache them for a year
+    // (vercel.json); the hand-named files in public/assets keep normal revalidation, so updating them is safe.
+    assetsDir: 'bundle',
     rolldownOptions: {
       input: {
         main: 'index.html',

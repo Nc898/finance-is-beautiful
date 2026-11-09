@@ -36,7 +36,7 @@ body {
   margin: 0;
   color: var(--ink);
   font: 400 16px/1.5 var(--sans);
-  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  background: var(--paper) url('/assets/paper-tile.webp') repeat;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -220,7 +220,7 @@ ul {
   bottom: 0;
   height: 200px;
   pointer-events: none;
-  background: var(--paper) url('/assets/paper-tile.png') repeat;
+  background: var(--paper) url('/assets/paper-tile.webp') repeat;
   -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.18) 72px, rgba(0, 0, 0, 0.5) 125px, rgba(0, 0, 0, 0.82) 160px, #000);
   mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.18) 72px, rgba(0, 0, 0, 0.5) 125px, rgba(0, 0, 0, 0.82) 160px, #000);
 }
@@ -259,6 +259,15 @@ html[data-ready] .grove {
 .grove.grove-tree {
   inset: auto;
   will-change: transform;
+}
+
+/* the far trees on the horizon: their own layers, held still and paled to 55% by the compositor */
+.grove.grove-far {
+  opacity: 0.0055;
+  will-change: auto;
+}
+html[data-ready] .grove.grove-far {
+  opacity: 0.55;
 }
 
 /* the type waits for the art, then settles in just after the paper and sky appear */
