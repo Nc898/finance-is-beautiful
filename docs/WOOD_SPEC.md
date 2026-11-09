@@ -83,4 +83,4 @@ zooms; extra height goes to the sky.
 - A figure (a forester with a pruning saw taking the cut and carrying it to the pile) in the manner of the
   orchard's pickers: the scene works without one, but a figure would match the sister demos' liveliness.
 - (Done: the ghost crown has a fine, broken ink contour so it reads as the no-fee tree, not a tree in the wood.)
-- Laptop and reduced-motion projects have not been run for this suite; desktop and mobile pass.
+- (Done: the suite passes on all four Playwright projects: desktop, mobile, laptop and reduced-motion.)
