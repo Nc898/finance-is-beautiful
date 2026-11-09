@@ -1,21 +1,14 @@
 /**
  * The grove: five trees from the real watercolor engine on one shared scale and ground line.
- * They grow in on load, then rest with subtle wind. Per frame only the trees are painted; paper, sky, meadow
- * and soil are the canvas CSS background (see backdrop.ts).
+ * They stand fully grown from the first frame (a grow-in animation cost more than a laptop GPU could keep up
+ * with on a visitor's first look), then rest with subtle wind on the compositor. Each tree is painted once and
+ * again only when a bird drops a bill into it; paper, sky, meadow and soil are a static layer (see backdrop.ts).
  */
 import { getModel } from '../scene';
 import { TreePainter } from '../scene/treePainter';
 import { ensureSprites, type Sprites } from '../scene/sprites';
 import { HORIZON_UP, applyHeroBackdrop, heroGeometry, type HeroGeometry } from './backdrop';
 import { Aviary } from './birds';
-
-/**
- * The trees grow in a wave from left to right, each starting a little after its neighbour to the left. When they
- * all grew at once, every tree was large and still growing in the same moment, and repainting them all each
- * frame was more than a laptop GPU could keep up with; in a wave only two or three are growing at a time.
- */
-const WAVE_S = 2.0; // seconds for the wave to cross the whole grove
-const WAVE = (x: number) => Math.round((x - 0.09) * WAVE_S * 100) / 100;
 
 interface GroveTree {
   seed: number;
@@ -24,39 +17,31 @@ interface GroveTree {
   /** final maturity */
   m: number;
   bills: number;
-  /** stagger before this tree starts growing, seconds */
-  delay: number;
   /** stands on the far horizon, paler and behind the main row */
   bg?: boolean;
 }
 
 const GROVE: GroveTree[] = [
   // main row: irregular gaps, one pair standing close
-  { seed: 9031, x: 0.09, m: 0.42, bills: 0, delay: WAVE(0.09) },
-  { seed: 4242, x: 0.268, m: 0.7, bills: 4, delay: WAVE(0.268) },
-  { seed: 1337, x: 0.432, m: 1.0, bills: 12, delay: WAVE(0.432) },
-  { seed: 2468, x: 0.66, m: 0.82, bills: 6, delay: WAVE(0.66) },
-  { seed: 777, x: 0.878, m: 0.55, bills: 0, delay: WAVE(0.878) },
+  { seed: 9031, x: 0.09, m: 0.42, bills: 0 },
+  { seed: 4242, x: 0.268, m: 0.7, bills: 4 },
+  { seed: 1337, x: 0.432, m: 1.0, bills: 12 },
+  { seed: 2468, x: 0.66, m: 0.82, bills: 6 },
+  { seed: 777, x: 0.878, m: 0.55, bills: 0 },
   // far horizon
-  { seed: 5510, x: 0.185, m: 0.4, bills: 0, delay: WAVE(0.185), bg: true },
-  { seed: 3307, x: 0.56, m: 0.5, bills: 0, delay: WAVE(0.56), bg: true },
-  { seed: 6120, x: 0.775, m: 0.33, bills: 0, delay: WAVE(0.775), bg: true },
+  { seed: 5510, x: 0.185, m: 0.4, bills: 0, bg: true },
+  { seed: 3307, x: 0.56, m: 0.5, bills: 0, bg: true },
+  { seed: 6120, x: 0.775, m: 0.33, bills: 0, bg: true },
 ];
-const GROW_S = 1.8;
-/** the grove settles once the last tree of the wave has grown (and its final, cached paint is done) */
-const GROW_END = Math.max(...GROVE.map((t) => t.delay)) + GROW_S + 0.2;
-const START_M = 0.02;
-const smoother = (t: number) => {
-  const x = t < 0 ? 0 : t > 1 ? 1 : t;
-  return x * x * x * (x * (x * 6 - 15) + 10);
-};
+/** the birds wait this long after the reveal, until the scene has faded in */
+const SETTLE_MS = 900;
 
 export interface Hero {
   /** resolves when the grove is drawn at its first size */
   ready: Promise<void>;
-  /** resolves when the grow-in has finished */
+  /** resolves once the revealed grove has settled (the birds start flying) */
   grown: Promise<void>;
-  /** start the grow-in (called when the page is revealed) */
+  /** called when the page is revealed */
   begin(): void;
   destroy(): void;
 }
@@ -76,9 +61,6 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   const hotUntil = GROVE.map(() => 0);
   let grownDone = false;
   let overlayDirty = false;
-  let tick = 0;
-  let finalPainted = false;
-  const settled = GROVE.map(() => false);
   /**
    * Wind as a gentle bend of each tree's cached image: a horizontal shear about its ground line, a slow
    * gust under a quicker flutter, phase-shifted per tree; bigger trees bend a little less.
@@ -220,14 +202,14 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     }
   };
 
-  const paintLayer = (i: number, now: number, secs: number, still: boolean) => {
+  /** paint tree i fully grown; `fade` lets a newly delivered bill fade in */
+  const paintLayer = (i: number, now: number, fade: boolean) => {
     const g = geo!;
     const t = GROVE[i]!;
     const L = layers[i]!;
     const lc = L.cv.getContext('2d')!;
     lc.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
     lc.clearRect(0, 0, L.cssW, L.cssH);
-    const e = smoother((secs - t.delay) / GROW_S);
     lc.save();
     if (t.bg) {
       // the horizon is a soft wash: keep the roots out of the meadow in front of it
@@ -239,13 +221,13 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       lc,
       { ox: L.cssW / 2, oy: LAYER_UP * g.s, s: g.s, dpr: g.dpr },
       {
-        maturity: START_M + (t.m - START_M) * e,
+        maturity: t.m,
         months: 24,
         timeMs: now,
         wind: false,
-        fadeBills: !still,
+        fadeBills: fade,
         pulse: -1,
-        bills: Math.floor(t.bills * e + 0.001) + extra[i]!,
+        bills: t.bills + extra[i]!,
       },
       sprites!,
     );
@@ -265,27 +247,12 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   const draw = (now: number) => {
     if (!geo || !sprites || layers.length === 0) return;
     const still = reduced();
-    // the grow clock starts when the page is revealed (begin()); until then the grove holds as seedlings
-    const secs = still ? 99 : t0 < 0 ? 0 : Math.max(0, (now - t0) / 1000);
-    const growing = secs < GROW_END;
-    // Trees are repainted only when they change: every frame while growing (far trees every other frame),
-    // and once when a bill lands. Wind never repaints a tree: the cached image is bent when drawn (sway()).
-    const first = layers.some((L) => L.at < 0);
+    // Trees are painted once (and again after a resize), then only while a bill a bird dropped fades in.
+    // Wind never repaints a tree: the cached image is bent on the compositor (sway()).
     const hot = (i: number) => hotUntil[i]! > now;
-    tick++;
     for (const i of allIdx) {
-      const t = GROVE[i]!;
-      // a tree still waiting for the wave holds as a seedling: nothing to repaint until its turn
-      const due = first || hot(i) || (growing && !settled[i] && secs >= t.delay && (!t.bg || tick % 2 === 0));
-      if (!due) continue;
-      paintLayer(i, now, secs, still);
-      // one last paint after its growth window closes, then it is cached for good
-      if (growing && secs > t.delay + GROW_S + 0.1) settled[i] = true;
-    }
-    if (!growing && !finalPainted) {
-      // make sure every tree's cached image is its exact final state
-      finalPainted = true;
-      for (const i of allIdx) if (!settled[i]) paintLayer(i, now, secs, still);
+      const first = layers[i]!.at < 0;
+      if (first || hot(i)) paintLayer(i, now, !first);
     }
     // the overlay canvas only carries birds and falling bills: redraw it only while something is flying
     if (grownDone && !still && (aviary.busy(now) || overlayDirty)) {
@@ -294,7 +261,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       aviary.frame(ctx, now);
       overlayDirty = aviary.busy(now);
     }
-    if (secs > GROW_END) {
+    if (!grownDone && (still || (t0 >= 0 && now >= t0))) {
       grownDone = true;
       resolveGrown();
     }
@@ -343,13 +310,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       canvas.height = Math.round(g.h * g.dpr);
       canvas.style.width = `${g.w}px`;
       canvas.style.height = `${g.h}px`;
-      // Warm-up behind the curtain: paint every tree once fully grown (builds bill, bark and clump sprites
-      // and first-use paths), then the seedling state, so nothing is created for the first time mid-animation.
-      if (!reduced()) {
-        const warm = performance.now();
-        for (let i = 0; i < layers.length; i++) paintLayer(i, warm, 99, true);
-        for (const L of layers) L.at = -1;
-      }
+      // paint the grove behind the curtain, before the reveal
       draw(performance.now());
       // Make the GPU finish all queued painting now, while only the bare paper is showing: a 1-pixel read
       // from each canvas forces it. Otherwise that work runs when the scene first becomes visible and the
@@ -390,7 +351,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     ready,
     grown,
     begin() {
-      if (t0 < 0) t0 = performance.now() + 250;
+      if (t0 < 0) t0 = performance.now() + SETTLE_MS;
       kick();
     },
     destroy() {
