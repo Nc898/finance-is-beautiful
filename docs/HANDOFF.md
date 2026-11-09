@@ -1,7 +1,12 @@
 # Handoff — 2026-11-04
 
-For the next session picking up this repo (cloud or local). Read this first, then the spec of the demo you touch
-(`docs/*_SPEC.md`), `docs/NOTES.md` (decisions log, design tokens) and `docs/TESTING.md`.
+For the next session picking up this repo (cloud or local).
+
+**First read `docs/QUALITY_BAR.md` in full.** It holds the owner's standard for concept, art, motion and process.
+Then read this file, the spec of the demo you are touching (`docs/*_SPEC.md`), `docs/NOTES.md` (decisions log,
+design tokens) and `docs/TESTING.md`.
+
+Do not start a new demonstration, or change an existing demo's concept, unless the owner has chosen it.
 
 ## What this is
 
