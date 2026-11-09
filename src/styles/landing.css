@@ -58,6 +58,38 @@ ul {
   outline-offset: 2px;
 }
 
+/* ---------- LinkedIn (top right, just left of the menu): the "in" mark in the menu icon's ink ---------- */
+
+.site-social {
+  position: absolute;
+  z-index: 10;
+  /* level with the menu button (40 px wide at right: 22 px), with a small gap */
+  top: 19px;
+  right: 68px;
+  display: block;
+  padding: 8px;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  transition-property: color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+.site-social .linkedin-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+@media (hover: hover) {
+  .site-social:hover {
+    color: var(--emerald-deep);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .site-social:active {
+    scale: 0.96;
+  }
+}
+
 /* ---------- Site menu (top right): opens on hover, focus or a tap ---------- */
 
 .site-menu {
@@ -234,11 +266,13 @@ html[data-ready] .grove {
 .hero-title,
 .hero-sub,
 .site-menu,
+.site-social,
 .demos,
 .closing,
 .foot {
   opacity: 0;
 }
+html[data-ready] .site-social,
 html[data-ready] .site-menu,
 html[data-ready] .demos,
 html[data-ready] .closing,

@@ -19,7 +19,7 @@ function loaderScreen(): Plugin {
 }
 
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [loaderScreen()],
   build: {
     rolldownOptions: {
@@ -32,15 +32,21 @@ export default defineConfig({
         onARoll: 'on-a-roll.html',
         brickByBrick: 'brick-by-brick.html',
         lowHangingFruit: 'low-hanging-fruit.html',
-        riverSceneTest: 'river-scene-test.html',
-        slice: 'slice.html',
-        sceneTest: 'scene-test.html',
-        snowSceneTest: 'snow-scene-test.html',
-        snowClimberTest: 'snow-climber-test.html',
+        // The development harnesses are served by the dev server as they are; a production build leaves them out
+        // of the public site unless built with `vite build --mode harness`.
+        ...(mode === 'harness'
+          ? {
+              riverSceneTest: 'river-scene-test.html',
+              slice: 'slice.html',
+              sceneTest: 'scene-test.html',
+              snowSceneTest: 'snow-scene-test.html',
+              snowClimberTest: 'snow-climber-test.html',
+            }
+          : {}),
       },
     },
   },
   test: {
     include: ['tests/**/*.test.ts'],
   },
-});
+}));

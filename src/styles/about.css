@@ -65,6 +65,46 @@ body {
 }
 .about-body {
   margin-top: 40px;
+  max-width: 34em;
+}
+.about-body p {
+  margin: 0 0 18px;
+  font: 400 18px / 1.6 var(--sans);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.about-body .about-social {
+  margin: 28px 0 0;
+}
+.linkedin-link {
+  display: inline-block;
+  /* a little room round the mark to aim at, without moving it off the text's left edge */
+  margin-left: -6px;
+  padding: 6px;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 150ms ease-out;
+}
+.linkedin-link .linkedin-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+@media (hover: hover) {
+  .linkedin-link:hover {
+    color: var(--emerald-deep);
+  }
+}
+.about-body .about-date {
+  margin-top: 28px;
+  font: italic 400 17px / 1.4 var(--serif);
+  color: var(--muted);
+}
+.about-body .about-credit {
+  margin-top: 56px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted-soft);
 }
 
 .about-foot {
