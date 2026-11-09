@@ -15,8 +15,9 @@ Canvas 2D, Vitest, Playwright). The owner, Nick, holds them to a high, specific 
 - **New demonstrations, and changes to a demo's concept, setting, season, metaphor or characters, are the owner's
   decision.** Brainstorm options, let him pick, then write the spec. Never build one unasked. A candidate idea in a
   list is not approval.
-- **Every demo is its own world.** It needs a new centerpiece metaphor, a new season or place, and people doing the
-  work. Don't reuse a sister demo's composition (for example, Time to Grow's two money-sized trees).
+- **Every demo is its own world.** It needs a new centerpiece metaphor and a new season or place. Don't reuse a
+  sister demo's composition (for example, Time to Grow's two money-sized trees). Figures are optional: use them only
+  when the metaphor naturally calls for them, and never force them in.
 - **Art matches the collection at 2× zoom:** ink under watercolor, nothing vector, gridded, cloned, flat or
   unfinished. Compare crops with a sister demo before showing anything.
 - **Motion is physical and continuous.** Nothing moves "like magic", nothing passes through anything, there are no

@@ -23,9 +23,9 @@ as done.
 1. **The owner decides what gets made.** A new demonstration's lesson, metaphor, setting, season and characters are
    his choices, made in a brainstorm with him. Never start a new demo, or redesign an existing one, because a
    handoff or a gap seemed to invite it. Propose and wait. See section 2.
-2. **Every demo is its own world.** It gets a new metaphor in which the picture *is* the math, a new season or place,
-   and people doing the work. Reusing a sister demo's composition or centerpiece is a rehash, even under a new
-   palette.
+2. **Every demo is its own world.** It gets a new metaphor in which the picture *is* the math, and a new season or
+   place. Reusing a sister demo's composition or centerpiece is a rehash, even under a new palette. Figures appear
+   only where the metaphor needs them, never forced in.
 3. **Art at the collection's finish, at 2× zoom.** Watercolor over ink, detailed and intentional. Nothing that reads
    as vector, gridded, cloned, stamped, flat or unfinished.
 4. **Motion is physical.** Nothing moves "like magic". Things are moved by someone or by a force, bodies don't pass
@@ -75,10 +75,12 @@ Rules that follow from this:
 - **A metaphor where the picture is the math.** Each visible quantity maps to a number, the mapping is monotonic and
   shared by both sides, and it's disclosed. Examples: interest bricks go into the lender's cart, snowfall is
   interest settling on each debt, the vine's growth follows the balance owed.
-- **People doing the work.** Every demo since the first has figures with jobs. The rowers row, the gardeners shear
-  and rake, the climbers push the snowballs, the builders lay bricks, the pickers fill baskets and plant. On the
-  landing page, birds drop bills into the trees. The money moves because someone moves it. A scene where things
-  appear on their own is below the bar.
+- **Every change in the picture has a visible cause.** The money moves because something moves it. That can be a
+  force or a process that belongs in the scene: growth, snowfall, a current, wind, gravity. Or it can be a figure
+  whose job is the metaphor: the rowers, the gardeners, the climbers, the builders and the pickers.
+- **Figures only where they make sense.** People are not a requirement. Time to Grow has none and needs none. Add a
+  figure only when the metaphor naturally calls for one, and make it look native to the scene. A figure forced in to
+  make the scene look busy is as wrong as things appearing by magic.
 - **Its own season and place, and a distinct palette.** The landing page reads as a collection of different worlds.
 - **The shared frame:**
   - the paper, ink and type (section 4);
@@ -108,7 +110,7 @@ Rules that follow from this:
 
 A new demo needs a centerpiece that is not "a tree whose size is money". Time to Grow owns that image. Planted
 orchards reuse trees, but there the trees are an outcome of the pickers' work, not the whole picture. It also needs
-a season and setting not in this table, and figures with a job.
+a season and setting not in this table.
 
 ---
 
@@ -300,9 +302,9 @@ and its browser tests pass. The problems are all in what this document covers.
   on one ground line, crown area following the money, with plates under them. Only the palette changes.
 - The new ideas are a pale "ghost" crown behind each tree and a log pile. Neither carries the lesson as strongly as
   Time to Grow's own trees, so the demo reads as Time to Grow with fewer parts.
-- **There are no people.** "The fees are cut off the top", but nothing cuts them. Sprigs fall and logs appear on
-  their own, which is exactly "moving like magic". The spec admits the scene "works without" a figure, but the
-  collection's standard is that it doesn't.
+- **Nothing does the cutting.** "The fees are cut off the top", but nothing cuts them. Sprigs fall and logs appear
+  on their own, which is exactly "moving like magic". The fix is not to bolt on a forester. Either the metaphor needs
+  a cause that belongs in the scene, or the demo needs a metaphor that has one built in.
 - **The season repeats.** It is spring again, which Brick by Brick already is. The spec says it is "the season and
   place the collection did not have yet", which is wrong for the season.
 - The app shell and stylesheet are Brick's, copied and re-inked.
