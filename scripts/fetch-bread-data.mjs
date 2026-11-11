@@ -61,7 +61,8 @@ for (const r of cpiRows) {
   const i = monthIndex(r.month) + 12;
   if (i >= 0 && i < cpi.length) cpi[i] = r.value;
 }
-if (cpi.some((v) => v === null)) throw new Error('cpi: a month is missing');
+if (cpi[0] === null || cpi[cpi.length - 1] === null) throw new Error('cpi: no figure for the first or last month');
+const cpiGaps = cpi.flatMap((v, i) => (v === null ? [i - 12] : []));
 
 const series = {};
 for (const item of ITEMS) {
@@ -115,11 +116,12 @@ ${ITEMS.map((i) => `  ${i.key}: ${fmt(series[i.key])},`).join('\n')}
 export const WEEKLY_PAY: readonly (number | null)[] = ${fmt(pay)};
 
 /** All-items consumer price index (1982-84 = 100), monthly from 1979-01: CPI[m + 12] is month m (12 months earlier
- *  is CPI[m]), so the 12-month inflation rate at month m is CPI[m + 12] / CPI[m] - 1. */
-export const CPI: readonly number[] = ${fmt(cpi)};
+ *  is CPI[m]), so the 12-month inflation rate at month m is CPI[m + 12] / CPI[m] - 1. null = not published. */
+export const CPI: readonly (number | null)[] = ${fmt(cpi)};
 `;
 writeFileSync(new URL('../src/bread/engine/data.ts', import.meta.url), out);
 console.log(`months ${months} (${START} to ${ym(months - 1)}), quarters ${pay.length}`);
 const yq = (q) => `${1980 + Math.floor(q / 4)} Q${(q % 4) + 1}`;
+if (cpiGaps.length) console.log(`  gaps in cpi: ${cpiGaps.map(ym).join(', ')}`);
 if (payGaps.length) console.log(`  gaps in pay: ${payGaps.map(yq).join(', ')}`);
 for (const [k, g] of Object.entries(gaps)) if (g.length) console.log(`  gaps in ${k}: ${g.length} months (${ym(g[0])} to ${ym(g[g.length - 1])})`);
