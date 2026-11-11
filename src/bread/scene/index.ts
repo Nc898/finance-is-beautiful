@@ -17,7 +17,7 @@ import { paintCounter, paintCrates, type Sprite } from './counter';
 import { GlassRain } from './street';
 import { Ambient } from './ambient';
 import { createBoard } from './board';
-import { createGrocer } from './grocerStandIn';
+import { createGrocer } from './grocer';
 import type { Board, Grocer, GrocerIntent } from './partsApi';
 
 const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
