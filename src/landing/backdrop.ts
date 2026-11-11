@@ -20,16 +20,15 @@ export interface HeroGeometry {
   groundY: number;
 }
 
-/** `crownTop`: where the tallest crown may reach, as a fraction of the height (the landing hero leaves the top
- *  third to its title; a strip of trees with no title above can let them stand taller) */
-export function heroGeometry(w: number, h: number, dpr: number, crownTop = 0.372): HeroGeometry {
+export function heroGeometry(w: number, h: number, dpr: number): HeroGeometry {
   const groundY = h * 0.835;
-  const crownTopY = h * crownTop;
-  const s = (groundY - crownTopY) / 585;
+  const crownTop = h * 0.372;
+  const s = (groundY - crownTop) / 585;
   return { w, h, dpr: Math.min(2, dpr || 1), s, groundY };
 }
 
-function bloom(ctx: CanvasRenderingContext2D, d: number, cx: number, cy: number, rx: number, ry: number, hex: string, alpha: number, seed: number): void {
+/** a soft watercolor wash: layered translucent pigment with a faint pooled edge (also used by the About page) */
+export function bloom(ctx: CanvasRenderingContext2D, d: number, cx: number, cy: number, rx: number, ry: number, hex: string, alpha: number, seed: number): void {
   const rnd = new Rand(seed);
   const base: number[] = [];
   const N = 22;
@@ -71,7 +70,8 @@ function bloom(ctx: CanvasRenderingContext2D, d: number, cx: number, cy: number,
   ctx.restore();
 }
 
-function speck(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, hex: string, alpha: number, rnd: Rand): void {
+/** a small fleck of pigment */
+export function speck(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, hex: string, alpha: number, rnd: Rand): void {
   const poly: number[] = [];
   const N = 8;
   for (let k = 0; k < N; k++) {

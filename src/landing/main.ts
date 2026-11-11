@@ -2,7 +2,6 @@ import '@fontsource/libre-caslon-display';
 import '@fontsource/libre-caslon-text/400.css';
 import '@fontsource/libre-caslon-text/400-italic.css';
 import '@fontsource-variable/figtree';
-import '../styles/grove.css';
 import '../styles/landing.css';
 
 import { startHero } from './hero';
