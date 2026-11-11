@@ -1,19 +1,11 @@
 /**
- * The collection. Adding a demonstration is one new object in DEMOS: the landing page renders the list from it.
+ * The collection with its previews: the catalog (catalog.ts: topics, concepts, search words) plus the painter for
+ * each entry's still. The landing page renders the list from DEMOS, grouped by topic.
  */
 import { createScene } from '../scene';
+import { CATALOG, type CatalogEntry } from './catalog';
 
-export interface Demo {
-  slug: string;
-  title: string;
-  /** One sentence. */
-  summary: string;
-  href: string;
-  /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the vine's
-   *  autumn rust, tendrils and falling leaves, the snow's winter blue, snowflakes and birds on the rule, or the
-   *  bricks' deep red, a course of bricks for the rule and a blossom wash, or the orchard's harvest ochre, a twig
-   *  hung with golden and red apples for the rule and a late-summer wash. */
-  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard';
+export interface Demo extends CatalogEntry {
   /** Paints a small live still into the given canvas (sized by its CSS box). Called again on resize. */
   paintPreview(canvas: HTMLCanvasElement): Promise<void>;
 }
@@ -128,53 +120,17 @@ async function paintLowHangingFruit(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
-export const DEMOS: Demo[] = [
-  {
-    slug: 'time-to-grow',
-    title: 'Time to Grow',
-    summary: 'Two trees, the same monthly contribution, different starting ages.',
-    href: './time-to-grow.html',
-    theme: 'grove',
-    paintPreview: paintTimeToGrow,
-  },
-  {
-    slug: 'against-the-current',
-    title: 'Against the Current',
-    summary: 'Three rowboats, the same money, and a current of rising prices.',
-    href: './against-the-current.html',
-    theme: 'river',
-    paintPreview: paintAgainstTheCurrent,
-  },
-  {
-    slug: 'nip-it-in-the-bud',
-    title: 'Nip It in the Bud',
-    summary: 'Two cottages, one card balance, and a vine that grows on interest.',
-    href: './nip-it-in-the-bud.html',
-    theme: 'vine',
-    paintPreview: paintNipItInTheBud,
-  },
-  {
-    slug: 'on-a-roll',
-    title: 'On a Roll',
-    summary: 'Three debts, the same budget, and two orders to roll them away.',
-    href: './on-a-roll.html',
-    theme: 'snow',
-    paintPreview: paintOnARoll,
-  },
-  {
-    slug: 'brick-by-brick',
-    title: 'Brick by Brick',
-    summary: 'The same home on a 30-year and a 15-year loan, built a brick at a time.',
-    href: './brick-by-brick.html',
-    theme: 'brick',
-    paintPreview: paintBrickByBrick,
-  },
-  {
-    slug: 'low-hanging-fruit',
-    title: 'Low-Hanging Fruit',
-    summary: 'Two pickers, the same pay and the same match from work, saving 3% or 6%.',
-    href: './low-hanging-fruit.html',
-    theme: 'orchard',
-    paintPreview: paintLowHangingFruit,
-  },
-];
+const PAINTERS: Record<string, Demo['paintPreview']> = {
+  'time-to-grow': paintTimeToGrow,
+  'against-the-current': paintAgainstTheCurrent,
+  'nip-it-in-the-bud': paintNipItInTheBud,
+  'on-a-roll': paintOnARoll,
+  'brick-by-brick': paintBrickByBrick,
+  'low-hanging-fruit': paintLowHangingFruit,
+};
+
+export const DEMOS: Demo[] = CATALOG.map((c) => {
+  const paintPreview = PAINTERS[c.slug];
+  if (!paintPreview) throw new Error(`No preview painter for ${c.slug}`);
+  return { ...c, paintPreview };
+});

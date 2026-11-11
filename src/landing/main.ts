@@ -6,6 +6,7 @@ import '../styles/landing.css';
 
 import { startHero } from './hero';
 import { DEMOS, type Demo } from './demos';
+import { TOPICS } from './catalog';
 
 const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const hero = document.getElementById('hero') as HTMLElement;
@@ -93,27 +94,43 @@ function entry(d: Demo): HTMLLIElement {
   a.innerHTML = `
     <canvas class="demo-art" aria-hidden="true"></canvas>
     <div class="demo-copy">
-      <h3 class="demo-title"></h3>
+      <h4 class="demo-title"></h4>
+      <p class="demo-concept"></p>
       <p class="demo-summary"></p>
       <span class="demo-cta"><span>Open the demonstration</span>${d.theme === 'river' ? WAVE_ARROW : d.theme === 'vine' ? TENDRIL_ARROW : d.theme === 'snow' ? SNOWBALL_ARROW : ARROW}</span>
     </div>`;
   if (d.theme === 'vine') li.insertAdjacentHTML('afterbegin', `<div class="vine-leaves" aria-hidden="true">${LEAVES}</div>`);
   if (d.theme === 'snow') li.insertAdjacentHTML('afterbegin', `<div class="snow-birds" aria-hidden="true">${SNOW_BIRDS}</div>`);
   a.querySelector('.demo-title')!.textContent = d.title;
+  a.querySelector('.demo-concept')!.textContent = d.concept;
   a.querySelector('.demo-summary')!.textContent = d.summary;
   li.append(a);
   return li;
 }
 
+/* grouped under their topic (catalog.ts), in the catalog's order */
 const list = document.getElementById('demo-list')!;
-for (const d of DEMOS) list.append(entry(d));
+for (const t of TOPICS) {
+  const group = DEMOS.filter((d) => d.topic === t.id);
+  if (group.length === 0) continue;
+  const section = document.createElement('section');
+  section.className = 'topic';
+  section.setAttribute('aria-labelledby', `topic-${t.id}`);
+  section.innerHTML = `<h3 class="topic-h" id="topic-${t.id}"></h3><ul class="demo-list"></ul>`;
+  section.querySelector('.topic-h')!.textContent = t.heading;
+  const ul = section.querySelector('.demo-list')!;
+  for (const d of group) ul.append(entry(d));
+  list.append(section);
+}
 
 /**
  * Paint each live still behind the curtain (before the reveal), so nothing heavy runs once the page is
  * showing; repaint later only if its box changes size.
  */
-const previews = Array.from(list.querySelectorAll<HTMLCanvasElement>('.demo-art')).map((canvas, i) => {
-  const demo = DEMOS[i]!;
+const previews = Array.from(list.querySelectorAll<HTMLCanvasElement>('.demo-art')).map((canvas) => {
+  // matched by slug, not position: the list is grouped by topic, so its order is not the catalog's
+  const slug = canvas.closest<HTMLElement>('.demo')!.dataset.slug;
+  const demo = DEMOS.find((d) => d.slug === slug)!;
   let lastW = 0;
   let timer = 0;
   const paint = async (): Promise<void> => {
