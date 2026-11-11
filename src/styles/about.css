@@ -52,9 +52,12 @@ body {
   color: var(--emerald-deep);
 }
 
+/* one centered reading column (about 60 characters a line at 18px): the title, the text and the icons share its
+   left edge, and it sits in the middle of the page like the footer line below it; on a phone its edges line up
+   with the header's 32px inset */
 .about {
   flex: 1;
-  width: min(720px, calc(100% - 64px));
+  width: min(544px, calc(100% - 64px));
   margin: 0 auto;
   padding: 64px 0 96px;
 }
@@ -65,7 +68,6 @@ body {
 }
 .about-body {
   margin-top: 40px;
-  max-width: 34em;
 }
 .about-body p {
   margin: 0 0 18px;
