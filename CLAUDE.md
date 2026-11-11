@@ -15,6 +15,12 @@ Canvas 2D, Vitest, Playwright). The owner, Nick, holds them to a high, specific 
 - **New demonstrations, and changes to a demo's concept, setting, season, metaphor or characters, are the owner's
   decision.** Brainstorm options, let him pick, then write the spec. Never build one unasked. A candidate idea in a
   list is not approval.
+- **Build a demo with the Low-Hanging Fruit recipe** (QUALITY_BAR.md section 3):
+  1. Offer options checked against the collection, and let him choose.
+  2. Commit the spec and the contracts first.
+  3. Build on parts he already approved.
+  4. Copy the quality bar into every builder's brief, and run two builders at a time.
+  5. Review 2× crops and frame strips yourself before he sees anything.
 - **Every demo is its own world.** It needs a new centerpiece metaphor and a new season or place. Don't reuse a
   sister demo's composition (for example, Time to Grow's two money-sized trees). Figures are optional: use them only
   when the metaphor naturally calls for them, and never force them in.

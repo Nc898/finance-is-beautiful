@@ -66,7 +66,87 @@ Rules that follow from this:
 
 ---
 
-## 3. What a demonstration in this collection is
+## 3. How a demo gets built (the Low-Hanging Fruit recipe)
+
+Low-Hanging Fruit (November 2 and 3) was the best-received build. It took two messages from the owner to start
+it, and one correction afterwards (the walk's hip drop). It worked because every correction from the five demos
+before it had become part of the process, so the builders and the coordinator caught problems before the owner
+saw them. Build every new demo this way.
+
+1. **Pitch, checked against the collection.** Offer three or four ideas, each with its lesson, its metaphor
+   and its setting. Once he picks one, ask the design questions together (AskUserQuestion), each with a
+   recommended option and a one-line reason per option. Low-Hanging Fruit asked four: which two to compare, how
+   the growth shows in the picture, setting and season, and how to build it. The reasons do the rehash check out
+   loud: "a palette the collection doesn't have yet", "sits closer to Brick's blossom", "risks echoing the
+   vine". Record his answers in the spec.
+2. **Commit the rules before any building**, as one commit (`Demo Name: the spec and the shared contracts`):
+   - `docs/<NAME>_SPEC.md`: the lesson in one sentence, the math with its defaults checked against a closed
+     form, the scene, the notes, the labels and the files;
+   - `src/<demo>/types.ts`: the engine and scene types;
+   - `src/<demo>/scene/geom.ts`: the world layout, with every position and size as a named constant;
+   - a parts contract for anything with behaviour (figures, props), including `place(intent)`, the settled
+     state that scrubbing and reduced motion use.
+
+   Builders implement the contract and never change it. If it is wrong, they work around it and report it.
+3. **Build on what already passed his review.** Don't start parts from scratch:
+   - **Trees:** `src/scene/treePainter.ts` with the foliage atlas, as part of a world (never as its subject).
+   - **Figures:** Brick's crew. That's `src/brick/scene/figure.ts` (skeleton, three-quarter turns),
+     `crewArt.ts` and the pose cache in `cache.ts`.
+   - **Gait:** the shared gait in `src/snow/scene/climberGait.ts`, and the orchard pickers' CMU-fitted walk
+     (`src/orchard/scene/pickerFigure.ts`, `tools/mocap`).
+   - **Washes and paper:** `src/scene/watercolor.ts`, and `bloom`/`speck` in `src/landing/backdrop.ts`.
+   - **App shell:** the panel, timeline, speed slider, notes and intro (`src/shared/intro.ts`), and the loading
+     screen (`src/shared/loaderHtml.ts`), adapted from the newest demo.
+
+   Copy what is tied to another demo into the new demo's own files. Don't edit the other demo.
+4. **Brief each builder completely** (template below). The key line is the quality bar, copied in as
+   acceptance criteria that can't be negotiated. Every item in it is one of his past corrections.
+5. **Two builders at a time.** Four at once hit the API rate limit and stalled the Low-Hanging Fruit build.
+6. **The coordinator reviews before he sees anything:**
+   - render the real page;
+   - compare 2× crops with the sister demos;
+   - watch frame strips of every motion;
+   - send each builder a written fix list, and repeat until nothing on it would embarrass the collection;
+   - run every test.
+
+   Low-Hanging Fruit's list included banded clouds, hard edges round the mown plots, a stray dashed line, blocky
+   shade in the tree and too much sky on phones. He saw none of them.
+7. **Finish:** add the landing entry with its own theme and a preview baked from the real scene, update the
+   spec, commit, and report honestly, including the flaws still known.
+
+### Brief template
+
+```text
+You are building <PART> for "<Demo>", the <nth> demo in a watercolor finance-demos site (Vite multi-page,
+TypeScript, Canvas 2D). Project root: <absolute path>.
+
+READ FIRST: docs/QUALITY_BAR.md (all of it), docs/<NAME>_SPEC.md (your part is "<section>"), src/<demo>/types.ts,
+src/<demo>/scene/geom.ts, the parts contract. Then study the proven part you build on: <files>.
+
+YOUR FILES (create): <list>. Do not create or edit: <other builders' files>, the contracts, the spec, other demos.
+
+Behaviour: <what it does, in order, with the contract's names>. place(intent) = the settled state for scrubbing
+and reduced motion.
+
+Quality bar (non-negotiable): no teleports or snapped poses, every transition blended >= 0.25 s; a proper gait
+with no foot sliding; three-quarter turns; nothing passes through anything; things move only in a hand or by a
+force, never appear; the picture keeps pace with the money at every month and rebuilds exactly when scrubbed;
+art at the sister demos' finish at 2x; <part-specific items>. Performance: <fps target>; repaint only on visible
+change (pose cache).
+
+Verify: a dev server runs at http://localhost:5180 (do not start another). Make a harness page (not in
+vite.config) showing your part at speeds 1 and 5, scrubbing, and reduced motion. Capture frame sequences with
+Playwright, look closely, and iterate.
+
+Rules: new files LF; match the codebase's idiom and comment density; `npx tsc --noEmit` clean; do not commit;
+do not spawn subagents; ask nothing, decide sensibly.
+
+Final report (concise): files, captures, contract issues, anything not verified.
+```
+
+---
+
+## 4. What a demonstration in this collection is
 
 ### The pattern every demo follows
 
@@ -83,7 +163,7 @@ Rules that follow from this:
   make the scene look busy is as wrong as things appearing by magic.
 - **Its own season and place, and a distinct palette.** The landing page reads as a collection of different worlds.
 - **The shared frame:**
-  - the paper, ink and type (section 4);
+  - the paper, ink and type (section 5);
   - a collapsible right-hand panel;
   - an introduction overlay the first time each session, with "About this demo" to reopen it;
   - small milestone notes at the upper left, under the title;
@@ -114,7 +194,7 @@ a season and setting not in this table.
 
 ---
 
-## 4. The art standard
+## 5. The art standard
 
 ### The visual language (from the original brief and its six reference paintings)
 
@@ -132,7 +212,7 @@ a season and setting not in this table.
   - Figtree for the UI, with tabular numerals.
   - Type is a quiet supporting element. The illustration is the centerpiece.
 - **The house tree painter** (`src/scene/treePainter.ts`, the foliage atlas) is the standard for trees. But
-  reusing it as the *subject* of a new demo is a rehash (section 3).
+  reusing it as the *subject* of a new demo is a rehash (section 4).
 
 ### What has been rejected (don't repeat these)
 
@@ -165,7 +245,7 @@ a season and setting not in this table.
 
 ---
 
-## 5. The motion standard
+## 6. The motion standard
 
 The owner scrutinizes motion more than anything else. "Make sure all motion is smooth and connected" and "everything
 should flow, move, and feel together" appear in almost every request.
@@ -210,7 +290,7 @@ stepped. "It's moving at about 5 fps" on Brick was a release-blocking failure. M
 
 ---
 
-## 6. Numbers and honesty
+## 7. Numbers and honesty
 
 - A pure, tested engine that is separate from the rendering:
   - monthly steps, full precision, rounded only for display;
@@ -225,7 +305,7 @@ stepped. "It's moving at about 5 fps" on Brick was a release-blocking failure. M
 
 ---
 
-## 7. Copy and UI
+## 8. Copy and UI
 
 - **No eyebrows, no em-dashes, no 3-step visualizations, no long paragraphs.** The rule applies to page copy,
   notes, labels and the intro. Keep sentences short and plain.
@@ -238,7 +318,7 @@ stepped. "It's moving at about 5 fps" on Brick was a release-blocking failure. M
 
 ---
 
-## 8. Loading and performance
+## 9. Loading and performance
 
 - No flash of unstyled text, and no white screen. The shared loading screen shows from the first frame, and the page
   appears only once the scene is painted and has settled. "The text appears before any of the visuals and the
@@ -248,7 +328,7 @@ stepped. "It's moving at about 5 fps" on Brick was a release-blocking failure. M
 
 ---
 
-## 9. Before anything is shown to the owner
+## 10. Before anything is shown to the owner
 
 Work through this list, and say in the report which items were done and which could not be.
 
@@ -268,7 +348,7 @@ Work through this list, and say in the report which items were done and which co
 
 ---
 
-## 10. Working conventions
+## 11. Working conventions
 
 - **Commit subjects:** `Demo Name: what changed, in plain words`. Author `Nick <nlevichilds@gmail.com>`.
 - **Commits:** small and readable, one concern each.
@@ -285,7 +365,7 @@ Work through this list, and say in the report which items were done and which co
 
 ---
 
-## 11. Case study: "A Little Off the Top" (branch `claude/fees-demo`, November 5)
+## 12. Case study: "A Little Off the Top" (branch `claude/fees-demo`, November 5)
 
 It was built overnight by a cloud session from the handoff notes alone. The engine is correct, and its 18 engine tests
 and its browser tests pass. The problems are all in what this document covers.
