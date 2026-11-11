@@ -3,7 +3,7 @@
  *  capture script drive it. */
 import { createBreadScene } from './bread/scene/index';
 import { monthRow, statementMonth } from './bread/engine';
-import { boardFor } from './bread/app/text';
+import { boardFor, boardMonth } from './bread/app/text';
 import { LAST_MONTH, PLAY_RATE } from './bread/app/store';
 import type { BasketInputs, BreadFrame, ItemKey } from './bread/types';
 import { BASKET_LIMITS, DEFAULT_BASKET, ITEM_KEYS } from './bread/types';
@@ -85,7 +85,7 @@ const frame = (now: number) => {
     speed: st.playing ? st.speed : 1,
     month: st.month,
     statementMonth: sm,
-    board: boardFor(row),
+    board: boardFor(monthRow(st.basket, boardMonth(sm))),
     basket: st.basket,
     scrubbed: st.scrubbed,
     reducedMotion: reduced.checked,

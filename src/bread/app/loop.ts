@@ -2,11 +2,11 @@
  * The one requestAnimationFrame loop: advance the clock, derive the snapshot, build the BreadFrame, render, and let
  * the UI update only what changed.
  */
-import { snapshot } from '../engine';
+import { monthRow, snapshot } from '../engine';
 import type { BreadFrame, BreadSceneAPI } from '../types';
 import type { Store } from './store';
 import type { UI } from './ui';
-import { boardFor } from './text';
+import { boardFor, boardMonth } from './text';
 
 export interface Loop {
   stop(): void;
@@ -78,7 +78,8 @@ export function startLoop(store: Store, scene: BreadSceneAPI, ui: UI): Loop {
       speed: state.playing ? state.speed : 1,
       month: snap.month,
       statementMonth: snap.statementMonth,
-      board: boardFor(snap.row),
+      // the board is chalked once a year, with January's prices (the labels below carry the month's)
+      board: boardFor(monthRow(basket, boardMonth(snap.statementMonth))),
       basket,
       scrubbed,
       reducedMotion: state.reducedMotion,

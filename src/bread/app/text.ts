@@ -44,6 +44,11 @@ export function boardFor(row: MonthRow): BoardContent {
   };
 }
 
+/** The month the board is chalked for: January of the shown month's year (the data starts in a January). */
+export function boardMonth(statementMonth: number): number {
+  return statementMonth - (statementMonth % 12);
+}
+
 export interface LabelText {
   /** the receipt: "This week's basket", the total, and the month ("Jan 1980", or "Oct 2025, estimated") */
   receiptTotal: string;

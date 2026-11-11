@@ -22,11 +22,10 @@ describe('the clock', () => {
     expect(s.state.month).toBe(0);
   });
 
-  it('plays a year in about two seconds at 1x, times speed; stops at the end and restarts from 0', () => {
-    expect(PLAY_SECONDS).toBe(94);
+  it('plays a year in six seconds at 1x, times speed; stops at the end and restarts from 0', () => {
     expect(LAST_MONTH).toBe(560);
-    expect(12 / PLAY_RATE).toBeGreaterThan(1.9);
-    expect(12 / PLAY_RATE).toBeLessThan(2.1);
+    expect(PLAY_SECONDS).toBeCloseTo((560 / 12) * 6, 9);
+    expect(12 / PLAY_RATE).toBeCloseTo(6, 9);
     const s = createStore();
     s.actions.play();
     s.tick(0.1);
@@ -48,16 +47,16 @@ describe('the clock', () => {
     expect(s.state.jumps).toBe(jumps + 1);
   });
 
-  it('the whole timeline takes about 94 s at 1x', () => {
+  it('the whole timeline takes 280 s at 1x', () => {
     const s = createStore();
     s.actions.play();
     let t = 0;
-    while (s.state.playing && t < 200) {
+    while (s.state.playing && t < 400) {
       s.tick(0.05);
       t += 0.05;
     }
-    expect(t).toBeGreaterThan(93);
-    expect(t).toBeLessThan(95);
+    expect(t).toBeGreaterThan(279);
+    expect(t).toBeLessThan(281);
   });
 
   it('speed stays within 0.1x and 5x, in tenths', () => {

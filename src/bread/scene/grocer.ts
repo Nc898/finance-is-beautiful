@@ -5,7 +5,7 @@
  * His work, each step finished before the next begins:
  *   board   when a line of the board differs from what it should say, he walks out past the counter's end to the
  *           board, takes the chalk from his apron pocket and the towel off his shoulder, and goes down the lines in
- *           BOARD_LINE_ORDER: for each that differs he reads what it should say now, wipes the old figure with the
+ *           PASS_ORDER: for each that differs he reads what it should say now, wipes the old figure with the
  *           towel in his left hand (the cloth exactly on the board's wipeTip), then chalks the new one with his right
  *           (the chalk's tip exactly on writeTip), stepping along the board between the year and the prices, up on
  *           his toes for the year, stooping a little for the total. While the timeline plays the months keep coming,
@@ -27,12 +27,15 @@ import type { BasketInputs, BoardContent, ItemKey } from '../types';
 import { ITEM_KEYS } from '../types';
 import { Mover, clamp, lerp, sstep } from '../../vine/scene/gardenerMath';
 import { BOARD_LINES, COUNTER, GROCER_FLOOR_Y, GROCER_SPOTS } from './geom';
-import { BOARD_LINE_ORDER, type Board, type BoardLine, type CreateGrocer, type Grocer, type GrocerIntent } from './partsApi';
+import { type Board, type BoardLine, type CreateGrocer, type Grocer, type GrocerIntent } from './partsApi';
 import { GrocerFigure, UNIT, type W3 } from './grocerFigure';
 import { buildGrocerSet } from './grocerArt';
 import { BasketArt, layoutBasket, sortPieces, type PieceSpec } from './basket';
 
 const PI = Math.PI;
+/** the order he goes down the board: the prices and the total, then the year last, so the board never shows a new
+ *  year over last year's prices */
+const PASS_ORDER: readonly BoardLine[] = ['bread', 'eggs', 'coffee', 'bananas', 'chicken', 'flour', 'total', 'year'];
 const STEP = 1 / 60;
 const FLOOR = GROCER_FLOOR_Y;
 /** the counter's back edge is this deep (world y) and its top this high above his floor: on the screen the top's back
@@ -55,7 +58,7 @@ const STAND_YEAR_WRITE = 826;
 const YEAR_Y = FLOOR;
 const STAND_PRICE = 904;
 /** his own clock against the wall clock: work at 1x, and the caps on work and walks at high speeds */
-const WORK_TIME = 1.7;
+const WORK_TIME = 2.1;
 const WORK_CAP = 2.7;
 const WALK_CAP = 1.3;
 const WALK_EASE = 0.35;
@@ -141,6 +144,7 @@ type Phase =
   | 'shift'
   | 'write'
   | 'side'
+  | 'wait'
   | 'disarm'
   | 'toCounter'
   | 'toPiece'
@@ -265,7 +269,8 @@ class GrocerImpl implements Grocer {
       if (intent.pace <= 0) this.tend = true;
     }
     if (intent.pace > 0) this.tend = false;
-    const walking = this.fig.walking || this.phase === 'toBoard' || this.phase === 'toCounter' || this.phase === 'toPiece' || this.phase === 'side';
+    // (a side-step along the board is part of the work, at the work's pace; the walks are a person's walks)
+    const walking = (this.fig.walking && this.phase !== 'side') || this.phase === 'toBoard' || this.phase === 'toCounter' || this.phase === 'toPiece';
     this.walkClock += ((walking ? 1 : 0) - this.walkClock) * (1 - Math.exp(-wall / WALK_EASE));
     const pace = intent.pace > 0 ? intent.pace : 1;
     const work = Math.min(WORK_TIME * pace, WORK_CAP);
@@ -404,8 +409,8 @@ class GrocerImpl implements Grocer {
   /** the next line from index i that differs from what it should say, or -1 */
   private nextLine(i: number, it: GrocerIntent): number {
     const b = this.board!.shown();
-    for (let j = i; j < BOARD_LINE_ORDER.length; j++) {
-      const l = BOARD_LINE_ORDER[j]!;
+    for (let j = i; j < PASS_ORDER.length; j++) {
+      const l = PASS_ORDER[j]!;
       if (lineText(b, l) !== lineText(it.board, l)) return j;
     }
     return -1;
@@ -542,7 +547,7 @@ class GrocerImpl implements Grocer {
         }
         // (the first line that differs now: a year may have turned on the way)
         if (this.nextLine(0, it) >= 0) this.lineI = this.nextLine(0, it);
-        const l = BOARD_LINE_ORDER[Math.max(0, this.lineI)]!;
+        const l = PASS_ORDER[Math.max(0, this.lineI)]!;
         this.stroke = lineText(board.shown(), l) === '' ? 'write' : 'wipe';
         if (this.arrive(this.standFor(l), FACE_BOARD)) this.next('arm');
         break;
@@ -632,13 +637,26 @@ class GrocerImpl implements Grocer {
       }
       case 'side': {
         // a step or two along the board, still facing it
-        const l = this.sideNext === 'shift' ? this.line! : BOARD_LINE_ORDER[this.lineI]!;
+        const l = this.sideNext === 'shift' ? this.line! : PASS_ORDER[this.lineI]!;
         this.engage(0, 'ready', () => this.chalkRest(), 0.3);
         this.engage(1, 'ready', () => this.clothRest(), 0.3);
         ({ look } = this.posture(l));
         if (f.goTo(this.standFor(l), FACE_BOARD, 4, true)) {
           if (this.sideNext === 'shift') this.next('shift');
           else this.startLine(it);
+        }
+        break;
+      }
+      case 'wait': {
+        // by the board between years: the chalk and the towel lowered to his sides, an eye on the board
+        this.engage(0, 'low', () => this.bodyPt(7, 10, 52), 0.5);
+        this.engage(1, 'low', () => this.bodyPt(5, -10, 52), 0.5);
+        look = { pitch: -0.15, yaw: 0.05 };
+        if (this.t < 0.3) break;
+        if (!ok || this.nextOp(it)) this.next('disarm');
+        else if (this.nextLine(0, it) >= 0) {
+          this.lineI = this.nextLine(0, it);
+          this.startLine(it);
         }
         break;
       }
@@ -740,12 +758,14 @@ class GrocerImpl implements Grocer {
       }
       j = this.nextLine(0, it);
       if (j < 0) {
-        this.next('disarm');
+        // the board is true for this year: while the timeline plays he waits by it for the next, tools in hand
+        // (the board changes once a year; walking back to the counter and out again each time would leave it behind)
+        this.next(it.activity === 'work' && it.pace > 0 ? 'wait' : 'disarm');
         return;
       }
     }
     this.lineI = j;
-    const l = BOARD_LINE_ORDER[j]!;
+    const l = PASS_ORDER[j]!;
     this.stroke = lineText(this.board!.shown(), l) === '' ? 'write' : 'wipe';
     this.sideNext = 'line';
     if (!this.atStand(l)) this.next('side');
@@ -761,7 +781,7 @@ class GrocerImpl implements Grocer {
       return;
     }
     this.lineI = j;
-    const l = BOARD_LINE_ORDER[j]!;
+    const l = PASS_ORDER[j]!;
     this.stroke = lineText(this.board!.shown(), l) === '' ? 'write' : 'wipe';
     this.sideNext = 'line';
     if (!this.atStand(l)) {

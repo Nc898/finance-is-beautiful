@@ -123,9 +123,10 @@ pickers' CMU-fitted walk for any steps):
 - **His work is the prices.** The board shows what the grocer last chalked, not the true month: he goes along the
   board line by line, wipes the old price with his cloth and chalks the new one (the chalk appears stroke by stroke
   under his hand; the board's API takes the chalk tip's position). After the six lines he rubs out and writes the
-  total, and when the year turns, the year at the top. At 1× a full pass takes about as long as a year of the
-  timeline, so the board lags by a few months at most; at high speeds he skips straight to the latest month on each
-  line. The exact figures are always in the labels below the scene.
+  total, and the year at the top. The board is chalked once a year, with January's prices (boardMonth in
+  app/text.ts): at 1× a year takes 6 s, about one pass (the year chalked last, so the board is never a new year over old prices), and between passes he waits by the board with his tools in
+  hand. At high speeds he skips straight to the latest year on each line. The month's exact figures are always in
+  the labels below the scene.
 - Between passes and when a quantity changes he tidies the basket: adds or takes away a loaf, an egg carton, a pound
   of bananas, wraps or unwraps the chicken, sets the flour sack down. Paused, he finishes the line he is on, then
   stands by the counter (idle: wiping it down, looking out at the rain).
@@ -155,7 +156,7 @@ envelope shows a median week's pay; the headline is how many minutes of that pay
 ("1980 was the peak of a high-inflation era: prices were rising 14% a year, and pay had just fallen behind."); the
 data ("Real prices and pay from the U.S. Bureau of Labor Statistics."); how to use it. Key
 `fib-intro-seen:bread-and-butter`. The timeline then waits at January 1980, paused. Play runs the whole timeline at
-about a year every 2 s at 1× (PLAY_SECONDS ≈ 94), scaled by the speed slider (0.1×–5×, log, as the vine): real
+a year every 6 s at 1× (SECONDS_PER_YEAR; PLAY_SECONDS = 280, under five minutes), scaled by the speed slider (0.1×–5×, log, as the vine): real
 history needs more time to read than the hypothetical demos.
 
 Short notes at the top left under the title, by month, every number live from the engine (the defaults shown):

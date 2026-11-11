@@ -42,8 +42,10 @@ export interface AppState {
   jumps: number;
 }
 
-/** A full run of the timeline takes this long at 1x: about a year every two seconds (real history needs time to read). */
-export const PLAY_SECONDS = 94;
+/** A year takes this long at 1x: time for the grocer to re-chalk the board once a year at a legible pace. */
+export const SECONDS_PER_YEAR = 6;
+/** A full run of the timeline takes this long at 1x (about four and a half minutes; the speed slider goes to 5x). */
+export const PLAY_SECONDS = (LAST_MONTH / 12) * SECONDS_PER_YEAR;
 /** Playback at 1x, in months a second. */
 export const PLAY_RATE = LAST_MONTH / PLAY_SECONDS;
 /** Max time step the clock will take in one frame (so tab switches don't jump). */
