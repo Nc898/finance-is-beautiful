@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF6EA" />
+<meta name="description" content="A real week's groceries and a real week's pay, every month since 1980. In a corner grocery the prices are chalked by hand, and the headline counts the minutes of work the basket takes." />
+<title>Bread and Butter</title>
+</head>
+<body>
+<!-- loader: Bread and Butter -->
+<div class="app" id="app">
+  <main class="main">
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="A corner grocery on a rainy morning, loading"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="label receipt" id="label-basket">
+          <div class="receipt-paper">
+            <p class="receipt-head">This week's basket</p>
+            <p class="receipt-total" id="receipt-total"></p>
+            <p class="receipt-date" id="receipt-date"></p>
+          </div>
+        </div>
+        <div class="label headline" id="label-minutes">
+          <p class="headline-line"><span class="headline-num" id="headline-num"></span> <span class="headline-unit" id="headline-unit">minutes of work</span></p>
+          <p class="headline-sub" id="headline-sub">to buy the basket</p>
+        </div>
+        <div class="label envelope" id="label-pay">
+          <div class="envelope-paper">
+            <p class="envelope-head">A week's pay</p>
+            <p class="envelope-amount" id="pay-amount"></p>
+            <p class="envelope-sub" id="pay-sub"></p>
+          </div>
+        </div>
+      </div>
+
+      <p class="year-readout" id="year-readout" aria-hidden="true">Jan 1980</p>
+
+      <div class="caption" id="caption">
+        <div class="cap" data-layer="0"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap" data-layer="1" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+        <div class="cap cap-ghost" id="cap-ghost" aria-hidden="true"><p class="cap-1"></p><p class="cap-2"></p></div>
+      </div>
+
+      <header class="masthead">
+        <h1 class="title"><a class="title-link" href="./index.html" aria-label="Bread and Butter, back to all demonstrations"><span class="title-arrow" aria-hidden="true">←</span>Bread and Butter</a></h1>
+        <div class="story-actions">
+          <button type="button" class="btn quiet" id="btn-about" aria-haspopup="dialog">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11.2v5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/></svg>
+            <span>About<span class="long"> this demo</span></span>
+          </button>
+        </div>
+      </header>
+    </div>
+
+    <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="dock" aria-expanded="true">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sr-only" id="panel-toggle-label">Hide controls</span>
+    </button>
+
+    <aside class="dock" id="dock" aria-label="Controls">
+      <div class="dock-inner">
+        <div class="transport" role="group" aria-label="Playback and timeline">
+          <button type="button" class="btn play" id="btn-play">
+            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>
+            <svg class="ico ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>
+            <span id="play-label">Play</span>
+          </button>
+
+          <div class="speeds" id="speeds">
+            <label class="speed-label" for="speed">Speed</label>
+            <input type="range" id="speed" min="0" max="1000" step="10" value="589" aria-label="Playback speed" aria-valuetext="1 times speed" />
+            <output class="speed-readout" id="speed-readout" for="speed">1×</output>
+          </div>
+
+          <output class="age-readout" id="age-readout" for="timeline">Jan 1980</output>
+
+          <div class="scale" id="scale">
+            <input type="range" id="timeline" min="0" max="560" step="1" value="0" aria-label="Timeline in months" />
+            <div class="scale-ticks" id="scale-ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <form class="inputs" id="inputs" novalidate autocomplete="off">
+          <fieldset class="set">
+            <legend>This week's basket</legend>
+            <div class="set-fields">
+              <div class="field" data-field="bread">
+                <label for="f-bread">Bread<span class="unit">loaves (1 lb each)</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer loaves of bread">−</button>
+                  <input id="f-bread" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-bread" />
+                  <button type="button" class="step" data-dir="1" aria-label="More loaves of bread">+</button>
+                </div>
+                <p class="field-error" id="err-bread" hidden></p>
+              </div>
+              <div class="field" data-field="eggs">
+                <label for="f-eggs">Eggs<span class="unit">dozens</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer dozens of eggs">−</button>
+                  <input id="f-eggs" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-eggs" />
+                  <button type="button" class="step" data-dir="1" aria-label="More dozens of eggs">+</button>
+                </div>
+                <p class="field-error" id="err-eggs" hidden></p>
+              </div>
+              <div class="field" data-field="coffee">
+                <label for="f-coffee">Coffee<span class="unit">lb</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer pounds of coffee">−</button>
+                  <input id="f-coffee" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-coffee" />
+                  <button type="button" class="step" data-dir="1" aria-label="More pounds of coffee">+</button>
+                </div>
+                <p class="field-error" id="err-coffee" hidden></p>
+              </div>
+              <div class="field" data-field="bananas">
+                <label for="f-bananas">Bananas<span class="unit">lb</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer pounds of bananas">−</button>
+                  <input id="f-bananas" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-bananas" />
+                  <button type="button" class="step" data-dir="1" aria-label="More pounds of bananas">+</button>
+                </div>
+                <p class="field-error" id="err-bananas" hidden></p>
+              </div>
+              <div class="field" data-field="chicken">
+                <label for="f-chicken">Chicken<span class="unit">lb (whole)</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer pounds of chicken">−</button>
+                  <input id="f-chicken" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-chicken" />
+                  <button type="button" class="step" data-dir="1" aria-label="More pounds of chicken">+</button>
+                </div>
+                <p class="field-error" id="err-chicken" hidden></p>
+              </div>
+              <div class="field" data-field="flour">
+                <label for="f-flour">Flour<span class="unit">lb</span></label>
+                <div class="stepper">
+                  <button type="button" class="step" data-dir="-1" aria-label="Fewer pounds of flour">−</button>
+                  <input id="f-flour" type="text" inputmode="numeric" autocomplete="off" aria-describedby="err-flour" />
+                  <button type="button" class="step" data-dir="1" aria-label="More pounds of flour">+</button>
+                </div>
+                <p class="field-error" id="err-flour" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="foot">
+          <p class="assumptions">Real BLS prices and median full-time weekly pay, before tax. Prices are U.S. city averages; yours will differ.</p>
+          <label class="reduce"><input type="checkbox" id="reduce-motion" /><span>Reduce motion</span></label>
+        <details class="how" id="how">
+          <summary>How this is calculated</summary>
+          <div class="how-body">
+            <h2 class="how-h">At <span id="how-month">Jan 1980</span></h2>
+            <p class="formula-lead">Basket = each quantity × its price, added up. Minutes of work = basket ÷ (weekly pay ÷ 40) × 60.</p>
+            <p class="formula"><span class="formula-k">Basket</span><span data-cell="basketFormula"></span></p>
+            <p class="formula"><span class="formula-k">Minutes</span><span data-cell="minutesFormula"></span></p>
+
+            <h2 class="how-h">This month's prices</h2>
+            <div class="table-wrap">
+              <table class="compare" id="prices-table">
+                <caption class="sr-only">Each price and the week's pay in the month on the clock</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Item</span></th>
+                    <th scope="col">Price</th>
+                    <th scope="col">In basket</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <h2 class="how-h">Year by year</h2>
+            <div class="table-wrap">
+              <table class="compare yearly" id="yearly">
+                <caption class="sr-only">Each year's average basket, weekly pay, minutes of work, and the yearly rise in prices overall and in all groceries</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Year</th>
+                    <th scope="col">Basket</th>
+                    <th scope="col">Pay</th>
+                    <th scope="col">Minutes</th>
+                    <th scope="col">Prices</th>
+                    <th scope="col">Groceries</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="table-note">Each row is the year's average. Prices and Groceries are the yearly rise in prices overall and in all groceries. * Includes months the BLS did not publish.</p>
+
+            <h2 class="how-h">Since January 1980</h2>
+            <div class="table-wrap">
+              <table class="compare" id="since-table">
+                <caption class="sr-only">How many times higher each measure is now than in January 1980</caption>
+                <tbody>
+                  <tr><th scope="row">This basket</th><td data-cell="since.basket"></td></tr>
+                  <tr><th scope="row">All groceries</th><td data-cell="since.groceries"></td></tr>
+                  <tr><th scope="row">Prices overall</th><td data-cell="since.overall"></td></tr>
+                  <tr><th scope="row">Core</th><td data-cell="since.core"></td></tr>
+                  <tr class="strong"><th scope="row">A week's pay</th><td data-cell="since.pay"></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="formula-lead" data-cell="sinceNote"></p>
+            <p class="formula-lead" data-cell="coreNote"></p>
+
+            <h2 class="how-h">Not published</h2>
+            <p class="formula-lead">The BLS did not publish these months. Each is filled in with a straight line between the nearest published months, and marked estimated.</p>
+            <ul class="conventions gaps" id="gaps"></ul>
+
+            <h2 class="how-h">Sources</h2>
+            <ul class="conventions sources" id="sources"></ul>
+
+            <ul class="conventions">
+              <li>Average prices show the price level in a month, not the exact rate of change. The yearly rises come from the consumer price index.</li>
+              <li>A week's pay is the median usual weekly earnings of full-time workers, before tax. A quarter's figure covers its three months.</li>
+              <li>1980 is where these average prices begin. It was the peak of a high-inflation era, so it is not a typical starting line.</li>
+            </ul>
+          </div>
+        </details>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <dialog class="intro" id="intro" aria-labelledby="intro-title" aria-describedby="intro-lede">
+    <form class="intro-card" method="dialog">
+      <p class="intro-kicker">Prices and pay</p>
+      <h2 class="intro-title" id="intro-title">Bread and Butter</h2>
+      <p class="intro-lede" id="intro-lede">A real week's groceries and a real week's pay, every month since 1980.</p>
+      <h3 class="intro-h">How to read it</h3>
+      <ul class="intro-list">
+        <li>The <strong>chalkboard</strong> shows what the basket costs. The grocer writes each month's prices by hand.</li>
+        <li>The <strong>pay envelope</strong> holds a median week's pay.</li>
+        <li>The <strong>headline</strong> is how many minutes of that pay the basket takes.</li>
+      </ul>
+      <h3 class="intro-h">Where it starts</h3>
+      <ul class="intro-list">
+        <li>1980 was the peak of a high-inflation era: prices were rising 14% a year, and pay had just fallen behind.</li>
+        <li>Real prices and pay from the U.S. Bureau of Labor Statistics.</li>
+      </ul>
+      <div class="intro-foot">
+        <p class="intro-hint">Press Play, or drag the timeline to move through the years. Change what is in the basket in the panel.</p>
+        <button class="intro-go" type="submit" value="done" data-intro-close>Start exploring</button>
+      </div>
+    </form>
+  </dialog>
+  <p class="sr-only" id="summary"></p>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+<script type="module" src="/src/bread/main.ts"></script>
+</body>
+</html>

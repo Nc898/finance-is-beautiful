@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => ({
         onARoll: 'on-a-roll.html',
         brickByBrick: 'brick-by-brick.html',
         lowHangingFruit: 'low-hanging-fruit.html',
+        breadAndButter: 'bread-and-butter.html',
         // The development harnesses are served by the dev server as they are; a production build leaves them out
         // of the public site unless built with `vite build --mode harness`.
         ...(mode === 'harness'
