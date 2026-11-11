@@ -21,8 +21,14 @@ const ITEMS = [
   { key: 'flour', series: 'APU0000701111', name: 'Flour, white, all purpose (per lb)' },
 ];
 const PAY = { series: 'LES1252881500Q', name: 'Median usual weekly earnings, full-time wage and salary workers (nominal)' };
-// all prices, for the notes' inflation rate (12-month change); starts 1913, so January 1979 is there for 1980's rate
-const CPI = { series: 'CPIAUCNS', name: 'Consumer Price Index, all urban consumers, all items, not seasonally adjusted' };
+// Price indexes (1982-84 = 100, not seasonally adjusted), from January 1979 so 1980 has its 12-month rate:
+// all items (prices overall), food at home (all groceries: is this basket typical?) and core (all items less food
+// and energy: one line in the panel for readers who know the term)
+const INDEXES = [
+  { key: 'cpi', series: 'CPIAUCNS', name: 'Consumer Price Index, all urban consumers, all items' },
+  { key: 'foodAtHome', series: 'CUUR0000SAF11', name: 'Consumer Price Index, all urban consumers, food at home' },
+  { key: 'core', series: 'CPILFENS', name: 'Consumer Price Index, all urban consumers, all items less food and energy' },
+];
 
 async function fredCsv(id) {
   const res = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}`);
@@ -55,14 +61,19 @@ const payEnd = monthIndex(payRows[payRows.length - 1].month) + 2;
 lastMonth = Math.min(lastMonth, payEnd);
 const months = lastMonth + 1;
 
-const cpiRows = (await fredCsv(CPI.series)).filter((r) => r.month >= '1979-01' && r.value !== null);
-const cpi = new Array(months + 12).fill(null); // index 0 = 1979-01, so cpi[m + 12] is month m
-for (const r of cpiRows) {
-  const i = monthIndex(r.month) + 12;
-  if (i >= 0 && i < cpi.length) cpi[i] = r.value;
+const indexes = {};
+const indexGaps = {};
+for (const ix of INDEXES) {
+  const rows = (await fredCsv(ix.series)).filter((r) => r.month >= '1979-01' && r.value !== null);
+  const arr = new Array(months + 12).fill(null); // index 0 = 1979-01, so arr[m + 12] is month m
+  for (const r of rows) {
+    const i = monthIndex(r.month) + 12;
+    if (i >= 0 && i < arr.length) arr[i] = r.value;
+  }
+  if (arr[0] === null || arr[arr.length - 1] === null) throw new Error(`${ix.key}: no figure for the first or last month`);
+  indexes[ix.key] = arr;
+  indexGaps[ix.key] = arr.flatMap((v, i) => (v === null ? [i - 12] : []));
 }
-if (cpi[0] === null || cpi[cpi.length - 1] === null) throw new Error('cpi: no figure for the first or last month');
-const cpiGaps = cpi.flatMap((v, i) => (v === null ? [i - 12] : []));
 
 const series = {};
 for (const item of ITEMS) {
@@ -92,7 +103,7 @@ const out = `/**
  * Sources (FRED, Federal Reserve Bank of St. Louis, from the U.S. Bureau of Labor Statistics):
 ${ITEMS.map((i) => ` *   ${i.key}: ${i.series}, ${i.name}`).join('\n')}
  *   pay: ${PAY.series}, ${PAY.name}
- *   cpi: ${CPI.series}, ${CPI.name}
+${INDEXES.map((i) => ` *   ${i.key}: ${i.series}, ${i.name}`).join('\n')}
  *
  * Months run from ${START} (index 0) to ${ym(months - 1)} (index ${months - 1}). null = no published price that month
  * (filled by interpolation in the engine). Pay is per quarter (index q covers months 3q to 3q + 2).
@@ -106,7 +117,9 @@ export const PRICE_SERIES = {
 ${ITEMS.map((i) => `  ${i.key}: '${i.series}',`).join('\n')}
 } as const;
 export const PAY_SERIES = '${PAY.series}';
-export const CPI_SERIES = '${CPI.series}';
+export const INDEX_SERIES = {
+${INDEXES.map((i) => `  ${i.key}: '${i.series}',`).join('\n')}
+} as const;
 
 export const PRICES: Record<keyof typeof PRICE_SERIES, readonly (number | null)[]> = {
 ${ITEMS.map((i) => `  ${i.key}: ${fmt(series[i.key])},`).join('\n')}
@@ -115,13 +128,16 @@ ${ITEMS.map((i) => `  ${i.key}: ${fmt(series[i.key])},`).join('\n')}
 /** Median usual weekly pay (dollars, before tax), per quarter; null = not published (filled by interpolation). */
 export const WEEKLY_PAY: readonly (number | null)[] = ${fmt(pay)};
 
-/** All-items consumer price index (1982-84 = 100), monthly from 1979-01: CPI[m + 12] is month m (12 months earlier
- *  is CPI[m]), so the 12-month inflation rate at month m is CPI[m + 12] / CPI[m] - 1. null = not published. */
-export const CPI: readonly (number | null)[] = ${fmt(cpi)};
+/** Price indexes (1982-84 = 100), monthly from 1979-01: INDEXES[k][m + 12] is month m (12 months earlier is
+ *  INDEXES[k][m]), so the 12-month rate at month m is INDEXES[k][m + 12] / INDEXES[k][m] - 1. null = not published.
+ *  cpi: all items (prices overall); foodAtHome: all groceries; core: all items less food and energy. */
+export const INDEXES: Record<keyof typeof INDEX_SERIES, readonly (number | null)[]> = {
+${INDEXES.map((i) => `  ${i.key}: ${fmt(indexes[i.key])},`).join('\n')}
+};
 `;
 writeFileSync(new URL('../src/bread/engine/data.ts', import.meta.url), out);
 console.log(`months ${months} (${START} to ${ym(months - 1)}), quarters ${pay.length}`);
 const yq = (q) => `${1980 + Math.floor(q / 4)} Q${(q % 4) + 1}`;
-if (cpiGaps.length) console.log(`  gaps in cpi: ${cpiGaps.map(ym).join(', ')}`);
+for (const [k, g] of Object.entries(indexGaps)) if (g.length) console.log(`  gaps in ${k}: ${g.map(ym).join(', ')}`);
 if (payGaps.length) console.log(`  gaps in pay: ${payGaps.map(yq).join(', ')}`);
 for (const [k, g] of Object.entries(gaps)) if (g.length) console.log(`  gaps in ${k}: ${g.length} months (${ym(g[0])} to ${ym(g[g.length - 1])})`);
