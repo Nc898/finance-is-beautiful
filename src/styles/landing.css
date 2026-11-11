@@ -58,7 +58,7 @@ ul {
   outline-offset: 2px;
 }
 
-/* ---------- LinkedIn (top right, just left of the menu): the "in" mark in the menu icon's ink ---------- */
+/* ---------- LinkedIn and Instagram (top right, left of the menu): the marks in the menu icon's ink ---------- */
 
 .site-social {
   position: absolute;
@@ -74,18 +74,24 @@ ul {
   transition-duration: 150ms;
   transition-timing-function: ease-out;
 }
-.site-social .linkedin-icon {
+.site-social svg {
   display: block;
   width: 17px;
   height: 17px;
 }
+/* Instagram, just left of LinkedIn (each mark is 33 px wide with its padding); a placeholder for now, so it is
+   not a link and has no hover or press state */
+.site-social.site-social-ig {
+  right: 101px;
+  cursor: default;
+}
 @media (hover: hover) {
-  .site-social:hover {
+  a.site-social:hover {
     color: var(--emerald-deep);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .site-social:active {
+  a.site-social:active {
     scale: 0.96;
   }
 }

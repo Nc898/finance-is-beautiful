@@ -76,8 +76,10 @@ body {
 .about-body .about-social {
   margin: 28px 0 0;
 }
-.linkedin-link {
+.linkedin-link,
+.instagram-link {
   display: inline-block;
+  vertical-align: top;
   /* a little room round the mark to aim at, without moving it off the text's left edge */
   margin-left: -6px;
   padding: 6px;
@@ -85,7 +87,13 @@ body {
   -webkit-tap-highlight-color: transparent;
   transition: color 150ms ease-out;
 }
-.linkedin-link .linkedin-icon {
+/* a placeholder for now: not a link, so no hover */
+.instagram-link {
+  margin-left: 6px;
+  cursor: default;
+}
+.linkedin-link .linkedin-icon,
+.instagram-link .instagram-icon {
   display: block;
   width: 28px;
   height: 28px;
