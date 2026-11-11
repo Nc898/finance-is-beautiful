@@ -12,8 +12,10 @@ import { BOARD, BOARD_COLUMNS, BOARD_LINES, CHALK_SIZE, type Pt } from './geom';
 import { BOARD_LINE_ORDER, type Board, type BoardLine } from './partsApi';
 import { Rand, clamp } from '../../scene/prng';
 import { makeCanvas, rgba } from '../../scene/watercolor';
+import { glazeSprite } from './light';
 import { chalkStroke, layoutText, tipAt, type LayoutSpec, type Laid } from './hand';
-import { INK, LIGHT, grain, mottle, pen, plank, rectPoly, ribbon, spriteCtx, wash } from './paint';
+import { INK, LIGHT, blobPoly, grain, mottle, pen, plank, rectPoly, ribbon, spriteCtx, wash } from './paint';
+import { deform, tracePoly } from '../../scene/watercolor';
 
 const CHALK = '#F3EFE2';
 const TAU = Math.PI * 2;
@@ -177,28 +179,89 @@ export function createBoard(): Board {
       ctx.fillRect(fx0 + 3, fy0 + 5, fx1 - fx0 + 1, fy1 - fy0 + 3);
       ctx.restore();
     }
-    // the frame: four boards of oak, mitred, worn
+    // the frame: four members of oak, mitred at the corners, each washed along its own grain and turned to the light
+    // (the top palest, the left next, the right and the foot in shade), a chamfer round the slate lit on its upper left
+    // and dark below right, the wax worn pale where hands take the chalk, chalk dust ground into the foot
     ctx.save();
     ctx.beginPath();
     ctx.rect(fx0 - 1, fy0 - 1, fx1 - fx0 + 2, fy1 - fy0 + 2);
     ctx.clip();
-    plank(ctx, fx0, fy0, fx1, BOARD.y0, '#9A6A40', rnd, { grain: 1.3, knots: 1 });
-    plank(ctx, fx0, BOARD.y1, fx1, fy1, '#7C5232', rnd, { grain: 1.3, knots: 1 });
-    plank(ctx, fx0, BOARD.y0, BOARD.x0, BOARD.y1, '#8E5F3A', rnd, { vertical: true, grain: 1.2 });
-    plank(ctx, BOARD.x1, BOARD.y0, fx1, BOARD.y1, '#744D2F', rnd, { vertical: true, grain: 1.2 });
-    // mitre joints
-    for (const [ax, ay, bx, by] of [
-      [fx0, fy0, BOARD.x0, BOARD.y0],
-      [fx1, fy0, BOARD.x1, BOARD.y0],
-      [fx0, fy1, BOARD.x0, BOARD.y1],
-      [fx1, fy1, BOARD.x1, BOARD.y1],
-    ] as const) pen(ctx, ax, ay, bx, by, 0.5, INK, 0.5, rnd, 0.2);
-    // worn edges: a pale scuff along the outer lit corner, dark grime low on the right
-    ctx.fillStyle = rgba('#E9C894', 0.3);
-    ribbon(ctx, [fx0 + 2, fy0 + 1.2, fx0 + 40, fy0 + 1.5, fx0 + 90, fy0 + 1.2], 1.2, 0.9);
-    ribbon(ctx, [fx0 + 1.2, fy0 + 2, fx0 + 1.4, fy0 + 40, fx0 + 1.1, fy0 + 120], 1.1, 0.9);
-    ctx.fillStyle = rgba('#2A180C', 0.26);
-    ribbon(ctx, [fx1 - 1.2, fy1 - 90, fx1 - 1.4, fy1 - 20], 1.2, 0.9);
+    const members: { poly: number[]; col: string; vertical: boolean; r: [number, number, number, number] }[] = [
+      { poly: [fx0, fy0, fx1, fy0, BOARD.x1, BOARD.y0, BOARD.x0, BOARD.y0], col: '#A06C40', vertical: false, r: [fx0, fy0, fx1, BOARD.y0] },
+      { poly: [fx0, fy0, BOARD.x0, BOARD.y0, BOARD.x0, BOARD.y1, fx0, fy1], col: '#946238', vertical: true, r: [fx0, fy0, BOARD.x0, fy1] },
+      { poly: [fx1, fy0, fx1, fy1, BOARD.x1, BOARD.y1, BOARD.x1, BOARD.y0], col: '#6E4628', vertical: true, r: [BOARD.x1, fy0, fx1, fy1] },
+      { poly: [fx0, fy1, BOARD.x0, BOARD.y1, BOARD.x1, BOARD.y1, fx1, fy1], col: '#7A4E2C', vertical: false, r: [fx0, BOARD.y1, fx1, fy1] },
+    ];
+    for (const m of members) {
+      ctx.save();
+      tracePoly(ctx, m.poly);
+      ctx.clip();
+      const [mx0, my0, mx1, my1] = m.r;
+      wash(ctx, rectPoly(mx0 - 1, my0 - 1, mx1 + 1, my1 + 1, rnd, 0.2), m.col, 0.97, rnd, 2, 0.004);
+      // its colour drifts along it in small washes
+      const len = m.vertical ? my1 - my0 : mx1 - mx0;
+      for (let k = 0; k < len / 9; k++) {
+        const t = rnd.next();
+        const cx = m.vertical ? (mx0 + mx1) / 2 : mx0 + t * (mx1 - mx0);
+        const cy = m.vertical ? my0 + t * (my1 - my0) : (my0 + my1) / 2;
+        ctx.fillStyle = rgba(rnd.pick(['#B88050', '#6A4024', '#A87448', '#5A3A20']), rnd.range(0.12, 0.26));
+        tracePoly(ctx, deform(blobPoly(cx, cy, m.vertical ? 7 : rnd.range(10, 22), m.vertical ? rnd.range(10, 22) : 7, rnd, 10, 0.3), rnd, 1, 0.1));
+        ctx.fill();
+      }
+      // the grain: long fine lines along the member, a little wavy, now and then swirling round a pin knot
+      const n = Math.round(FRAME * 0.9);
+      for (let g = 0; g < n; g++) {
+        const off = rnd.range(0.08, 0.92) * FRAME;
+        const a0 = rnd.range(0, len * 0.4);
+        const a1 = a0 + rnd.range(len * 0.25, len * 0.7);
+        const pts: number[] = [];
+        for (let k = 0; k <= 10; k++) {
+          const u = a0 + ((a1 - a0) * k) / 10;
+          const w = Math.sin(u * 0.08 + g) * 0.5;
+          pts.push(m.vertical ? mx0 + off + w : mx0 + u, m.vertical ? my0 + u : my0 + off + w);
+        }
+        ctx.fillStyle = rgba('#2E1808', rnd.range(0.12, 0.26));
+        ribbon(ctx, pts, rnd.range(0.25, 0.6), 0.9);
+      }
+      ctx.restore();
+    }
+    // the chamfer round the slate: lit on the top and the left, in shade on the right and below
+    const ch = 2.4;
+    const chamfer = (pts: number[], col: string, a: number) => {
+      ctx.fillStyle = rgba(col, a);
+      tracePoly(ctx, pts);
+      ctx.fill();
+    };
+    chamfer([BOARD.x0 - ch, BOARD.y0 - ch, BOARD.x1 + ch, BOARD.y0 - ch, BOARD.x1, BOARD.y0, BOARD.x0, BOARD.y0], '#F2CC90', 0.6);
+    chamfer([BOARD.x0 - ch, BOARD.y0 - ch, BOARD.x0, BOARD.y0, BOARD.x0, BOARD.y1, BOARD.x0 - ch, BOARD.y1 + ch], '#E2B47A', 0.5);
+    chamfer([BOARD.x1 + ch, BOARD.y0 - ch, BOARD.x1 + ch, BOARD.y1 + ch, BOARD.x1, BOARD.y1, BOARD.x1, BOARD.y0], '#2A160A', 0.5);
+    chamfer([BOARD.x0 - ch, BOARD.y1 + ch, BOARD.x0, BOARD.y1, BOARD.x1, BOARD.y1, BOARD.x1 + ch, BOARD.y1 + ch], '#2A160A', 0.42);
+    // the mitres, stated where the light shows them
+    for (const [ax, ay, bx, by, a] of [
+      [fx0, fy0, BOARD.x0 - ch, BOARD.y0 - ch, 0.45],
+      [fx1, fy0, BOARD.x1 + ch, BOARD.y0 - ch, 0.6],
+      [fx0, fy1, BOARD.x0 - ch, BOARD.y1 + ch, 0.55],
+      [fx1, fy1, BOARD.x1 + ch, BOARD.y1 + ch, 0.65],
+    ] as const) pen(ctx, ax, ay, bx, by, 0.5, INK, a, rnd, 0.1);
+    // the wax worn pale along the outer lit edges and where the hand takes the chalk (low on the left)
+    ctx.fillStyle = rgba('#F2D2A0', 0.32);
+    ribbon(ctx, [fx0 + 3, fy0 + 1.3, fx0 + 60, fy0 + 1.6, fx0 + 150, fy0 + 1.2], 1.3, 0.9);
+    ribbon(ctx, [fx0 + 1.3, fy0 + 4, fx0 + 1.5, fy0 + 80, fx0 + 1.2, fy0 + 200], 1.2, 0.9);
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = rgba('#E8D2B0', rnd.range(0.12, 0.24));
+      tracePoly(ctx, deform(blobPoly(fx0 + rnd.range(4, 11), rnd.range(BOARD.y1 - 90, BOARD.y1), rnd.range(2, 4), rnd.range(6, 16), rnd, 9, 0.3), rnd, 1, 0.1));
+      ctx.fill();
+    }
+    // chalk dust ground into the foot, and a smear where the cloth was wiped on it
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = rgba('#EDEAE0', rnd.range(0.08, 0.3));
+      ctx.fillRect(rnd.range(fx0 + 8, fx1 - 8), rnd.range(BOARD.y1 + 2, fy1 - 2), rnd.range(0.4, 2.4), rnd.range(0.3, 0.8));
+    }
+    ctx.fillStyle = rgba('#DCDAD0', 0.16);
+    ribbon(ctx, [fx1 - 70, BOARD.y1 + 6, fx1 - 40, BOARD.y1 + 7, fx1 - 18, BOARD.y1 + 5.5], 4, 0.8, 0.2);
+    // grime gathered on the right member and the foot, away from the light
+    ctx.fillStyle = rgba('#24140A', 0.22);
+    ribbon(ctx, [fx1 - 1.5, fy0 + 20, fx1 - 1.8, (fy0 + fy1) / 2, fx1 - 1.5, fy1 - 4], 2.2, 0.85);
     // nails at the corners
     for (const [nx, ny] of [
       [fx0 + 6, fy0 + 6],
@@ -206,24 +269,25 @@ export function createBoard(): Board {
       [fx0 + 6, fy1 - 6],
       [fx1 - 6, fy1 - 6],
     ] as const) {
-      ctx.fillStyle = rgba('#2A1A10', 0.6);
+      ctx.fillStyle = rgba('#2A1A10', 0.65);
       ctx.beginPath();
       ctx.arc(nx, ny, 1.15, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = rgba('#7A4A2A', 0.4);
+      ctx.beginPath();
+      ctx.ellipse(nx + 0.4, ny + 1.6, 0.7, 1.6, 0, 0, TAU);
       ctx.fill();
       ctx.fillStyle = rgba(LIGHT, 0.5);
       ctx.beginPath();
       ctx.arc(nx - 0.35, ny - 0.4, 0.4, 0, TAU);
       ctx.fill();
     }
-    // the inner moulding: a bright line catching the light on the top and left, a dark one low
-    ctx.fillStyle = rgba('#F4D9A8', 0.4);
-    ribbon(ctx, [BOARD.x0 - 1, BOARD.y0 - 1, BOARD.x1 + 1, BOARD.y0 - 1], 1.1, 0.9);
-    ribbon(ctx, [BOARD.x0 - 1, BOARD.y0 - 1, BOARD.x0 - 1, BOARD.y1 + 1], 1.1, 0.9);
     ctx.restore();
-    pen(ctx, fx0, fy0, fx1, fy0, 0.6, INK, 0.55, rnd, 0.25);
-    pen(ctx, fx0, fy0, fx0, fy1, 0.6, INK, 0.55, rnd, 0.25);
-    pen(ctx, fx1, fy0, fx1, fy1, 0.6, INK, 0.6, rnd, 0.25);
-    pen(ctx, fx0, fy1, fx1, fy1, 0.6, INK, 0.65, rnd, 0.25);
+    // ink on the outer edges, heavier on the shaded right and foot, lost in places on the lit top and left
+    pen(ctx, fx0, fy0, fx1, fy0, 0.5, INK, 0.4, rnd, 0.25);
+    pen(ctx, fx0, fy0, fx0, fy1, 0.5, INK, 0.42, rnd, 0.25);
+    pen(ctx, fx1, fy0, fx1, fy1, 0.7, INK, 0.65, rnd, 0.25);
+    pen(ctx, fx0, fy1, fx1, fy1, 0.75, INK, 0.7, rnd, 0.25);
     await tick();
     if (!check()) return null;
 
@@ -287,6 +351,49 @@ export function createBoard(): Board {
     await tick();
     if (!check()) return null;
 
+    // the ledge under the frame, with a stub of chalk and the felt rubber
+    const ly = fy1 - 0.5;
+    plank(ctx, BOARD.x0 + 6, ly, BOARD.x1 - 6, ly + 7.5, '#8A5C38', rnd, { grain: 1 });
+    ctx.fillStyle = rgba('#F6DDB0', 0.35);
+    ribbon(ctx, [BOARD.x0 + 8, ly + 0.7, BOARD.x1 - 8, ly + 0.7], 0.8, 0.9);
+    ctx.fillStyle = rgba('#2A180C', 0.22);
+    ctx.fillRect(BOARD.x0 + 8, ly + 7.5, BOARD.x1 - BOARD.x0 - 16, 2.2);
+    // chalk dust along the ledge
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = rgba(CHALK, rnd.range(0.12, 0.4));
+      ctx.beginPath();
+      ctx.ellipse(rnd.range(BOARD.x0 + 40, BOARD.x0 + 150), ly + rnd.range(0.2, 2.2), rnd.range(0.4, 1.6), rnd.range(0.2, 0.5), 0, 0, TAU);
+      ctx.fill();
+    }
+    // chalk: a stub, slightly broken, and a short end
+    const stub = (x: number, w: number, tilt: number) => {
+      ctx.save();
+      ctx.translate(x, ly - 0.2);
+      ctx.rotate(tilt);
+      wash(ctx, rectPoly(0, -2.6, w, 0, rnd, 0.12), '#F4EFE0', 0.95, rnd, 2, 0.01);
+      ctx.fillStyle = rgba('#B9B3A2', 0.35);
+      ctx.fillRect(0.4, -0.9, w - 0.8, 0.9);
+      pen(ctx, 0, 0, w, 0, 0.35, INK, 0.45, rnd, 0.1);
+      ctx.restore();
+    };
+    stub(BOARD.x0 + 52, 13, -0.03);
+    stub(BOARD.x0 + 76, 6, 0.05);
+    // the rubber: a felt pad on a wooden back
+    {
+      const ex = BOARD.x1 - 62;
+      wash(ctx, rectPoly(ex, ly - 6.5, ex + 26, ly - 0.2, rnd, 0.2), '#8A5C38', 0.95, rnd, 2, 0.01);
+      wash(ctx, rectPoly(ex + 0.5, ly - 10, ex + 25.5, ly - 6, rnd, 0.2), '#4A4A48', 0.95, rnd, 2, 0.01);
+      ctx.fillStyle = rgba(CHALK, 0.28);
+      for (let i = 0; i < 18; i++) ctx.fillRect(ex + rnd.range(1, 24), ly - rnd.range(6.5, 9.5), rnd.range(0.6, 2.4), 0.5);
+      pen(ctx, ex, ly - 6.4, ex + 26, ly - 6.4, 0.4, INK, 0.5, rnd, 0.1);
+      pen(ctx, ex, ly - 0.2, ex + 26, ly - 0.2, 0.4, INK, 0.5, rnd, 0.1);
+    }
+    // the room's light over the frame, the slate and the ledge (before the chalk: the chalk is the brightest thing on
+    // the board and stays so); the lamp is to its left, so its right side sinks into the shade
+    glazeSprite(cv, sbox, q, () => 'wall', 41, undefined, 0.24, 0.45);
+    await tick();
+    if (!check()) return null;
+
     // the chalk that is written once: the title, the item names, the leaders, the ruled line (on its own sheet, so the
     // slate's tooth can eat it as it eats the rest)
     const sh = spriteCtx(sbox, q);
@@ -327,52 +434,6 @@ export function createBoard(): Board {
     grain(c2, CHALK, sbox.x, sbox.y, sbox.w, sbox.h, 0.34, 0, 911);
     ctx.drawImage(sh.cv, sbox.x, sbox.y, sbox.w, sbox.h);
 
-    // the ledge under the frame, with a stub of chalk and the felt rubber
-    const ly = fy1 - 0.5;
-    plank(ctx, BOARD.x0 + 6, ly, BOARD.x1 - 6, ly + 7.5, '#8A5C38', rnd, { grain: 1 });
-    ctx.fillStyle = rgba('#F6DDB0', 0.35);
-    ribbon(ctx, [BOARD.x0 + 8, ly + 0.7, BOARD.x1 - 8, ly + 0.7], 0.8, 0.9);
-    ctx.fillStyle = rgba('#2A180C', 0.22);
-    ctx.fillRect(BOARD.x0 + 8, ly + 7.5, BOARD.x1 - BOARD.x0 - 16, 2.2);
-    // chalk dust along the ledge
-    for (let i = 0; i < 26; i++) {
-      ctx.fillStyle = rgba(CHALK, rnd.range(0.12, 0.4));
-      ctx.beginPath();
-      ctx.ellipse(rnd.range(BOARD.x0 + 40, BOARD.x0 + 150), ly + rnd.range(0.2, 2.2), rnd.range(0.4, 1.6), rnd.range(0.2, 0.5), 0, 0, TAU);
-      ctx.fill();
-    }
-    // chalk: a stub, slightly broken, and a short end
-    const stub = (x: number, w: number, tilt: number) => {
-      ctx.save();
-      ctx.translate(x, ly - 0.2);
-      ctx.rotate(tilt);
-      wash(ctx, rectPoly(0, -2.6, w, 0, rnd, 0.12), '#F4EFE0', 0.95, rnd, 2, 0.01);
-      ctx.fillStyle = rgba('#B9B3A2', 0.35);
-      ctx.fillRect(0.4, -0.9, w - 0.8, 0.9);
-      pen(ctx, 0, 0, w, 0, 0.35, INK, 0.45, rnd, 0.1);
-      ctx.restore();
-    };
-    stub(BOARD.x0 + 52, 13, -0.03);
-    stub(BOARD.x0 + 76, 6, 0.05);
-    // the rubber: a felt pad on a wooden back
-    {
-      const ex = BOARD.x1 - 62;
-      wash(ctx, rectPoly(ex, ly - 6.5, ex + 26, ly - 0.2, rnd, 0.2), '#8A5C38', 0.95, rnd, 2, 0.01);
-      wash(ctx, rectPoly(ex + 0.5, ly - 10, ex + 25.5, ly - 6, rnd, 0.2), '#4A4A48', 0.95, rnd, 2, 0.01);
-      ctx.fillStyle = rgba(CHALK, 0.28);
-      for (let i = 0; i < 18; i++) ctx.fillRect(ex + rnd.range(1, 24), ly - rnd.range(6.5, 9.5), rnd.range(0.6, 2.4), 0.5);
-      pen(ctx, ex, ly - 6.4, ex + 26, ly - 6.4, 0.4, INK, 0.5, rnd, 0.1);
-      pen(ctx, ex, ly - 0.2, ex + 26, ly - 0.2, 0.4, INK, 0.5, rnd, 0.1);
-    }
-    // a faint wash of the lamp's warmth on the frame and slate (the lamps hang to its left)
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-atop';
-    const warm = ctx.createLinearGradient(fx0, 0, fx1, 0);
-    warm.addColorStop(0, 'rgba(255,214,140,0.12)');
-    warm.addColorStop(1, 'rgba(255,214,140,0)');
-    ctx.fillStyle = warm;
-    ctx.fillRect(sbox.x, sbox.y, sbox.w, sbox.h);
-    ctx.restore();
     return cv;
   };
 

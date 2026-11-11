@@ -11,9 +11,14 @@
   --accent-tint: rgba(138, 74, 28, 0.09);
   --golden: #f0b429;
   --error: #b02a1e;
-  /* text over the painted sky: a softer ink than --ink (never the panel's --muted), on a pale lifted wash */
+  /* text over the painted shop: the shop is a dark, lamplit interior, so the words set on it are a warm cream on a
+     soft dark wash (signwriting in shadow), not ink on a pale cloud, which read as pale blots on the dark floor */
   --ink-soft: #4a4236;
-  --lift: rgba(251, 246, 234, 0.74);
+  --on-shop: #fbf3e2;
+  --on-shop-soft: #eadfc8;
+  --on-shop-num: #f3d29a;
+  --lift: rgba(30, 20, 12, 0.52);
+  --shop-shadow: 0 0 10px rgba(24, 15, 8, 0.85), 0 0 4px rgba(24, 15, 8, 0.8), 0 1px 2px rgba(24, 15, 8, 0.9);
   /* the introduction card's ink (src/styles/intro.css) */
   --intro-accent: var(--accent);
   --intro-accent-deep: var(--accent-deep);
@@ -136,7 +141,8 @@ input {
   padding-top: 11px;
   font: 400 21px/1.1 var(--serif-display);
   letter-spacing: 0.01em;
-  color: var(--ink);
+  color: var(--on-shop);
+  text-shadow: var(--shop-shadow);
 }
 
 /* the title is a quiet way back to the collection */
@@ -202,10 +208,10 @@ input {
   padding: 2px 0;
   font-family: var(--serif);
   font-style: italic;
-  text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+  text-shadow: var(--shop-shadow);
 }
 
-/* this sky darkens to a deep blue at the top, so the words sit on a pale wash, like a lifted cloud with soft edges */
+/* the words sit on a soft dark wash with lost edges, so they read over both the lit wall and the dark floor */
 .cap::before,
 .year-readout::before,
 .headline::before {
@@ -234,14 +240,14 @@ input {
 .cap-1 {
   font-size: 14px;
   line-height: 1.3;
-  color: var(--ink);
+  color: var(--on-shop);
 }
 
 .cap-2 {
   margin-top: 1px;
   font-size: 12.5px;
   line-height: 1.4;
-  color: var(--ink-soft);
+  color: var(--on-shop-soft);
 }
 
 .cap-2:empty {
@@ -257,15 +263,15 @@ input {
   isolation: isolate;
   font: italic 400 17px/1.2 var(--serif);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
-  text-shadow: 0 0 10px var(--paper), 0 0 4px var(--paper), 0 0 2px var(--paper);
+  color: var(--on-shop-soft);
+  text-shadow: var(--shop-shadow);
   pointer-events: none;
   transition: opacity 0.35s ease;
 }
 
 .year-readout::before {
   inset: -10px -26px;
-  background: rgba(251, 246, 234, 0.82);
+  background: var(--lift);
 }
 
 /* with the panel open its own readout shows the month, so the scene's copy steps aside */
@@ -1207,18 +1213,18 @@ body[data-ready] .panel-toggle {
   color: #3d2a16;
 }
 
-/* the headline, between them: set straight on the shop, on a pale lifted wash so it reads over the picture */
+/* the headline, between them: set straight on the shop's dark floor, cream on a soft dark wash */
 .headline {
   isolation: isolate;
   min-width: 200px;
   text-align: center;
-  color: var(--ink);
-  text-shadow: 0 0 10px var(--paper), 0 0 5px var(--paper), 0 0 2px var(--paper);
+  color: var(--on-shop);
+  text-shadow: var(--shop-shadow);
 }
 
 .headline::before {
   inset: -6px -22px;
-  background: rgba(251, 246, 234, 0.8);
+  background: var(--lift);
   filter: blur(14px);
 }
 
@@ -1231,13 +1237,13 @@ body[data-ready] .panel-toggle {
   font-size: 48px;
   line-height: 1;
   letter-spacing: -0.01em;
-  color: var(--accent-deep);
+  color: var(--on-shop-num);
 }
 
 .headline-sub {
   margin-top: 2px;
   font: italic 400 16px/1.3 var(--serif);
-  color: var(--ink-soft);
+  color: var(--on-shop-soft);
 }
 
 /* ---------- Bread and Butter: the basket and the explanations in the panel ---------- */

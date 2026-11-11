@@ -9,13 +9,15 @@
  * the grocer stands on; WALL_FOOT_Y in geom.ts is 548, a touch below his feet at 540, so the wall's foot is painted
  * at 534 and he stands on boards).
  */
-import { Rand } from '../../scene/prng';
+import { Rand, clamp, makeNoise2D } from '../../scene/prng';
 import { makeCanvas, paintPaperBackdrop, rgba, tracePoly, deform } from '../../scene/watercolor';
 import { LAMPS, SHELVES, WINDOW, type Pt } from './geom';
-import { fitCamera, viewX, viewY, type Camera } from './layout';
-import { INK, LIGHT, SHADE, blobPoly, face, grain, lit, mix, mottle, outline, patchWash, pen, plank, rectPoly, ribbon, wash, washEdge, washField } from './paint';
+import { viewX, viewY, type Camera } from './layout';
+import { INK, LIGHT, SHADE, blobPoly, face, grain, lit, mix, mottle, outline, patchWash, pen, plank, rectPoly, ribbon, wash, washField } from './paint';
 import { bottle, crateOfThings, jar, packet, sack, tin } from './goods';
-import { GLASS, PANES, paintGlass, paintStreet } from './street';
+import { GLASS, PANES, paintDoorView, paintGlass, paintStreet } from './street';
+import { buildGlaze, glazePixels } from './light';
+import { paintClutter, paintFloorClutter } from './walls';
 
 export const FLOOR_Y = 534;
 /** the cup on the shelf behind the counter (the steam rises from here) */
@@ -23,6 +25,9 @@ export const CUP: Pt = { x: 642, y: 281 };
 
 const WOOD_GREEN = '#52695C';
 const OAK = '#6A4529';
+/** the top of the oak beam under the ceiling (above the frame at 16:10; taller screens see it and the ceiling): the wall
+ *  runs up to it above the shelves and the board, where the signs hang, and the page's title sits on its daylit plaster */
+export const BEAM_Y = -104;
 
 export interface BackLayer {
   cv: HTMLCanvasElement;
@@ -44,6 +49,9 @@ export async function paintBack(c: Camera, tile: CanvasImageSource, tick: () => 
   const vx = viewX(c, 70);
   const vy = viewY(c, 50);
   const rnd = new Rand(24681);
+  // the signs are lettered in the page's faces: wait for them (briefly; a fallback face is better than no room)
+  await Promise.race([Promise.all(['800 20px "Figtree Variable"', '700 20px "Libre Caslon Display"'].map((f) => document.fonts?.load(f))).catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
+  if (!alive()) return null;
 
   paintWall(ctx, vx, vy, rnd);
   await tick();
@@ -54,18 +62,87 @@ export async function paintBack(c: Camera, tile: CanvasImageSource, tick: () => 
   paintShelves(ctx, rnd);
   await tick();
   if (!alive()) return null;
-  paintLamps(ctx, rnd, vy.y0);
-  paintRightWall(ctx, vx, rnd);
-  paintFloor(ctx, vx, vy, rnd);
+  paintClutter(ctx, vx, rnd);
   await tick();
   if (!alive()) return null;
-  paintLight(ctx, vx, vy);
-  finishSheet(sheet, ctx, S);
+  paintLampShadows(ctx);
+  paintFloor(ctx, vx, vy, rnd);
+  paintFloorClutter(ctx, vx);
+  await tick();
+  if (!alive()) return null;
   // the paper's grain lifts the wash on its peaks and pools pigment in its valleys, over the whole room
-  grain(ctx, '#4A3826', vx.x0, vy.y0, vx.x1 - vx.x0, vy.y1 - vy.y0, 0.07, 0.16, 733);
+  grain(ctx, '#4A3826', vx.x0, vy.y0, vx.x1 - vx.x0, vy.y1 - vy.y0, 0.05, 0.14, 733);
   pctx.setTransform(1, 0, 0, 1, 0, 0);
   pctx.drawImage(sheet, 0, 0);
+
+  // the light, glazed over everything painted (and the paper under it), a band of rows at a time
+  {
+    const g = buildGlaze(vx.x0 - 10, vy.y0 - 10, vx.x1 + 10, vy.y1 + 40, 3, (_x, y) => (y >= FLOOR_Y ? 'floor' : 'wall'), 11, undefined, 0.6);
+    const img = pctx.getImageData(0, 0, Wd, Hd);
+    const out = pctx.createImageData(Wd, Hd);
+    const bands = 6;
+    for (let b = 0; b < bands; b++) {
+      glazePixels(img.data, out.data, Wd, Hd, [Math.floor((Hd * b) / bands), Math.floor((Hd * (b + 1)) / bands)], -c.ox / c.s, -c.oy / c.s, S, g, 0.13);
+      await tick();
+      if (!alive()) return null;
+    }
+    pctx.putImageData(out, 0, 0);
+  }
+  loseEdges(paper, c, S);
+  // the lamps light themselves: painted over the glaze
+  pctx.setTransform(S, 0, 0, S, c.ox * d, c.oy * d);
+  pctx.lineJoin = 'round';
+  pctx.lineCap = 'round';
+  paintLamps(pctx, rnd, vy.y0);
   return { cv: paper };
+}
+
+/**
+ * Lost and found edges: a softened copy of the room shows through where the eye does not go (patchily, as a painter
+ * lets one edge bleed and keeps the next), most toward the frame's edges and the front of the floor, never round the
+ * counter top and the board.
+ */
+function loseEdges(cv: HTMLCanvasElement, c: Camera, S: number): void {
+  const W = cv.width;
+  const H = cv.height;
+  const soft = makeCanvas(W, H);
+  const sg = soft.getContext('2d')!;
+  sg.filter = `blur(${Math.max(0.8, 1.5 * S)}px)`;
+  sg.drawImage(cv, 0, 0);
+  sg.filter = 'none';
+  const q = 8;
+  const mw = Math.ceil(W / q);
+  const mh = Math.ceil(H / q);
+  const mask = makeCanvas(mw, mh);
+  const mg = mask.getContext('2d')!;
+  const md = mg.createImageData(mw, mh);
+  const nz = makeNoise2D(5309);
+  const d = c.dpr;
+  const vx = viewX(c, 0);
+  const vy = viewY(c, 0);
+  for (let j = 0; j < mh; j++) {
+    for (let i = 0; i < mw; i++) {
+      const x = (i * q - c.ox * d) / S;
+      const y = (j * q - c.oy * d) / S;
+      // the focus: the counter top and the board, and the middle of the shelves a little
+      const fc = Math.exp(-(((x - 420) / 330) ** 4) - (((y - 445) / 70) ** 2));
+      const fb = Math.exp(-(((x - 845) / 150) ** 4) - (((y - 250) / 190) ** 4));
+      const fs = 0.6 * Math.exp(-(((x - 490) / 230) ** 4) - (((y - 260) / 180) ** 4));
+      const focus = Math.max(fc, fb, fs);
+      const edge = Math.max(clamp(1 - Math.min(x - vx.x0, vx.x1 - x) / 120, 0, 1) * 0.8, clamp((y - 600) / 90, 0, 1), clamp(1 - (y - vy.y0) / 70, 0, 1));
+      const patch = clamp((nz(x / 34, y / 30) - 0.38) * 2.2, 0, 1);
+      const m = clamp(Math.max(edge * 0.9, patch * 0.75) * (1 - focus * 0.92), 0, 1);
+      const o = (j * mw + i) * 4;
+      md.data[o + 3] = Math.round(m * 255);
+    }
+  }
+  mg.putImageData(md, 0, 0);
+  sg.globalCompositeOperation = 'destination-in';
+  sg.imageSmoothingQuality = 'high';
+  sg.drawImage(mask, 0, 0, W, H);
+  const ctx = cv.getContext('2d')!;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(soft, 0, 0);
 }
 
 /* ------------------------------------------------------------------ the walls */
@@ -97,23 +174,31 @@ function paintWall(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number }
   for (let i = 0; i < 5; i++) {
     const sx = rnd.range(x0, x1);
     ctx.fillStyle = rgba('#8A7048', 0.07);
-    tracePoly(ctx, deform(blobPoly(sx, 52, rnd.range(30, 70), rnd.range(14, 26), rnd, 12, 0.3), rnd, 2, 0.1));
+    tracePoly(ctx, deform(blobPoly(sx, BEAM_Y + 30, rnd.range(30, 70), rnd.range(14, 26), rnd, 12, 0.3), rnd, 2, 0.1));
     ctx.fill();
   }
-  // the ceiling, and the oak beam across the top with its shadow
-  const ceil = ctx.createLinearGradient(0, top, 0, 28);
-  ceil.addColorStop(0, '#A8936B');
-  ceil.addColorStop(1, '#BFAA80');
-  ctx.fillStyle = ceil;
-  ctx.fillRect(x0, top, x1 - x0, 28 - top);
-  plank(ctx, x0, 26, x1, 48, '#5E3F28', rnd, { grain: 1.4, knots: 2 });
+  // the ceiling (boards in shadow), and the oak beam across the top with its shadow; the wall runs up above the
+  // shelves to it, where the signs hang
+  {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, top, x1 - x0, BEAM_Y - top + 2);
+    ctx.clip();
+    ctx.fillStyle = '#8E7656';
+    ctx.fillRect(x0, top, x1 - x0, BEAM_Y - top + 2);
+    const cf = washField(3307, ['#7E6448', '#947A58', '#86704E', '#9A8462', '#7A6650'], 0.01, 0.05);
+    patchWash(ctx, x0, top, x1, BEAM_Y + 2, cf, rnd, 16, 0.5, 2);
+    for (let x = x0 + rnd.range(0, 30); x < x1; x += rnd.range(36, 58)) pen(ctx, x, top, x + rnd.range(-2, 2), BEAM_Y, 0.6, '#3A2818', 0.3, rnd, 0.5);
+    ctx.restore();
+  }
+  plank(ctx, x0, BEAM_Y, x1, BEAM_Y + 20, '#5E3F28', rnd, { grain: 1.4, knots: 3 });
   ctx.fillStyle = rgba('#2A1A10', 0.35);
-  ribbon(ctx, [x0, 47, x1, 47], 2.2, 1);
-  const sh = ctx.createLinearGradient(0, 48, 0, 76);
-  sh.addColorStop(0, 'rgba(58,40,24,0.32)');
+  ribbon(ctx, [x0, BEAM_Y + 19, x1, BEAM_Y + 19], 2.2, 1);
+  const sh = ctx.createLinearGradient(0, BEAM_Y + 20, 0, BEAM_Y + 44);
+  sh.addColorStop(0, 'rgba(58,40,24,0.3)');
   sh.addColorStop(1, 'rgba(58,40,24,0)');
   ctx.fillStyle = sh;
-  ctx.fillRect(x0, 48, x1 - x0, 28);
+  ctx.fillRect(x0, BEAM_Y + 20, x1 - x0, 24);
   // the dado: green tongue-and-groove, a cream rail, a dark skirting
   const rail = 478;
   {
@@ -218,11 +303,11 @@ function paintWindowAndDoor(ctx: CanvasRenderingContext2D, S: number, vx: { x0: 
   pen(ctx, g.x0, 128, g.x1, 128, 0.7, INK, 0.5, rnd, 0.2);
   pen(ctx, g.x0, 136, g.x1, 136, 0.6, INK, 0.45, rnd, 0.2);
   pen(ctx, W.x0 - 8, g.y1 + 12, W.x1 + 8, g.y1 + 12, 0.8, INK, 0.5, rnd, 0.2);
-  paintDoor(ctx, vx, rnd);
+  paintDoor(ctx, S, vx, rnd);
 }
 
 /** the shop door at the left, past the window (seen on wider screens): a green leaf with a glazed top, brass, a bell */
-function paintDoor(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number }, rnd: Rand): void {
+function paintDoor(ctx: CanvasRenderingContext2D, S: number, vx: { x0: number; x1: number }, rnd: Rand): void {
   const x0 = -104;
   const x1 = 6;
   if (vx.x0 > x1 + 4) return;
@@ -251,24 +336,8 @@ function paintDoor(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number }
   ctx.restore();
   const gx0 = x0 + 12;
   const gx1 = x1 - 16;
-  // the glass: the street's cool grey, an old streaky reflection
-  const gg = ctx.createLinearGradient(0, top + 22, 0, 330);
-  gg.addColorStop(0, '#9FB2BF');
-  gg.addColorStop(1, '#C3D0D4');
-  ctx.fillStyle = gg;
-  ctx.fillRect(gx0, top + 22, gx1 - gx0, 330 - top - 22);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(gx0, top + 22, gx1 - gx0, 330 - top - 22);
-  ctx.clip();
-  mottle(ctx, gx0, top + 22, gx1, 330, ['#7C92A4', '#C4D2D8', '#98ACBA', '#B0BEA8'], 3131, 0.3, 30, 0.7);
-  ctx.restore();
-  for (let i = 0; i < 14; i++) {
-    const x = rnd.range(gx0 + 3, gx1 - 3);
-    const y = rnd.range(top + 30, 300);
-    ctx.fillStyle = rgba('#EAF1F2', rnd.range(0.14, 0.28));
-    ribbon(ctx, [x, y, x + 0.4, y + rnd.range(14, 44)], 0.8, 0.9);
-  }
+  // the glass: the street further along, out of focus, rain on the pane
+  paintDoorView(ctx, S, { x0: gx0, x1: gx1, y0: top + 22, y1: 330 });
   ctx.fillStyle = rgba('#F4F8F8', 0.08);
   ctx.beginPath();
   ctx.moveTo(gx0 + 18, top + 22);
@@ -516,105 +585,109 @@ function stockRow(ctx: CanvasRenderingContext2D, x0: number, x1: number, base: n
 
 /* ------------------------------------------------------------------ the lamps */
 
-function paintLamps(ctx: CanvasRenderingContext2D, rnd: Rand, topY: number): void {
+/** each lamp's shadow on the goods behind it (glazed with the rest of the room) */
+function paintLampShadows(ctx: CanvasRenderingContext2D): void {
+  const rnd = new Rand(3141);
   for (const L of LAMPS) {
-    const top = L.shadeY;
-    // its shadow falls on the goods behind it
-    ctx.fillStyle = 'rgba(30,18,8,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(L.x + 9, top + 52, 38, 15, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(30,18,8,0.2)';
+    tracePoly(ctx, deform(blobPoly(L.x + 10, L.shadeY + 50, 40, 15, rnd, 14, 0.15), rnd, 2, 0.08));
     ctx.fill();
-    // the flex and its ceiling rose
-    ctx.strokeStyle = rgba('#2A1F18', 0.85);
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(L.x, topY);
-    ctx.lineTo(L.x + 0.3, top - 6);
-    ctx.stroke();
-    // a brass collar where the flex enters the shade
-    wash(ctx, [L.x - 4, top - 8, L.x + 4, top - 8, L.x + 3, top + 1, L.x - 3, top + 1], '#B88A3A', 0.95, rnd, 2, 0.02);
-    // the shade: a deep green enamel dome, flared, lit on the left; the lamp's own warm light under it
-    const dome: number[] = [];
-    for (let k = 0; k <= 14; k++) {
-      const a = Math.PI + (k / 14) * Math.PI;
-      dome.push(L.x + Math.cos(a) * 29, top + 24 + Math.sin(a) * 24);
-    }
-    dome.push(L.x + 35, top + 28, L.x - 35, top + 28);
-    ctx.strokeStyle = rgba(INK, 0.6);
-    ctx.lineWidth = 0.7;
-    tracePoly(ctx, dome);
-    ctx.stroke();
-    wash(ctx, dome, '#3F6350', 0.96, rnd, 3, 0.01);
-    ctx.fillStyle = rgba('#B6D6B8', 0.5);
-    ribbon(ctx, [L.x - 22, top + 18, L.x - 15, top + 8, L.x - 4, top + 3], 3, 0.8);
-    ctx.fillStyle = rgba('#1E3228', 0.4);
-    ribbon(ctx, [L.x + 14, top + 6, L.x + 25, top + 18, L.x + 31, top + 26], 5, 0.8);
-    // the rim and the bright underside
-    ctx.fillStyle = rgba('#F7E3A0', 0.95);
-    ctx.beginPath();
-    ctx.ellipse(L.x, top + 28, 35, 4.2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = rgba(INK, 0.55);
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
-    const bulb = ctx.createRadialGradient(L.x, top + 31, 0, L.x, top + 31, 12);
-    bulb.addColorStop(0, 'rgba(255,250,214,1)');
-    bulb.addColorStop(1, 'rgba(255,226,150,0)');
-    ctx.fillStyle = bulb;
-    ctx.fillRect(L.x - 14, top + 24, 28, 18);
-    pen(ctx, L.x - 6, top + 1, L.x + 6, top + 1, 0.7, INK, 0.5, rnd, 0.1);
   }
 }
 
-/* ------------------------------------------------------------------ the right wall (past the board) */
-
-function paintRightWall(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number }, rnd: Rand): void {
-  if (vx.x1 < 980) return;
-  // a wall clock, and a rail with two hanging baskets: few things, each painted properly
-  const cx = 1060;
-  const cy = 160;
-  const ring = (r: number): number[] => Array.from({ length: 28 }, (_, k) => [cx + Math.cos((k / 28) * Math.PI * 2) * r, cy + Math.sin((k / 28) * Math.PI * 2) * r]).flat();
-  ctx.fillStyle = 'rgba(46,30,16,0.22)';
-  ctx.beginPath();
-  ctx.ellipse(cx + 3, cy + 5, 27, 27, 0, 0, Math.PI * 2);
-  ctx.fill();
-  wash(ctx, ring(26), '#6A4529', 0.95, rnd, 3, 0.01);
-  wash(ctx, ring(21), '#EDE4C8', 0.95, rnd, 3, 0.01);
-  ctx.fillStyle = rgba('#FFF6DC', 0.4);
-  ribbon(ctx, [cx - 16, cy - 8, cx - 8, cy - 15, cx + 2, cy - 17], 3, 0.8);
-  ctx.strokeStyle = rgba(INK, 0.5);
-  ctx.lineWidth = 0.6;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 26, 0.2, Math.PI * 1.9);
-  ctx.stroke();
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    pen(ctx, cx + Math.cos(a) * 17.5, cy + Math.sin(a) * 17.5, cx + Math.cos(a) * 20, cy + Math.sin(a) * 20, k % 3 === 0 ? 1 : 0.6, INK, 0.65, rnd, 0.05);
-  }
-  pen(ctx, cx, cy, cx + 5, cy - 10, 0.9, INK, 0.8, rnd, 0.05);
-  pen(ctx, cx, cy, cx - 12, cy + 3, 0.7, INK, 0.8, rnd, 0.05);
-  plank(ctx, 1000, 250, 1170, 258, OAK, rnd, { grain: 1 });
-  for (const [hx, r] of [
-    [1034, 17],
-    [1100, 14],
-  ] as const) {
-    ctx.fillStyle = 'rgba(46,30,16,0.2)';
-    ctx.beginPath();
-    ctx.ellipse(hx + 5, 304, r, 5, 0, 0, Math.PI * 2);
+/**
+ * The pendant lamps, painted after the room's glaze because they light themselves: a deep green enamel dome, its top
+ * in its own shade and only a cool glint from the window on the left; the rim catching its light; the bulb seen from a
+ * little below, the brightest thing in the room with the paper left bare in its middle, and its warmth glowing on the
+ * air round the mouth.
+ */
+function paintLamps(ctx: CanvasRenderingContext2D, rnd: Rand, topY: number): void {
+  for (const L of LAMPS) {
+    const top = L.shadeY;
+    // the flex: a twisted cord, stated darker where it nears the shade
+    ctx.fillStyle = rgba('#2A1F18', 0.7);
+    ribbon(ctx, [L.x - 0.2, topY, L.x + 0.3, (topY + top) / 2, L.x + 0.3, top - 6], 1.2, 0.2);
+    for (let y = top - 30; y < top - 7; y += 2.6) {
+      ctx.fillStyle = rgba('#120C08', 0.4);
+      ctx.fillRect(L.x - 0.5, y, 1.2, 0.8);
+    }
+    // a brass collar where the flex enters the shade
+    wash(ctx, [L.x - 4, top - 8, L.x + 4, top - 8, L.x + 3.4, top + 1.5, L.x - 3.4, top + 1.5], '#7A5A26', 0.97, rnd, 2, 0.02);
+    ctx.fillStyle = rgba('#E8C878', 0.5);
+    ctx.fillRect(L.x - 3, top - 7, 1.1, 7.5);
+    // the shade: a flared dome
+    const dome: number[] = [];
+    for (let k = 0; k <= 16; k++) {
+      const a = Math.PI + (k / 16) * Math.PI;
+      const flare = Math.pow(Math.sin((k / 16) * Math.PI), 0.6);
+      dome.push(L.x + Math.cos(a) * (29 + (1 - flare) * 6), top + 26 + Math.sin(a) * 24);
+    }
+    dome.push(L.x + 36, top + 28.5, L.x - 36, top + 28.5);
+    const dm = deform(dome, rnd, 1, 0.01);
+    ctx.fillStyle = rgba('#24392E', 0.98);
+    tracePoly(ctx, dm);
     ctx.fill();
-    ctx.strokeStyle = rgba('#6A4A22', 0.8);
-    ctx.lineWidth = 1.1;
+    ctx.save();
+    tracePoly(ctx, dm);
+    ctx.clip();
+    // wet in wet: the green drifts darker to the right and up into the shadow, a bloom of blue-green on the left
+    mottle(ctx, L.x - 36, top, L.x + 36, top + 30, ['#2E4A3C', '#1C2E26', '#36584A', '#22382E'], 7100 + L.x, 0.5, 9, 1.4);
+    const sh = ctx.createLinearGradient(L.x - 36, 0, L.x + 36, 0);
+    sh.addColorStop(0, 'rgba(120,170,160,0.28)');
+    sh.addColorStop(0.45, 'rgba(40,70,58,0)');
+    sh.addColorStop(1, 'rgba(10,16,14,0.45)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(L.x - 40, top - 2, 80, 34);
+    // the window's glint on the enamel, broken
+    ctx.fillStyle = rgba('#CFE4DA', 0.55);
+    ribbon(ctx, [L.x - 23, top + 19, L.x - 17, top + 10, L.x - 9, top + 5], 2.2, 0.85);
+    ctx.fillStyle = rgba('#CFE4DA', 0.3);
+    ribbon(ctx, [L.x - 27, top + 25, L.x - 25, top + 22], 1.4, 0.8);
+    ctx.restore();
+    // ink only on the shaded side and the crown; the lit edge is lost against the wall
+    ctx.strokeStyle = rgba(INK, 0.6);
+    ctx.lineWidth = 0.65;
     ctx.beginPath();
-    ctx.arc(hx, 266, 8, Math.PI, Math.PI * 2);
+    for (let k = 7; k <= 16; k++) {
+      const x = dome[k * 2]!;
+      const y = dome[k * 2 + 1]!;
+      if (k === 7) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
     ctx.stroke();
-    pen(ctx, hx, 258, hx, 262, 1, '#2A1F18', 0.8, rnd, 0.1);
-    wash(ctx, [hx - r, 274, hx + r, 274, hx + r - 4, 302, hx - r + 4, 302], '#B68F52', 0.95, rnd, 3, 0.03);
-    for (let b = 0; b < 6; b++) pen(ctx, hx - r + 2, 278 + b * 4.5, hx + r - 2, 278 + b * 4.5 + rnd.range(-1, 1), 0.6, '#5A3A1A', 0.45, rnd, 0.3);
-    for (let b = 0; b < 7; b++) pen(ctx, hx - r + 2 + b * ((2 * r - 4) / 6), 274, hx - r + 4 + b * ((2 * r - 8) / 6), 302, 0.5, '#5A3A1A', 0.35, rnd, 0.2);
-    ctx.fillStyle = rgba(LIGHT, 0.3);
-    ribbon(ctx, [hx - r + 3, 276, hx - r + 5, 300], 2, 0.8);
+    // the mouth: the inside of the shade glowing, the rim lit, the bulb's paper-white heart
+    const glow = ctx.createRadialGradient(L.x, top + 30, 2, L.x, top + 34, 46);
+    glow.addColorStop(0, 'rgba(255,236,180,0.55)');
+    glow.addColorStop(0.4, 'rgba(255,214,140,0.16)');
+    glow.addColorStop(1, 'rgba(255,200,120,0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = glow;
+    ctx.fillRect(L.x - 50, top + 18, 100, 64);
+    ctx.restore();
+    ctx.fillStyle = rgba('#F2C877', 0.96);
+    ctx.beginPath();
+    ctx.ellipse(L.x, top + 28.5, 36, 4.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgba('#FFF2CC', 0.95);
+    ctx.beginPath();
+    ctx.ellipse(L.x - 1, top + 29.2, 30, 3.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const bulb = ctx.createRadialGradient(L.x, top + 30, 0, L.x, top + 30, 11);
+    bulb.addColorStop(0, 'rgba(255,253,240,1)');
+    bulb.addColorStop(0.5, 'rgba(255,248,222,0.9)');
+    bulb.addColorStop(1, 'rgba(255,236,190,0)');
+    ctx.fillStyle = bulb;
+    ctx.beginPath();
+    ctx.ellipse(L.x, top + 30, 12, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // the rim's outer edge: dark on the right where it turns away
+    ctx.strokeStyle = rgba('#2A2018', 0.5);
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(L.x, top + 28.5, 36, 4.4, 0, -0.25, Math.PI * 0.62);
+    ctx.stroke();
   }
-  void washEdge;
 }
 
 /* ------------------------------------------------------------------ the floor */
@@ -667,10 +740,10 @@ function paintFloor(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number 
           ribbon(ctx, [gx0, ya + 1, (gx0 + gx1) / 2 + rnd.range(-0.6, 0.6), (ya + yb) / 2, gx1, yb - 1], rnd.range(0.3, 0.9), 0.9);
         }
         // the lit edge of the board (light from the window), the joint dark
-        ctx.fillStyle = rgba('#F2D8A8', 0.1);
-        ribbon(ctx, [ax0 + 0.6, ya, bx0 + 0.6, yb], 0.8, 0.9);
-        pen(ctx, bx0, yb - 0.4, bx1, yb - 0.4, 0.7, '#1E1008', 0.6, rnd, 0.3);
-        pen(ctx, ax0, ya, bx0, yb, 0.6, '#1E1008', 0.5, rnd, 0.3);
+        ctx.fillStyle = rgba('#F2D8A8', 0.2);
+        ribbon(ctx, [ax0 + 0.6, ya, bx0 + 0.6, yb], 0.9, 0.9);
+        pen(ctx, bx0, yb - 0.4, bx1, yb - 0.4, 0.7, '#1E1008', 0.7, rnd, 0.3);
+        pen(ctx, ax0, ya, bx0, yb, 0.65, '#1E1008', 0.65, rnd, 0.3);
         if (rnd.chance(0.5)) {
           for (const nx of [0.2, 0.8]) {
             ctx.fillStyle = rgba('#1E1008', 0.45);
@@ -696,126 +769,74 @@ function paintFloor(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number 
   wash(ctx, rectPoly(mx0, 548, mx1, 584, rnd, 0.8), '#7A5E3A', 0.95, rnd, 3, 0.02);
   wash(ctx, rectPoly(mx0 + 5, 553, mx1 - 5, 579, rnd, 0.6), '#9A7C4C', 0.9, rnd, 2, 0.02);
   for (let i = 0; i < 60; i++) pen(ctx, rnd.range(mx0 + 7, mx1 - 7), rnd.range(555, 577), rnd.range(mx0 + 7, mx1 - 7), rnd.range(555, 577), 0.4, '#4A3418', 0.25, rnd, 0.2);
-  // under the label band the floor is quiet and dark: the foot of the room falls away into shadow
+  // the boards are waxed: the counter stands in them, its warm panels and the brass rail's glints run down as broken
+  // streaks, fading as they come toward us
+  {
+    const cy = 606;
+    for (let x = 108; x < 688; x += rnd.range(5, 11)) {
+      const len = rnd.range(14, 40);
+      ctx.fillStyle = rgba(rnd.pick(['#8A5632', '#7C4C2C', '#9A6A40']), rnd.range(0.12, 0.26));
+      ribbon(ctx, [x, cy, x + rnd.range(-0.5, 0.5), cy + len * 0.5, x + rnd.range(-1, 1), cy + len], rnd.range(2, 5), 0.6);
+    }
+    for (let i = 0; i < 9; i++) {
+      const x = rnd.range(118, 680);
+      ctx.fillStyle = rgba('#F2D48A', rnd.range(0.18, 0.34));
+      ribbon(ctx, [x, cy + 6, x + rnd.range(-0.4, 0.4), cy + rnd.range(14, 24)], rnd.range(0.6, 1.4), 0.5);
+    }
+  }
+  // the door's glass and the window, reflected on the boards by the door: cool, long, soft
+  for (const [rx, rw, a] of [
+    [-60, 46, 0.09],
+    [60, 30, 0.06],
+  ] as const) {
+    ctx.fillStyle = rgba('#B8CCD8', a);
+    tracePoly(ctx, deform([rx - rw / 2, FLOOR_Y + 4, rx + rw / 2, FLOOR_Y + 4, rx + rw / 2 + 10, FLOOR_Y + 70, rx - rw / 2 + 14, FLOOR_Y + 74], rnd, 2, 0.06));
+    ctx.fill();
+  }
+  // what the day has left on the boards: sawdust, a curl of onion skin, a leaf or two from the greens, a dropped bag
+  for (let i = 0; i < 70; i++) {
+    ctx.fillStyle = rgba(rnd.pick(['#D8B47A', '#C89A5A', '#E8CC98']), rnd.range(0.2, 0.45));
+    ctx.fillRect(rnd.range(-120, 1100), rnd.range(552, 680), rnd.range(0.4, 1.2), rnd.range(0.3, 0.7));
+  }
+  for (const [lx, ly, rot, col] of [
+    [846, 642, 0.6, '#6E9A44'],
+    [868, 650, -0.4, '#5E8A3C'],
+    [214, 640, 1.2, '#C98A3E'],
+  ] as const) {
+    ctx.save();
+    ctx.translate(lx, ly);
+    ctx.rotate(rot);
+    ctx.fillStyle = rgba(col, 0.9);
+    tracePoly(ctx, deform(blobPoly(0, 0, 5, 2.4, rnd, 10, 0.25), rnd, 1, 0.1));
+    ctx.fill();
+    ctx.strokeStyle = rgba(mix(col, '#FFFFFF', 0.4), 0.6);
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-4.5, 0);
+    ctx.lineTo(4.5, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  {
+    // a paper bag, dropped and flattened, by the right crates
+    const bx = 1012;
+    const by = 646;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(-0.25);
+    wash(ctx, rectPoly(-12, -5, 12, 5, rnd, 0.6), '#B48A58', 0.95, rnd, 2, 0.02);
+    pen(ctx, -12, 5, 12, 5, 0.4, INK, 0.5, rnd, 0.3);
+    pen(ctx, 7, -5, 7, 5, 0.3, '#7A5430', 0.5, rnd, 0.2);
+    ctx.restore();
+  }
+  // under the label band the floor is quiet and dark: the foot of the room falls away into shadow (the room's glaze
+  // deepens it further)
   const fall = ctx.createLinearGradient(0, 590, 0, bottom);
   fall.addColorStop(0, 'rgba(34,20,10,0)');
-  fall.addColorStop(0.5, 'rgba(34,20,10,0.28)');
-  fall.addColorStop(1, 'rgba(30,18,10,0.46)');
+  fall.addColorStop(0.5, 'rgba(34,20,10,0.12)');
+  fall.addColorStop(1, 'rgba(30,18,10,0.24)');
   ctx.fillStyle = fall;
   ctx.fillRect(x0, 590, x1 - x0, bottom - 590);
   ctx.restore();
 }
 
-/* ------------------------------------------------------------------ the light */
-
-function paintLight(ctx: CanvasRenderingContext2D, vx: { x0: number; x1: number }, vy: { y0: number; y1: number }): void {
-  const w = WINDOW;
-  const x0 = vx.x0;
-  const wide = vx.x1 - vx.x0;
-  ctx.save();
-  // only lights what is painted
-  ctx.globalCompositeOperation = 'source-atop';
-  // daylight: cool, from the window across the left wall and floor, falling off to the right
-  {
-    const g = ctx.createRadialGradient((w.x0 + w.x1) / 2, 250, 20, (w.x0 + w.x1) / 2, 250, 520);
-    g.addColorStop(0, 'rgba(140,184,226,0.36)');
-    g.addColorStop(0.5, 'rgba(140,184,226,0.14)');
-    g.addColorStop(1, 'rgba(176,206,232,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(x0, vy.y0, 760 - x0, vy.y1 - vy.y0);
-  }
-  // the window's light on the floor: a slanted patch, the bars' shadows across it
-  {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x0, FLOOR_Y, wide, vy.y1 - FLOOR_Y);
-    ctx.clip();
-    const lg = ctx.createRadialGradient(170, 590, 0, 170, 590, 300);
-    lg.addColorStop(0, 'rgba(200,222,240,0.16)');
-    lg.addColorStop(1, 'rgba(200,222,240,0)');
-    ctx.fillStyle = lg;
-    ctx.fillRect(x0, FLOOR_Y, 600, vy.y1 - FLOOR_Y + 60);
-    ctx.restore();
-  }
-  // warm pools under each lamp, wide and soft, brightest on what is nearest below
-  for (const L of LAMPS) {
-    const g = ctx.createRadialGradient(L.x, L.shadeY + 40, 10, L.x, L.shadeY + 80, 330);
-    g.addColorStop(0, 'rgba(255,206,120,0.34)');
-    g.addColorStop(0.45, 'rgba(255,196,110,0.14)');
-    g.addColorStop(1, 'rgba(255,190,100,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(L.x - 340, vy.y0, 680, vy.y1 - vy.y0);
-  }
-  // the room darkens toward its far corners and floor edge
-  {
-    const g = ctx.createRadialGradient(500, 330, 280, 500, 330, Math.max(520, wide * 0.62));
-    g.addColorStop(0, 'rgba(40,24,12,0)');
-    g.addColorStop(1, 'rgba(40,24,12,0.34)');
-    ctx.fillStyle = g;
-    ctx.fillRect(vx.x0, vy.y0, wide, vy.y1 - vy.y0);
-  }
-  ctx.restore();
-  void fitCamera;
-  void bottle;
-}
-
-/** colour drifting through what is painted, soft edges, and paper left bare where the light is */
-function finishSheet(sheet: HTMLCanvasElement, ctx: CanvasRenderingContext2D, S: number): void {
-  const Wd = sheet.width;
-  const Hd = sheet.height;
-  const rnd = new Rand(99173);
-  // 1. wet-in-wet drift: broad blooms of blue, ochre, rose and sage laid over what is painted (low resolution, scaled up)
-  {
-    const q = 6;
-    const w = Math.ceil(Wd / q);
-    const h = Math.ceil(Hd / q);
-    const sm = makeCanvas(w, h);
-    const g = sm.getContext('2d')!;
-    const cols = ['70,110,170', '176,124,56', '160,80,70', '90,130,100', '100,90,140'];
-    for (let i = 0; i < 22; i++) {
-      const x = rnd.range(0, w);
-      const y = rnd.range(0, h);
-      const r = rnd.range(0.08, 0.26) * Math.max(w, h);
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      const c = rnd.pick(cols);
-      gr.addColorStop(0, `rgba(${c},${rnd.range(0.04, 0.085)})`);
-      gr.addColorStop(1, `rgba(${c},0)`);
-      g.fillStyle = gr;
-      g.fillRect(0, 0, w, h);
-    }
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(sm, 0, 0, Wd, Hd);
-    ctx.restore();
-  }
-  // 2. soft edges: a blurred copy over the crisp one, as a wet brush softens a drawn line
-  {
-    const t = makeCanvas(Wd, Hd);
-    const tg = t.getContext('2d')!;
-    tg.filter = `blur(${Math.max(0.6, 0.75 * S)}px)`;
-    tg.drawImage(sheet, 0, 0);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = 0.3;
-    ctx.drawImage(t, 0, 0);
-    ctx.restore();
-  }
-  // 3. paper left bare where the light is brightest: under each lamp and at the window's upper left
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  for (const [lx, ly, r, a] of [
-    [LAMPS[0]!.x, 250, 230, 0.07],
-    [LAMPS[1]!.x, 250, 230, 0.07],
-    [90, 160, 190, 0.06],
-    [100, 200, 150, 0.07],
-  ] as const) {
-    const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
-    g.addColorStop(0, `rgba(0,0,0,${a})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(lx - r, ly - r, r * 2, r * 2);
-  }
-  ctx.restore();
-}

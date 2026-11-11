@@ -77,7 +77,7 @@ function building(ctx: CanvasRenderingContext2D, x0: number, x1: number, top: nu
       const wx = x0 + c * ww + ww * 0.5 + rnd.range(-1, 1);
       const wy = top + 14 + fl * fh + rnd.range(-1, 1);
       const lit = (o.lit ?? []).includes(fl * 10 + c);
-      const dab = deform(blobPoly(wx, wy + fh * 0.2, ww * 0.2, fh * 0.28, rnd, 8, 0.12), rnd, 1, 0.05);
+      const dab = deform(rectPoly(wx - ww * 0.19, wy + fh * 0.2 - fh * 0.27, wx + ww * 0.19, wy + fh * 0.2 + fh * 0.27, rnd, 0.6), rnd, 1, 0.06);
       if (lit) {
         const gl = ctx.createRadialGradient(wx, wy + fh * 0.2, 0, wx, wy + fh * 0.2, ww * 0.9);
         gl.addColorStop(0, 'rgba(244,196,110,0.34)');
@@ -298,8 +298,8 @@ export function paintGlass(ctx: CanvasRenderingContext2D): void {
     const len = rnd.range(14, 60);
     const pts: number[] = [];
     for (let k = 0; k <= 6; k++) pts.push(x + Math.sin(k * 1.3 + i) * 0.7, y0 + (len * k) / 6);
-    ctx.fillStyle = rgba('#EAF1F2', rnd.range(0.12, 0.26));
-    ribbon(ctx, pts, rnd.range(0.5, 1.1), 0.9);
+    ctx.fillStyle = rgba('#DDE6EA', rnd.range(0.06, 0.13));
+    ribbon(ctx, pts, rnd.range(0.7, 1.4), 0.9);
   }
   // beads that stayed: each a little long (gravity), a darker refracting edge below, a soft crescent of light above
   for (let i = 0; i < 70; i++) {
@@ -307,20 +307,16 @@ export function paintGlass(ctx: CanvasRenderingContext2D): void {
     const y = rnd.range(78, 384);
     const r = rnd.range(0.5, 1.3);
     const ry = r * rnd.range(1.5, 2.4);
-    ctx.fillStyle = rgba('#CFDDE2', 0.18);
+    // a bead is a lens: a touch darker than the glass where it bends the sky away, its lower edge holding a little
+    // light, never a sparkle
+    ctx.fillStyle = rgba('#7A8E9C', 0.16);
     ctx.beginPath();
     ctx.ellipse(x, y, r, ry, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = rgba('#34485A', 0.38);
-    ctx.lineWidth = 0.4;
+    ctx.fillStyle = rgba('#E4ECEE', 0.22);
     ctx.beginPath();
-    ctx.ellipse(x, y, r, ry, 0, 0.1, Math.PI - 0.1);
-    ctx.stroke();
-    ctx.strokeStyle = rgba('#F4FAFA', 0.5);
-    ctx.lineWidth = 0.3;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * 0.7, ry * 0.75, 0, Math.PI * 1.15, Math.PI * 1.7);
-    ctx.stroke();
+    ctx.ellipse(x + r * 0.1, y + ry * 0.45, r * 0.7, ry * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 
@@ -406,8 +402,8 @@ export class GlassRain {
     // falling rain: fine slanted streaks, lighter than the dull street
     const H = 330;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(224,234,240,0.32)';
-    ctx.lineWidth = 0.55;
+    ctx.strokeStyle = 'rgba(214,226,234,0.2)';
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
     for (let i = 0; i < (reduced ? 0 : this.falling.length); i += 4) {
       const x = this.falling[i]!;
@@ -426,28 +422,99 @@ export class GlassRain {
       const y = d.y0 + f * d.travel;
       const a = Math.min(1, u / 0.05) * Math.min(1, (1 - u) / 0.1);
       const tl = Math.min(f * d.travel, 46);
+      // the wet track it leaves: a faint clear runnel, a shade darker at its edge
       if (tl > 2) {
-        ctx.fillStyle = `rgba(232,240,242,${0.2 * a})`;
-        ribbon(ctx, [d.x, y - tl, d.x + 0.3, y - tl * 0.4, d.x, y], 0.8, 0.6);
+        ctx.fillStyle = `rgba(110,130,146,${0.1 * a})`;
+        ribbon(ctx, [d.x, y - tl, d.x + 0.3, y - tl * 0.4, d.x, y], 1.1, 0.5);
+        ctx.fillStyle = `rgba(226,236,240,${0.12 * a})`;
+        ribbon(ctx, [d.x - 0.3, y - tl, d.x, y - tl * 0.4, d.x - 0.3, y], 0.5, 0.5);
       }
+      // the drop: a lens, darker where it bends the sky away, light gathered in its lower half
       const r = d.r * 0.8 * (0.55 + 0.45 * Math.min(1, u / 0.12));
-      const ry = r * 2;
-      ctx.fillStyle = `rgba(206,222,230,${0.26 * a})`;
+      const ry = r * 1.7;
+      ctx.fillStyle = `rgba(96,114,130,${0.26 * a})`;
       ctx.beginPath();
       ctx.ellipse(d.x, y, r, ry, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(44,62,78,${0.5 * a})`;
-      ctx.lineWidth = 0.45;
+      ctx.fillStyle = `rgba(232,240,242,${0.34 * a})`;
       ctx.beginPath();
-      ctx.ellipse(d.x, y, r, ry, 0, 0.1, Math.PI - 0.1);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(248,252,252,${0.6 * a})`;
-      ctx.lineWidth = 0.35;
-      ctx.beginPath();
-      ctx.ellipse(d.x, y, r * 0.65, ry * 0.7, 0, Math.PI * 1.15, Math.PI * 1.7);
-      ctx.stroke();
+      ctx.ellipse(d.x + r * 0.1, y + ry * 0.4, r * 0.62, ry * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
     void SHADE;
   }
+}
+
+/**
+ * The street seen through the door's glass, a little further along than the window shows: the same grey morning (a
+ * pale sky, the end of a terrace across the road with one warm window, the kerb and the wet road catching the sky),
+ * painted on its own sheet and laid down out of focus like the window's view.
+ */
+export function paintDoorView(ctx: CanvasRenderingContext2D, S: number, r: Rect): void {
+  const rnd = new Rand(40531);
+  const pad = 6;
+  const box = { x: r.x0 - pad, y: r.y0 - pad, w: r.x1 - r.x0 + pad * 2, h: r.y1 - r.y0 + pad * 2 };
+  const sh = spriteCtx(box, S);
+  const g = sh.ctx;
+  const X0 = box.x;
+  const X1 = box.x + box.w;
+  const Y0 = box.y;
+  const Y1 = box.y + box.h;
+  const sky = g.createLinearGradient(0, Y0, 0, 250);
+  sky.addColorStop(0, '#93A6B4');
+  sky.addColorStop(1, '#C9D3D4');
+  g.fillStyle = sky;
+  g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+  mottle(g, X0, Y0, X1, 220, ['#8296A6', '#A8B8C2', '#B9C6CC'], 5531, 0.26, 26, 1.6);
+  // the end of the terrace opposite, a gable and its chimney, one lit window, one dark
+  building(g, X0 - 4, X1 - 22, 150, 300, '#8C7A6C', rnd, { roof: '#5C6C78', lit: [1], floors: 3 });
+  building(g, X1 - 22, X1 + 6, 176, 300, '#9AA8B2', rnd, { roof: '#66747F', lit: [], floors: 2 });
+  // rain haze, the pavement opposite, the road and its reflections
+  const hz = g.createLinearGradient(0, 220, 0, 300);
+  hz.addColorStop(0, 'rgba(185,199,206,0)');
+  hz.addColorStop(1, 'rgba(185,199,206,0.3)');
+  g.fillStyle = hz;
+  g.fillRect(X0, 220, X1 - X0, 80);
+  wash(g, rectPoly(X0 - 4, 296, X1 + 4, 306, rnd, 0.4), '#A8B4BA', 0.9, rnd, 2, 0.02);
+  wash(g, rectPoly(X0 - 4, 306, X1 + 4, Y1 + 4, rnd, 0.4), '#5C6A74', 0.95, rnd, 3, 0.02);
+  g.fillStyle = rgba('#E8B864', 0.3);
+  ribbon(g, [X0 + 22, 308, X0 + 21, 322, X0 + 22, Y1], 5, 0.8, 0.15);
+  g.fillStyle = rgba('#C3D0D6', 0.35);
+  ribbon(g, [X0 + 6, 316, X0 + 40, 317, X1 - 6, 316], 1.6, 0.8);
+  g.fillStyle = 'rgba(96,120,144,0.08)';
+  g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+  ctx.clip();
+  ctx.filter = `blur(${Math.max(0.6, 1.2 * S)}px)`;
+  ctx.drawImage(sh.cv, box.x, box.y, box.w, box.h);
+  ctx.filter = 'none';
+  // the glass: old tracks of rain, beads, the mist along its foot
+  for (let i = 0; i < 12; i++) {
+    const x = rnd.range(r.x0 + 3, r.x1 - 3);
+    const y = rnd.range(r.y0 + 6, r.y1 - 40);
+    ctx.fillStyle = rgba('#DDE6EA', rnd.range(0.06, 0.12));
+    ribbon(ctx, [x, y, x + 0.4, y + rnd.range(14, 44)], 1, 0.9);
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rnd.range(r.x0 + 2, r.x1 - 2);
+    const y = rnd.range(r.y0 + 4, r.y1 - 4);
+    const rr = rnd.range(0.5, 1.2);
+    ctx.fillStyle = rgba('#7A8E9C', 0.16);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rr, rr * 1.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgba('#E4ECEE', 0.2);
+    ctx.beginPath();
+    ctx.ellipse(x, y + rr * 0.7, rr * 0.6, rr * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const m = ctx.createLinearGradient(0, r.y1 - 40, 0, r.y1);
+  m.addColorStop(0, 'rgba(226,234,236,0)');
+  m.addColorStop(1, 'rgba(226,234,236,0.28)');
+  ctx.fillStyle = m;
+  ctx.fillRect(r.x0, r.y1 - 40, r.x1 - r.x0, 40);
+  ctx.restore();
 }

@@ -90,10 +90,19 @@ export function wash(ctx: CanvasRenderingContext2D, poly: number[], hex: string,
   if (ext > 5 && a > 0.3) {
     ctx.strokeStyle = rgba(mix(hex, SHADE, 0.3), Math.min(0.3, a * 0.2));
     ctx.lineWidth = 0.4 + Math.min(0.5, ext * 0.004);
-    ctx.setLineDash([ext * 0.25, ext * 0.05]);
-    tracePoly(ctx, deform(poly, rnd, 2, amp * 0.8));
+    const rim = deform(poly, rnd, 2, amp * 0.8);
+    const n = rim.length / 2;
+    ctx.beginPath();
+    let k = 0;
+    while (k < n) {
+      const run = rnd.int(2, 7);
+      if (rnd.chance(0.65)) {
+        ctx.moveTo(rim[(k % n) * 2]!, rim[(k % n) * 2 + 1]!);
+        for (let j = 1; j <= run; j++) ctx.lineTo(rim[((k + j) % n) * 2]!, rim[((k + j) % n) * 2 + 1]!);
+      }
+      k += run + rnd.int(1, 3);
+    }
     ctx.stroke();
-    ctx.setLineDash([]);
   }
 }
 
@@ -146,6 +155,29 @@ export function plank(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1:
   wash(ctx, poly, tone, 0.8, rnd, 2, 0.012);
   const len = vert ? h : w;
   const thick = vert ? w : h;
+  // the colour drifts along the board in long patches, wet into wet, and the pigment pools along its lower (or right)
+  // edge where the wash dried
+  ctx.save();
+  tracePoly(ctx, poly);
+  ctx.clip();
+  for (let i = 0; i < Math.max(1, Math.round(len / 34)); i++) {
+    const t = rnd.next();
+    const pl = len * rnd.range(0.12, 0.3);
+    const cx = vert ? x0 + w / 2 : x0 + t * w;
+    const cy = vert ? y0 + t * h : y0 + h / 2;
+    ctx.fillStyle = rgba(mix(tone, rnd.pick(['#C89058', '#4A2E18', '#8A7A60', '#A06A40']), rnd.range(0.3, 0.55)), rnd.range(0.14, 0.28));
+    tracePoly(ctx, deform(blobPoly(cx, cy, vert ? thick * 0.7 : pl, vert ? pl : thick * 0.7, rnd, 10, 0.3), rnd, 1, 0.1));
+    ctx.fill();
+  }
+  if (thick > 3) {
+    const pg = vert ? ctx.createLinearGradient(x0, 0, x1, 0) : ctx.createLinearGradient(0, y0, 0, y1);
+    pg.addColorStop(0, rgba(mix(tone, '#2A160A', 0.5), 0));
+    pg.addColorStop(0.55, rgba(mix(tone, '#2A160A', 0.5), 0));
+    pg.addColorStop(1, rgba(mix(tone, '#2A160A', 0.5), 0.3));
+    ctx.fillStyle = pg;
+    ctx.fillRect(x0, y0, w, h);
+  }
+  ctx.restore();
   const gl = Math.max(3, Math.round(thick * 0.5 * (o.grain ?? 1)));
   for (let i = 0; i < gl; i++) {
     const off = rnd.range(0.1, 0.9) * thick;
@@ -209,15 +241,14 @@ export function lightAt(x: number, y: number): { cool: number; warm: number } {
   return { cool, warm };
 }
 
-/** a colour under the room's light: cooled toward slate-blue by the window, warmed toward amber by the lamps, and
- *  sinking toward a violet shade where neither reaches */
+/** a colour nudged toward the light that falls there (cool by the window, amber under the lamps): only the hue; the
+ *  values are the room's glaze's (light.ts), laid over everything once it is painted */
 export function lit(col: string, x: number, y: number): string {
   const { cool, warm } = lightAt(x, y);
   let c = col;
-  if (cool > 0) c = mix(c, '#A9BDD0', cool * 0.3);
-  if (warm > 0) c = mix(c, '#F4C67C', warm * 0.34);
-  const dark = clamp(1 - Math.max(cool * 0.9, warm * 1.2) - 0.2, 0, 0.8);
-  return mix(c, SHADE, dark * 0.16);
+  if (cool > 0) c = mix(c, '#A9BDD0', cool * 0.14);
+  if (warm > 0) c = mix(c, '#F4C67C', warm * 0.12);
+  return c;
 }
 
 /** a surface built from many small, varied, overlapping washes (never one fill): each patch takes its colour from the

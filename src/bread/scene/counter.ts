@@ -4,11 +4,12 @@
  * at the left end, the scale at the right, paper bags and a ball of twine with its loose end. Ink first, then the
  * washes, as the shelves; lit from the upper left (the window) and warmed from above (the lamps).
  */
-import { Rand } from '../../scene/prng';
+import { Rand, clamp } from '../../scene/prng';
 import { deform, rgba, tracePoly } from '../../scene/watercolor';
 import { COUNTER, CRATES, SCALE, TILL } from './geom';
 import { INK, LIGHT, SHADE, blobPoly, grain, lit, lightAt, mix, mottle, patchWash, pen, plank, rectPoly, ribbon, spriteCtx, wash, washField } from './paint';
 import { apple, greens, potato } from './goods';
+import { glazeSprite } from './light';
 
 export interface Sprite {
   cv: HTMLCanvasElement;
@@ -38,10 +39,13 @@ export function paintCounter(q: number): Sprite {
     ctx.fillStyle = sh;
     ctx.fillRect(x0 - 10, floorFront - 2, x1 - x0 + 20, 16);
   }
-  // the front: unequal bays between stiles, no two alike: a cupboard door, one standing a little ajar, a pair of drawers,
-  // a door with a worn panel, a plain board; the lamps' light lies on the left and middle and fades to shade on the right
+  // the front: unequal bays between stiles and rails, no two alike: a cupboard door, one standing a little ajar, a pair
+  // of drawers, a door, a bay of plain boards, a door. The doors are raised and fielded: the bevels catch the light on
+  // their upper left and fall into shade below right, the field carries the wood's figure. The lip above throws a deep
+  // shadow across the top of it all (the strongest dark against the lit top).
   const widths = [96, 108, 84, 112, 90, 84];
   const kinds = ['door', 'ajar', 'drawers', 'door', 'board', 'door'] as const;
+  const tones = ['#8A5632', '#7C4C2C', '#946038', '#80502E', '#8E5A34', '#76462A'];
   const stile = 10;
   const total = widths.reduce((a, b) => a + b, 0);
   const scale = (x1 - x0 - stile) / (total + stile * (widths.length - 1));
@@ -49,131 +53,165 @@ export function paintCounter(q: number): Sprite {
   ctx.beginPath();
   ctx.rect(x0 - 1, lip - 1, x1 - x0 + 2, floorFront - lip + 2);
   ctx.clip();
-  ctx.fillStyle = rgba('#6B4228', 0.6);
+  // the carcass: rails and stiles washed in drifting wood tones, the grain running along each
+  ctx.fillStyle = rgba('#7E4E2E', 0.8);
   ctx.fillRect(x0, lip, x1 - x0, floorFront - lip);
-  const wf = washField(8101, ['#6A3E24', '#7A4A2C', '#5C3620', '#8A5A36', '#64422E'], 0.02, 0.03);
-  patchWash(ctx, x0, lip, x1, floorFront, (x, y) => lit(wf(x, y), x, y), rnd, 16, 0.5, 2);
+  const wf = washField(8101, ['#7A4A2A', '#8C5A34', '#6E4226', '#9A6A3E', '#764830'], 0.02, 0.03);
+  patchWash(ctx, x0, lip, x1, floorFront, (x, y) => lit(wf(x, y), x, y), rnd, 12, 0.5, 2);
+  for (let i = 0; i < 26; i++) {
+    const gy = rnd.range(lip + 1, lip + 9);
+    const gx = rnd.range(x0, x1 - 40);
+    ctx.fillStyle = rgba('#2A1608', rnd.range(0.1, 0.22));
+    ribbon(ctx, [gx, gy, gx + rnd.range(30, 90), gy + rnd.range(-0.4, 0.4)], rnd.range(0.3, 0.7), 0.9);
+  }
   let cursor = x0 + stile * scale;
-  for (let i = 0; i < widths.length; i++) {
-    const px0 = cursor + 2;
-    const px1 = cursor + widths[i]! * scale - 2;
+  for (let i = 0; i <= widths.length; i++) {
+    // the stile to the left of this bay: vertical grain, a lit left arris
+    const sx0 = cursor - stile * scale;
+    for (let g = 0; g < 3; g++) {
+      const gx = rnd.range(sx0 + 1.5, cursor - 1.5);
+      ctx.fillStyle = rgba('#2A1608', rnd.range(0.1, 0.2));
+      ribbon(ctx, [gx, lip + 2, gx + rnd.range(-0.6, 0.6), (lip + floorFront) / 2, gx + rnd.range(-0.6, 0.6), floorFront - 22], rnd.range(0.3, 0.6), 0.9);
+    }
+    ctx.fillStyle = rgba('#F0C890', 0.18);
+    ribbon(ctx, [sx0 + 0.8, lip + 10, sx0 + 0.8, floorFront - 24], 0.7, 0.9);
+    if (i === widths.length) break;
+    const px0 = cursor + 1.5;
+    const px1 = cursor + widths[i]! * scale - 1.5;
     cursor += (widths[i]! + stile) * scale;
-    const py0 = lip + 9 + rnd.range(-0.6, 0.6);
-    const py1 = floorFront - 24 + rnd.range(-0.8, 0.8);
+    const py0 = lip + 10 + rnd.range(-0.6, 0.6);
+    const py1 = floorFront - 26 + rnd.range(-0.8, 0.8);
     const kind = kinds[i]!;
-    const tone = mix('#6A3E24', rnd.chance(0.5) ? '#9A6A40' : '#4A2A18', rnd.range(0.05, 0.4));
-    pen(ctx, px0, py0, px1, py0, 0.7, INK, 0.5, rnd, 0.3);
-    pen(ctx, px0, py0, px0, py1, 0.7, INK, 0.5, rnd, 0.3);
-    wash(ctx, rectPoly(px0, py0, px1, py1, rnd, 0.4), lit(tone, (px0 + px1) / 2, (py0 + py1) / 2), 0.86, rnd, 3, 0.01);
-    // the panel's own colour drifts: small washes of nearby wood tones, the pigment pooled low
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(px0, py0, px1 - px0, py1 - py0);
-    ctx.clip();
-    const pf = washField(8300 + i, [mix(tone, '#B07C48', 0.25), tone, mix(tone, '#3A2010', 0.3), mix(tone, '#8A6A58', 0.2)], 0.05, 0.04);
-    patchWash(ctx, px0, py0, px1, py1, (x, y) => lit(pf(x, y), x, y), rnd, 8, 0.3, 1);
-    const pool = ctx.createLinearGradient(0, py0, 0, py1);
-    pool.addColorStop(0, 'rgba(30,16,8,0)');
-    pool.addColorStop(1, 'rgba(30,16,8,0.22)');
-    ctx.fillStyle = pool;
-    ctx.fillRect(px0, py0, px1 - px0, py1 - py0);
-    ctx.restore();
+    const tone = lit(tones[i]!, (px0 + px1) / 2, (py0 + py1) / 2);
     if (kind === 'drawers') {
-      // two drawers with brass pulls
       const mid = (py0 + py1) / 2;
       for (const [a, b] of [
-        [py0 + 4, mid - 2],
-        [mid + 2, py1 - 4],
+        [py0, mid - 2.5],
+        [mid + 2.5, py1],
       ] as const) {
-        wash(ctx, rectPoly(px0 + 4, a, px1 - 4, b, rnd, 0.3), mix(tone, '#B07C48', 0.2), 0.9, rnd, 2, 0.01);
-        pen(ctx, px0 + 4, a, px1 - 4, a, 0.6, INK, 0.5, rnd, 0.2);
-        pen(ctx, px0 + 4, a, px0 + 4, b, 0.6, INK, 0.45, rnd, 0.2);
-        ctx.fillStyle = rgba('#1E1008', 0.3);
-        ribbon(ctx, [px0 + 5, b, px1 - 4, b], 1.3, 0.9);
-        wash(ctx, rectPoly((px0 + px1) / 2 - 6, (a + b) / 2 - 1, (px0 + px1) / 2 + 6, (a + b) / 2 + 1.6, rnd, 0.2), BRASS, 0.95, rnd, 2, 0.01);
-        ctx.fillStyle = rgba(BRASS_L, 0.6);
-        ctx.fillRect((px0 + px1) / 2 - 5.5, (a + b) / 2 - 0.8, 11, 0.6);
+        fieldPanel(ctx, px0, a, px1, b, mix(tone, '#B07C48', 0.12), rnd, 3.2, 0.5);
+        // a brass cup pull
+        const cx = (px0 + px1) / 2;
+        const cy = (a + b) / 2;
+        ctx.fillStyle = rgba('#1E1008', 0.4);
+        ctx.beginPath();
+        ctx.ellipse(cx + 0.8, cy + 1.6, 7.5, 2.6, 0, 0, Math.PI);
+        ctx.fill();
+        wash(ctx, [cx - 7, cy - 1.4, cx + 7, cy - 1.4, cx + 6, cy + 1.2, cx + 3, cy + 2.6, cx - 3, cy + 2.6, cx - 6, cy + 1.2], BRASS, 0.97, rnd, 2, 0.01);
+        ctx.fillStyle = rgba(BRASS_L, 0.75);
+        ribbon(ctx, [cx - 6, cy - 0.9, cx - 1, cy - 1], 0.7, 0.9);
+        ctx.fillStyle = rgba(BRASS_D, 0.6);
+        ribbon(ctx, [cx - 3, cy + 2, cx + 5, cy + 1], 0.9, 0.9);
       }
     } else if (kind === 'board') {
-      // plain boards, grain stated down them
-      for (let g = 0; g < 7; g++) {
-        const gx = rnd.range(px0 + 4, px1 - 4);
-        ctx.fillStyle = rgba('#2A1608', rnd.range(0.1, 0.22));
-        ribbon(ctx, [gx, py0 + 3, gx + rnd.range(-1.5, 1.5), (py0 + py1) / 2, gx + rnd.range(-1, 1), py1 - 3], rnd.range(0.4, 1), 0.9);
+      // tongue-and-groove boards, each its own tone, the groove dark and the board's edge beside it lit
+      const n = 5;
+      for (let k = 0; k < n; k++) {
+        const bx0 = px0 + ((px1 - px0) * k) / n;
+        const bx1 = px0 + ((px1 - px0) * (k + 1)) / n;
+        wash(ctx, rectPoly(bx0, py0, bx1, py1, rnd, 0.2), mix(tone, rnd.pick(['#A87448', '#5E3820', '#8A6040']), rnd.range(0.1, 0.35)), 0.9, rnd, 2, 0.004);
+        for (let g = 0; g < 3; g++) {
+          const gx = rnd.range(bx0 + 2, bx1 - 2);
+          ctx.fillStyle = rgba('#2A1608', rnd.range(0.1, 0.22));
+          ribbon(ctx, [gx, py0 + 2, gx + rnd.range(-1, 1), (py0 + py1) / 2, gx + rnd.range(-1, 1), py1 - 2], rnd.range(0.3, 0.8), 0.9);
+        }
+        pen(ctx, bx0, py0, bx0, py1, 0.6, '#1E0E06', 0.6, rnd, 0.2);
+        ctx.fillStyle = rgba('#F0C890', 0.22);
+        ribbon(ctx, [bx0 + 1, py0 + 1, bx0 + 1, py1 - 1], 0.7, 0.9);
       }
-      pen(ctx, (px0 + px1) / 2, py0, (px0 + px1) / 2, py1, 0.6, INK, 0.4, rnd, 0.3);
+      pen(ctx, px0, py0, px1, py0, 0.7, INK, 0.55, rnd, 0.2);
     } else {
-      // the raised centre of the door, lit on its upper left and shaded below right
-      const inset = kind === 'ajar' ? 6 : 7;
-      wash(ctx, rectPoly(px0 + inset, py0 + inset, px1 - inset, py1 - inset, rnd, 0.4), mix(tone, '#C9905A', 0.14), 0.88, rnd, 2, 0.01);
-      ctx.fillStyle = rgba(LIGHT, 0.28);
-      ribbon(ctx, [px0 + inset - 0.5, py1 - inset, px0 + inset - 0.5, py0 + inset, px1 - inset, py0 + inset], 1.1, 0.9);
-      ctx.fillStyle = rgba('#1E1008', 0.34);
-      ribbon(ctx, [px1 - inset + 0.5, py0 + inset, px1 - inset + 0.5, py1 - inset, px0 + inset, py1 - inset], 1.4, 0.9);
-      pen(ctx, px0 + inset, py1 - inset, px1 - inset, py1 - inset, 0.5, INK, 0.4, rnd, 0.2);
-      pen(ctx, px1 - inset, py0 + inset, px1 - inset, py1 - inset, 0.5, INK, 0.4, rnd, 0.2);
+      fieldPanel(ctx, px0, py0, px1, py1, tone, rnd, 5.5, 1);
       if (kind === 'ajar') {
         // the right edge swung out: a dark gap showing the inside, a sliver of shelf, the door's thickness lit
-        wash(ctx, [px1 - 9, py0 + 1, px1 + 1, py0 + 3, px1 + 1, py1 - 3, px1 - 9, py1 - 1], '#1E1208', 0.9, rnd, 2, 0.01);
-        ctx.fillStyle = rgba('#8A6A44', 0.6);
-        ctx.fillRect(px1 - 8, (py0 + py1) / 2, 8, 2);
-        wash(ctx, [px1 - 11, py0 + 1, px1 - 9, py0 + 1, px1 - 8.5, py1 - 1, px1 - 11, py1 - 1], '#C9905A', 0.8, rnd, 2, 0.01);
+        wash(ctx, [px1 - 7, py0 - 1, px1 + 2, py0 + 1, px1 + 2, py1 - 1, px1 - 7, py1 + 1], '#140A04', 0.95, rnd, 2, 0.01);
+        ctx.fillStyle = rgba('#6A4A2C', 0.7);
+        ctx.fillRect(px1 - 6, (py0 + py1) / 2 + 4, 7, 1.8);
+        wash(ctx, [px1 - 10, py0 - 1, px1 - 7, py0 - 1, px1 - 6.5, py1 + 1, px1 - 10, py1 + 1], '#C9905A', 0.85, rnd, 2, 0.01);
+        ctx.fillStyle = rgba('#F2D4A0', 0.4);
+        ribbon(ctx, [px1 - 9, py0, px1 - 9, py1], 0.6, 0.9);
       }
-      // a knob
-      ctx.fillStyle = rgba(BRASS, 0.95);
+      // a brass knob, its shadow, its glint
+      const kx = kind === 'ajar' ? px1 - 15 : px1 - 11;
+      const ky = (py0 + py1) / 2 + 6;
+      ctx.fillStyle = rgba('#1E1008', 0.45);
       ctx.beginPath();
-      ctx.arc(kind === 'ajar' ? px1 - 14 : px1 - 10, (py0 + py1) / 2 + 6, 1.6, 0, Math.PI * 2);
+      ctx.ellipse(kx + 1.2, ky + 1.4, 2.2, 1.6, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = rgba(BRASS_L, 0.7);
-      ctx.fillRect(kind === 'ajar' ? px1 - 14.8 : px1 - 10.8, (py0 + py1) / 2 + 5, 0.8, 0.8);
-      // grain only here and there
-      const lg = lightAt((px0 + px1) / 2, py0 + 20);
-      if (lg.warm + lg.cool > 0.42) {
-        for (let g = 0; g < 3; g++) {
-          const gx = rnd.range(px0 + 12, px1 - 12);
-          ctx.fillStyle = rgba('#2A1608', rnd.range(0.08, 0.14));
-          ribbon(ctx, [gx, py0 + 10, gx + rnd.range(-1.5, 1.5), (py0 + py1) / 2, gx + rnd.range(-1, 1), py1 - 10], rnd.range(0.3, 0.7), 0.9);
-        }
+      ctx.fillStyle = rgba(BRASS, 0.97);
+      ctx.beginPath();
+      ctx.arc(kx, ky, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = rgba(BRASS_L, 0.85);
+      ctx.beginPath();
+      ctx.arc(kx - 0.7, ky - 0.7, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      // a keyhole escutcheon on the larger doors
+      if (px1 - px0 > 70) {
+        ctx.fillStyle = rgba(BRASS_D, 0.8);
+        ctx.fillRect(kx - 0.9, ky + 6, 1.8, 3.2);
+        ctx.fillStyle = rgba('#120804', 0.8);
+        ctx.fillRect(kx - 0.35, ky + 6.6, 0.7, 2);
       }
     }
   }
-  // the toe-kick: a darker board, scuffed
+  // the toe-kick: a darker board, scuffed by boots
   plank(ctx, x0, floorFront - 20, x1, floorFront, '#4A2E1A', rnd, { grain: 0.8 });
-  for (let i = 0; i < 14; i++) {
-    ctx.fillStyle = rgba('#C9905A', rnd.range(0.08, 0.2));
-    ribbon(ctx, [rnd.range(x0, x1), floorFront - rnd.range(3, 17), rnd.range(x0, x1) + 20, floorFront - rnd.range(3, 17)], rnd.range(0.4, 1.2), 0.9);
+  for (let i = 0; i < 22; i++) {
+    ctx.fillStyle = rgba(rnd.chance(0.6) ? '#C9905A' : '#1A0C06', rnd.range(0.08, 0.22));
+    const sx = rnd.range(x0, x1);
+    const sy = floorFront - rnd.range(3, 17);
+    ribbon(ctx, [sx, sy, sx + rnd.range(6, 24), sy + rnd.range(-1.5, 1.5)], rnd.range(0.4, 1.4), 0.9);
   }
-  // the left side lit by the window, the right in the lamps' shade
-  const lg = ctx.createLinearGradient(x0, 0, x1, 0);
-  lg.addColorStop(0, 'rgba(176,206,232,0.14)');
-  lg.addColorStop(0.3, 'rgba(255,200,120,0.12)');
-  lg.addColorStop(0.6, 'rgba(255,200,120,0.08)');
-  lg.addColorStop(1, 'rgba(14,8,6,0.4)');
-  ctx.fillStyle = lg;
-  ctx.fillRect(x0, lip, x1 - x0, floorFront - lip);
+  // grime gathered low on the face, where mops and boots reach
+  {
+    const gm = ctx.createLinearGradient(0, floorFront - 60, 0, floorFront - 20);
+    gm.addColorStop(0, 'rgba(30,16,8,0)');
+    gm.addColorStop(1, 'rgba(30,16,8,0.25)');
+    ctx.fillStyle = gm;
+    ctx.fillRect(x0, floorFront - 60, x1 - x0, 40);
+  }
+  // the lip's shadow across the top of the face: deep under the overhang, its lower edge broken
+  {
+    const pts: number[] = [x0 - 2, lip - 1, x1 + 2, lip - 1];
+    for (let x = x1 + 2; x >= x0 - 2; x -= 6) pts.push(x, lip + 5 + Math.sin(x * 0.05) * 0.8 + rnd.range(-0.6, 0.6));
+    ctx.fillStyle = 'rgba(18,8,4,0.5)';
+    tracePoly(ctx, pts);
+    ctx.fill();
+    const ls = ctx.createLinearGradient(0, lip, 0, lip + 16);
+    ls.addColorStop(0, 'rgba(18,8,4,0.3)');
+    ls.addColorStop(1, 'rgba(18,8,4,0)');
+    ctx.fillStyle = ls;
+    ctx.fillRect(x0, lip, x1 - x0, 16);
+  }
   ctx.restore();
 
-  // lamp light lying along the top and the window's cool on its left end: soft sheens, not lines
-  for (const [lx, a] of [[330, 0.3], [590, 0.26]] as const) {
-    const g = ctx.createRadialGradient(lx, topBack + 16, 0, lx, topBack + 16, 110);
-    g.addColorStop(0, `rgba(255,222,150,${a})`);
-    g.addColorStop(1, 'rgba(255,222,150,0)');
-    ctx.save();
-    ctx.translate(0, 0);
-    ctx.fillStyle = g;
-    ctx.fillRect(lx - 110, topBack, 220, topFront - topBack + 12);
-    ctx.restore();
-  }
   // worn patches on the panels, where knees and baskets knock
   for (let i = 0; i < 16; i++) {
-    ctx.fillStyle = rgba('#D9A56A', rnd.range(0.025, 0.06));
+    ctx.fillStyle = rgba('#D9A56A', rnd.range(0.04, 0.09));
     tracePoly(ctx, deform(blobPoly(rnd.range(x0 + 20, x1 - 20), rnd.range(lip + 30, floorFront - 40), rnd.range(10, 30), rnd.range(4, 14), rnd, 10, 0.3), rnd, 2, 0.1));
     ctx.fill();
   }
-  // a brass foot rail along the toe-kick
-  wash(ctx, rectPoly(x0 + 8, floorFront - 25, x1 - 8, floorFront - 21.5, rnd, 0.2), BRASS, 0.9, rnd, 2, 0.004);
-  ctx.fillStyle = rgba(BRASS_L, 0.6);
-  ribbon(ctx, [x0 + 10, floorFront - 24.5, x1 - 10, floorFront - 24.5], 0.9, 0.9);
+  // a brass foot rail on its brackets along the toe-kick: a tube, lit along its top, its shadow on the kick
+  {
+    const ry = floorFront - 24;
+    ctx.fillStyle = 'rgba(18,8,4,0.4)';
+    ribbon(ctx, [x0 + 10, ry + 4.5, x1 - 10, ry + 4.5], 2.4, 0.95);
+    for (let bx = x0 + 26; bx < x1 - 10; bx += rnd.range(118, 136)) {
+      wash(ctx, [bx - 1.6, ry, bx + 1.6, ry, bx + 2.4, ry + 9, bx - 2.4, ry + 9], BRASS_D, 0.95, rnd, 2, 0.02);
+      ctx.fillStyle = rgba(BRASS_L, 0.5);
+      ctx.fillRect(bx - 1.2, ry + 1, 0.6, 7);
+    }
+    wash(ctx, rectPoly(x0 + 8, ry - 1.8, x1 - 8, ry + 2, rnd, 0.15), BRASS, 0.97, rnd, 2, 0.003);
+    ctx.fillStyle = rgba(BRASS_D, 0.7);
+    ribbon(ctx, [x0 + 9, ry + 1.4, x1 - 9, ry + 1.4], 0.9, 0.95);
+    // the polish: bright where feet rest it, dull between
+    for (let i = 0; i < 7; i++) {
+      const sx = rnd.range(x0 + 12, x1 - 60);
+      ctx.fillStyle = rgba('#FFF2C0', rnd.range(0.4, 0.75));
+      ribbon(ctx, [sx, ry - 0.9, sx + rnd.range(20, 60), ry - 0.9], 0.7, 0.8);
+    }
+  }
   // a polished band along the front where hands rest, warmer and lighter, patchy
   for (let i = 0; i < 5; i++) {
     const sx = rnd.range(x0 + 10, x1 - 150);
@@ -243,7 +281,75 @@ export function paintCounter(q: number): Sprite {
   paintScale(ctx, rnd);
   paintBags(ctx, rnd);
   grain(ctx, '#3A2616', box.x, box.y, box.w, box.h, 0, 0.18, 611);
+  // the room's light: the top faces the lamps, the front turns away from them; what stands on the top catches them
+  glazeSprite(cv, box, q, (_x, y) => (y < topBack - 1 ? 'wall' : y < lip + 1 ? 'top' : 'front'), 21, (x, y) => (y < topBack - 1 ? 0.35 * Math.exp(-(((x - 420) / 300) ** 2)) : 0), 0.26);
   return { cv, x: box.x, y: box.y, w: box.w, h: box.h };
+}
+
+/**
+ * A raised and fielded panel in its frame: the recess dark where the frame shades it, the four bevels (lit on the upper
+ * left, in shade below right), and the field in its own wash with the wood's figure (the cathedral arcs of a plain-sawn
+ * board) and the pigment pooled low. `strength` scales the figure (small drawer fronts carry less).
+ */
+function fieldPanel(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, tone: string, rnd: Rand, bev: number, strength: number): void {
+  const fx0 = x0 + bev;
+  const fy0 = y0 + bev;
+  const fx1 = x1 - bev;
+  const fy1 = y1 - bev;
+  wash(ctx, rectPoly(x0, y0, x1, y1, rnd, 0.25), mix(tone, '#2A160A', 0.3), 0.95, rnd, 2, 0.004);
+  const bevel = (pts: number[], col: string, a: number) => {
+    ctx.fillStyle = rgba(col, a);
+    tracePoly(ctx, deform(pts, rnd, 1, 0.004));
+    ctx.fill();
+  };
+  bevel([x0, y0, x1, y0, fx1, fy0, fx0, fy0], mix(tone, '#F0B878', 0.38), 0.92);
+  bevel([x0, y0, fx0, fy0, fx0, fy1, x0, y1], mix(tone, '#E0A868', 0.24), 0.92);
+  bevel([x0, y1, fx0, fy1, fx1, fy1, x1, y1], mix(tone, '#1E0E06', 0.45), 0.92);
+  bevel([x1, y0, x1, y1, fx1, fy1, fx1, fy0], mix(tone, '#1E0E06', 0.32), 0.92);
+  // the field
+  wash(ctx, rectPoly(fx0, fy0, fx1, fy1, rnd, 0.25), tone, 0.95, rnd, 3, 0.004);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(fx0, fy0, fx1 - fx0, fy1 - fy0);
+  ctx.clip();
+  const pf = washField(rnd.int(1, 9999), [mix(tone, '#B07C48', 0.22), tone, mix(tone, '#3A2010', 0.25), mix(tone, '#8A6A58', 0.18)], 0.06, 0.04);
+  patchWash(ctx, fx0, fy0, fx1, fy1, pf, rnd, 7, 0.32, 1);
+  // the figure: nested arcs climbing the board, straight grain down its sides
+  const cx = (fx0 + fx1) / 2 + rnd.range(-0.15, 0.15) * (fx1 - fx0);
+  const fw = fx1 - fx0;
+  const fh = fy1 - fy0;
+  for (let k = 0; k < 6; k++) {
+    const ay = fy0 + fh * (0.12 + k * 0.1) + rnd.range(-2, 2);
+    const spread = fw * (0.14 + k * 0.07);
+    const pts: number[] = [];
+    for (let j = -6; j <= 6; j++) {
+      const t = j / 6;
+      pts.push(cx + t * spread + Math.sin(k + j) * 0.3, ay + t * t * fh * (0.22 + k * 0.03));
+    }
+    ctx.fillStyle = rgba('#2A1406', (0.06 + rnd.range(0, 0.06)) * strength);
+    ribbon(ctx, pts, rnd.range(0.6, 1.4), 0.85);
+  }
+  for (const side of [-1, 1]) {
+    for (let g = 0; g < 3; g++) {
+      const gx = cx + side * fw * rnd.range(0.32, 0.47);
+      ctx.fillStyle = rgba('#2A1406', rnd.range(0.08, 0.16) * strength);
+      ribbon(ctx, [gx, fy0 + 1, gx + rnd.range(-0.6, 0.6), (fy0 + fy1) / 2, gx + rnd.range(-0.6, 0.6), fy1 - 1], rnd.range(0.3, 0.7), 0.9);
+    }
+  }
+  const pool = ctx.createLinearGradient(0, fy0, 0, fy1);
+  pool.addColorStop(0, 'rgba(255,214,160,0.08)');
+  pool.addColorStop(0.5, 'rgba(30,16,8,0)');
+  pool.addColorStop(1, 'rgba(30,16,8,0.22)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(fx0, fy0, fw, fh);
+  ctx.restore();
+  // ink: the frame's inner edge above and left (where the recess's shadow starts), the field's edge below and right
+  pen(ctx, x0, y0, x1, y0, 0.65, INK, 0.6, rnd, 0.15);
+  pen(ctx, x0, y0, x0, y1, 0.6, INK, 0.5, rnd, 0.15);
+  pen(ctx, fx0, fy1, fx1, fy1, 0.5, INK, 0.45, rnd, 0.15);
+  pen(ctx, fx1, fy0, fx1, fy1, 0.5, INK, 0.45, rnd, 0.15);
+  ctx.fillStyle = rgba('#FFE2B0', 0.3);
+  ribbon(ctx, [fx0 + 0.5, fy1 - 2, fx0 + 0.5, fy0 + 0.5, fx1 - 2, fy0 + 0.5], 0.6, 0.9);
 }
 
 /* ------------------------------------------------------------------ the till */
@@ -538,6 +644,8 @@ export function paintCrates(q: number): { sprites: Sprite[] } {
     ctx.fillStyle = rgba(rnd.pick(['#7A2E26', '#2E3F5A', '#2A2A22']), 0.45);
     for (let k = 0; k < 5; k++) ctx.fillRect(mx - 14 + k * 6.2 + rnd.range(-0.4, 0.4), top + 6 + sh + 4, rnd.range(2.4, 4.4), 6.4);
     grain(ctx, '#3A2616', box.x, box.y, box.w, box.h, 0, 0.16, 619 + i);
+    // in the room's light: toward us and the frame's edge, so quiet (the produce keeps a little of the lamps)
+    glazeSprite(cv, box, q, () => 'front', 31 + i, (_x, y) => 0.3 * clamp((cr.y - 20 - y) / 40, 0, 1), 0.28);
     sprites.push({ cv, x: box.x, y: box.y, w: box.w, h: box.h });
   });
   return { sprites };
