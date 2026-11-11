@@ -43,13 +43,36 @@ body {
   padding: 26px 32px;
 }
 .about-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font: 400 22px / 1.2 var(--serif-display);
   letter-spacing: 0.01em;
   color: var(--ink);
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 150ms ease-out;
 }
-.about-home:hover {
-  color: var(--emerald-deep);
+/* a hand-drawn ink arrow in the menu icon's stroke, pointing home */
+.back-arrow {
+  flex: none;
+  width: 22px;
+  height: 14px;
+  /* sits on the text's x-height rather than its baseline */
+  margin-top: 2px;
+}
+@media (hover: hover) {
+  .about-home:hover {
+    color: var(--emerald-deep);
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .back-arrow {
+    transition: translate 150ms ease-out;
+  }
+  .about-home:hover .back-arrow {
+    translate: -3px 0;
+  }
 }
 
 /* one centered reading column (about 60 characters a line at 18px): the title, the text and the icons share its
@@ -59,7 +82,7 @@ body {
   flex: 1;
   width: min(544px, calc(100% - 64px));
   margin: 0 auto;
-  padding: 64px 0 96px;
+  padding: 64px 0 24px;
 }
 .about-title {
   margin: 0;
@@ -117,8 +140,39 @@ body {
   color: var(--muted-soft);
 }
 
+/* The page ends on a strip of the landing page's painted meadow and soil, with a few of its trees. The painted
+   paper fades in from the page above and the soil dissolves into the paper below, so the strip has no edges. */
+.about-grove {
+  position: relative;
+  /* the trees' size follows the strip's height, so on a narrow screen the strip is shorter and the crowns fit */
+  height: clamp(210px, min(40vh, 46vw), 400px);
+  overflow: hidden;
+}
+.about-grove::before,
+.about-grove::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background: var(--paper) url('/assets/paper-tile.webp') repeat;
+}
+.about-grove::before {
+  top: 0;
+  height: 18%;
+  -webkit-mask-image: linear-gradient(to top, transparent, #000);
+  mask-image: linear-gradient(to top, transparent, #000);
+}
+.about-grove::after {
+  bottom: 0;
+  height: 26%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.5) 55%, #000);
+  mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.5) 55%, #000);
+}
+
 .about-foot {
-  padding: 0 32px 48px;
+  padding: 8px 32px 48px;
   text-align: center;
 }
 .about-foot p {

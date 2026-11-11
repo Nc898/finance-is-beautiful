@@ -20,10 +20,12 @@ export interface HeroGeometry {
   groundY: number;
 }
 
-export function heroGeometry(w: number, h: number, dpr: number): HeroGeometry {
+/** `crownTop`: where the tallest crown may reach, as a fraction of the height (the landing hero leaves the top
+ *  third to its title; a strip of trees with no title above can let them stand taller) */
+export function heroGeometry(w: number, h: number, dpr: number, crownTop = 0.372): HeroGeometry {
   const groundY = h * 0.835;
-  const crownTop = h * 0.372;
-  const s = (groundY - crownTop) / 585;
+  const crownTopY = h * crownTop;
+  const s = (groundY - crownTopY) / 585;
   return { w, h, dpr: Math.min(2, dpr || 1), s, groundY };
 }
 

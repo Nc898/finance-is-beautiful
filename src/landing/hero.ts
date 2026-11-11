@@ -10,7 +10,7 @@ import { ensureSprites, type Sprites } from '../scene/sprites';
 import { HORIZON_UP, applyHeroBackdrop, heroGeometry, type HeroGeometry } from './backdrop';
 import { Aviary } from './birds';
 
-interface GroveTree {
+export interface GroveTree {
   seed: number;
   /** trunk x as a fraction of the hero width */
   x: number;
@@ -46,19 +46,30 @@ export interface Hero {
   destroy(): void;
 }
 
-export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced: () => boolean): Hero {
+export interface HeroOptions {
+  /** the trees to paint (the landing page's grove by default) */
+  grove?: GroveTree[];
+  /** birds that fly in and drop bills into the crowns (on by default) */
+  birds?: boolean;
+  /** how high the tallest crown may reach, as a fraction of the height (see heroGeometry) */
+  crownTop?: number;
+}
+
+export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced: () => boolean, opts: HeroOptions = {}): Hero {
+  const grove = opts.grove ?? GROVE;
+  const birds = opts.birds ?? true;
   const ctx = canvas.getContext('2d')!;
-  const painters = GROVE.map((t) => new TreePainter(getModel(t.seed)));
+  const painters = grove.map((t) => new TreePainter(getModel(t.seed)));
   // large trees last so crowns overlap the smaller ones behind
-  const order = GROVE.map((_, i) => i)
-    .filter((i) => !GROVE[i]!.bg)
-    .sort((a, b) => GROVE[a]!.m - GROVE[b]!.m);
-  const bgOrder = GROVE.map((_, i) => i).filter((i) => GROVE[i]!.bg);
-  const allIdx = GROVE.map((_, i) => i);
+  const order = grove.map((_, i) => i)
+    .filter((i) => !grove[i]!.bg)
+    .sort((a, b) => grove[a]!.m - grove[b]!.m);
+  const bgOrder = grove.map((_, i) => i).filter((i) => grove[i]!.bg);
+  const allIdx = grove.map((_, i) => i);
   /** bills the birds have delivered to each tree (on top of its starting count) */
-  const extra = GROVE.map(() => 0);
+  const extra = grove.map(() => 0);
   /** a tree that just received a bill repaints every frame until this time, so the bill fades in smoothly */
-  const hotUntil = GROVE.map(() => 0);
+  const hotUntil = grove.map(() => 0);
   let grownDone = false;
   let overlayDirty = false;
   /**
@@ -69,7 +80,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   const swayAt = (i: number, t: number): number => {
     const ph = i * 1.7;
     const w = (Math.PI * 2 * t) / (SWAY_MS / 1000);
-    const amp = 0.011 * (1.15 - 0.35 * GROVE[i]!.m);
+    const amp = 0.011 * (1.15 - 0.35 * grove[i]!.m);
     return amp * (0.7 * Math.sin(w + ph) + 0.3 * Math.sin(3 * w + ph * 1.9));
   };
   /** current bend of tree i, read from its running compositor animation */
@@ -78,8 +89,8 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     const ct = a ? Number(a.currentTime ?? 0) : 0;
     return a ? swayAt(i, (ct % SWAY_MS) / 1000) : 0;
   };
-  const swayAnims: Array<Animation | undefined> = GROVE.map(() => undefined);
-  const billCount = (i: number) => GROVE[i]!.bills + extra[i]!;
+  const swayAnims: Array<Animation | undefined> = grove.map(() => undefined);
+  const billCount = (i: number) => grove[i]!.bills + extra[i]!;
   const layerView = (i: number) => {
     const g = geo!;
     const L = layers[i]!;
@@ -92,13 +103,13 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       const hr = hero.getBoundingClientRect();
       const sub = subline ? subline.getBoundingClientRect().bottom - hr.top : g.h * 0.32;
       let crown = Infinity;
-      for (const i of order) crown = Math.min(crown, g.groundY - painters[i]!.apexWorld(GROVE[i]!.m).y * g.s);
+      for (const i of order) crown = Math.min(crown, g.groundY - painters[i]!.apexWorld(grove[i]!.m).y * g.s);
       const yTop = sub + 34;
       return { w: g.w, yTop, yBottom: Math.max(yTop + 40, crown - 34), scale: Math.min(1.3, Math.max(0.85, g.w / 1440)) };
     },
     targets() {
       return order
-        .filter((i) => !aviary.reserved.has(i) && billCount(i) < Math.min(painters[i]!.billSlots, GROVE[i]!.bills + 24))
+        .filter((i) => !aviary.reserved.has(i) && billCount(i) < Math.min(painters[i]!.billSlots, grove[i]!.bills + 24))
         .map((i) => ({ tree: i, x: layers[i]!.x + layers[i]!.cssW / 2, variant: billCount(i) % 3 }));
     },
     restPose(i) {
@@ -152,7 +163,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     for (const a of swayAnims) a?.cancel();
     for (const c of domLayers) c.remove();
     domLayers = [];
-    layers = GROVE.map((t) => {
+    layers = grove.map((t) => {
       const cssW = Math.ceil(LAYER_W * g.s);
       const cssH = Math.ceil((LAYER_UP + LAYER_DOWN) * g.s);
       const cv = document.createElement('canvas');
@@ -205,7 +216,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
   /** paint tree i fully grown; `fade` lets a newly delivered bill fade in */
   const paintLayer = (i: number, now: number, fade: boolean) => {
     const g = geo!;
-    const t = GROVE[i]!;
+    const t = grove[i]!;
     const L = layers[i]!;
     const lc = L.cv.getContext('2d')!;
     lc.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
@@ -255,7 +266,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
       if (first || hot(i)) paintLayer(i, now, !first);
     }
     // the overlay canvas only carries birds and falling bills: redraw it only while something is flying
-    if (grownDone && !still && (aviary.busy(now) || overlayDirty)) {
+    if (birds && grownDone && !still && (aviary.busy(now) || overlayDirty)) {
       ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
       ctx.clearRect(0, 0, geo.w, geo.h);
       aviary.frame(ctx, now);
@@ -289,7 +300,7 @@ export function startHero(hero: HTMLElement, canvas: HTMLCanvasElement, reduced:
     const w = Math.round(hero.clientWidth);
     const h = Math.round(hero.clientHeight);
     if (w < 50 || h < 50) return;
-    const g = heroGeometry(w, h, window.devicePixelRatio || 1);
+    const g = heroGeometry(w, h, window.devicePixelRatio || 1, opts.crownTop);
     if (geo && geo.w === g.w && geo.h === g.h && geo.dpr === g.dpr) return;
     const my = ++gen;
     void Promise.all([ensureSprites(g.s * g.dpr), applyHeroBackdrop(canvas, g)]).then(([sp, b]) => {
