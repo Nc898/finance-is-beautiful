@@ -120,6 +120,18 @@ async function paintLowHangingFruit(canvas: HTMLCanvasElement): Promise<void> {
   }
 }
 
+/** Bread and Butter in the mid-1980s: the grocer at his board. Baked from the real scene (scripts/bake-bread-preview.mjs). */
+async function paintBreadAndButter(canvas: HTMLCanvasElement): Promise<void> {
+  const img = new Image();
+  img.src = '/assets/preview-bread.webp';
+  try {
+    await img.decode();
+    drawCover(canvas, img);
+  } catch {
+    /* no still: the entry reads without its picture */
+  }
+}
+
 const PAINTERS: Record<string, Demo['paintPreview']> = {
   'time-to-grow': paintTimeToGrow,
   'against-the-current': paintAgainstTheCurrent,
@@ -127,6 +139,7 @@ const PAINTERS: Record<string, Demo['paintPreview']> = {
   'on-a-roll': paintOnARoll,
   'brick-by-brick': paintBrickByBrick,
   'low-hanging-fruit': paintLowHangingFruit,
+  'bread-and-butter': paintBreadAndButter,
 };
 
 export const DEMOS: Demo[] = CATALOG.map((c) => {

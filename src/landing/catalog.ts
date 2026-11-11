@@ -35,8 +35,9 @@ export interface CatalogEntry {
   /** The entry's accent and ornament on the landing page: the grove's emerald, the river's teal and waves, the
    *  vine's autumn rust, tendrils and falling leaves, the snow's winter blue, snowflakes and birds on the rule,
    *  the bricks' deep red, a course of bricks for the rule and a blossom wash, or the orchard's harvest ochre, a
-   *  twig hung with golden and red apples for the rule and a late-summer wash. */
-  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard';
+   *  twig hung with golden and red apples for the rule and a late-summer wash, or the grocery's chalkboard slate,
+   *  a length of twine hung with brown-paper price tags for the rule and a lamplit, rainy wash. */
+  theme: 'grove' | 'river' | 'vine' | 'snow' | 'brick' | 'orchard' | 'grocer';
 }
 
 /** in the order they appear within their topic */
@@ -100,6 +101,16 @@ export const CATALOG: CatalogEntry[] = [
     summary: 'As prices rise, the same dollars buy a little less each year.',
     tags: ['prices', 'purchasing power', 'cost of living', 'saving', 'cash'],
     theme: 'river',
+  },
+  {
+    slug: 'bread-and-butter',
+    title: 'Bread and Butter',
+    href: './bread-and-butter.html',
+    topic: 'inflation',
+    concept: 'Prices vs pay',
+    summary: 'Prices rise most years, but what counts is how many minutes of work your groceries cost.',
+    tags: ['groceries', 'food prices', 'wages', 'pay', 'cost of living', 'purchasing power', 'real wages', 'eggs', 'history'],
+    theme: 'grocer',
   },
 ];
 

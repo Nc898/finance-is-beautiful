@@ -32,7 +32,9 @@ describe('searchCatalog', () => {
     expect(slugs('Mortgage')).toEqual(['brick-by-brick']);
     expect(slugs('401k')).toEqual(['low-hanging-fruit']);
     expect(slugs('investing')).toEqual(['time-to-grow', 'low-hanging-fruit']);
-    expect(slugs('inflation')).toEqual(['against-the-current']);
+    expect(slugs('inflation')).toEqual(['against-the-current', 'bread-and-butter']);
+    expect(slugs('groceries')).toEqual(['bread-and-butter']);
+    expect(slugs('wages')).toEqual(['bread-and-butter']);
     expect(slugs('snowball')).toEqual(['on-a-roll']);
   });
 
