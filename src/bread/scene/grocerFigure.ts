@@ -38,6 +38,8 @@ const TORSO_D = 8.8;
 const WALK_TURN = 2.0;
 /** the most the shoulders lift for an overhead reach (rig units) */
 const SHRUG_MAX = 9;
+/** how far below the rig's neck joint his head sits (rig units): the jaw just clear of the collar */
+const HEAD_SINK = 0.7;
 
 const mk = (): IK3Out => ({ joint: [0, 0, 0], end: [0, 0, 0], reach: true });
 
@@ -673,11 +675,16 @@ export class GrocerFigure {
     const sp = [this.sUp[0], KAPPA * this.sUp[1] - this.sUp[2]];
     const torsoRot = Math.atan2(sp[0], -sp[1]);
     items.push({ k: torsoKey, f: () => view(set.torso, this.yawT, hipS[0], hipS[1], torsoRot, this.breath) });
-    // (the head sits a little down into the collar: a man of his age carries his head lower than the rig's)
-    const neckS = this.scr([this.neck[0] - this.sUp[0] * 1.6, this.neck[1] - this.sUp[1] * 1.6, this.neck[2] - this.sUp[2] * 1.6]);
+    // (the head sits a little down toward the collar: a man of his age carries his head lower than the rig's)
+    const neckS = this.scr([this.neck[0] - this.sUp[0] * HEAD_SINK, this.neck[1] - this.sUp[1] * HEAD_SINK, this.neck[2] - this.sUp[2] * HEAD_SINK]);
     const cH = Math.cos(this.yawH);
     const headRot = 0.4 * torsoRot + this.look.x * (0.65 * cH + 0.35 * Math.tanh(cH * 4));
-    items.push({ k: this.neck[1] + 8, f: () => view(set.head, this.yawH, neckS[0], neckS[1], headRot) });
+    // (the neck is the torso's, its collar over it; facing us the head is laid over the collar, its chin in front of
+    // it, but turned away it goes under the torso, so the collar and the nape cover the jaw's underside, which is then
+    // behind them: both in between, for an unbroken turn)
+    const away = sstep((-Math.sin(this.yawH) - 0.05) / 0.5);
+    if (away > 0.001) items.push({ k: torsoKey - 0.001, f: () => view(set.head, this.yawH, neckS[0], neckS[1], headRot, 1, Math.min(1, away * 4)) });
+    if (away < 0.999) items.push({ k: this.neck[1] + 8, f: () => view(set.head, this.yawH, neckS[0], neckS[1], headRot, 1, 1 - away) });
     for (let i = 0; i < 2; i++) {
       const hip = this.hips[i]!;
       const kn = this.knee[i]!;
@@ -711,7 +718,7 @@ export class GrocerFigure {
       const kElb = keyAt(lerp3(el, gl, 0.22));
       const kHand = keyAt(lerp3(el, gl, 0.8));
       items.push({ k: ku, f: () => bone(set.upper, set.upperFar, sh, el, 24, farOf(zu), null, 0) });
-      const drawFore = () => bone(set.fore, set.foreFar, el, gl, FOREARM, farOf(zf), set.elbow, 0.7);
+      const drawFore = () => bone(set.fore[i]!, set.foreFar[i]!, el, gl, FOREARM, farOf(zf), set.elbow, 0.7);
       const arm = i as 0 | 1;
       if (kElb > torsoKey !== kHand > torsoKey && only === null) {
         items.push({ k: kElb, f: () => halfOf(el, gl, true, drawFore) });
