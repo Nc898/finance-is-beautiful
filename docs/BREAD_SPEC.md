@@ -130,7 +130,7 @@ pickers' CMU-fitted walk for any steps):
   ones (bananas, chicken, flour) set on the brass scale (the needle swings round and settles), each set back in its
   place and keyed into the till (the price flags pop up); after the flour he turns the till's crank, the drawer runs
   out and he shuts it; a breath (a wipe of the counter, a look out at the rain), and round again. A round takes about
-  12 to 16 s at 1x; it is the shop's life, not a clock, so nothing on it has to match the timeline.
+  half a minute at 1x, at his own natural pace; it is the shop's life, not a clock, so nothing on it has to match the timeline.
 - When a quantity changes he first adds or takes away pieces one at a time (from the shelf under the counter). Paused,
   he finishes what is in his hands, then stands at the counter (idle: wiping it down, looking out at the rain).
 - `place(intent)` (scrubbing, reduced motion): the settled state: the basket complete, the till shut, the needle at

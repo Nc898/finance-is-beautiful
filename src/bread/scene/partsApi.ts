@@ -18,8 +18,9 @@ import type { BasketInputs, BoardContent } from '../types';
  * fixed enamel strip at the left; its price in flap cells at the right) and, under a painted rule, the total.
  *
  * Each price is right-aligned in a fixed row of cells wide enough for the longest it can be ("~$123.45"); unused
- * cells show a blank flap. A cell's flaps carry, in order: blank, "$", "~", ".", "0" … "9" (the year's cells carry
- * only the digits). A cell that must change flips through its flaps in that order, one flap after another (the top
+ * cells show a blank flap. A cell's flaps carry, in order: blank, "$", "~", ".", "0" … "9"; the year's cells, and
+ * the price's dollar-units and two cents cells, carry only the digits (with the full drum a one-cent drop would cost
+ * a lap of thirteen flaps, and the board would never rest at 1×). A cell that must change flips through its flaps in that order, one flap after another (the top
  * half falls over the bottom, with its shadow), until it shows the target, so a change takes longer the further the
  * target is round the drum, as a real board does. Cells start their flips a few hundredths of a second apart, left
  * to right, so a row ripples. A new target that arrives mid-flip is simply flipped on to (no restart).
@@ -65,8 +66,9 @@ export type GrocerActivity =
 export interface GrocerIntent {
   activity: GrocerActivity;
   basket: BasketInputs;
-  /** How fast he works: 1 at 1× (a person's own pace: a round of the basket in about 12 to 16 s), × the playback
-   *  speed, capped at a brisk pace; his walks stay a person's walks. 0 when paused. */
+  /** How fast he works: 1 at 1× (a person's own pace; a round of the basket takes as long as it takes at that pace,
+   *  about half a minute, since nothing on it has to match the timeline), × the playback speed, capped at a brisk
+   *  pace; his walks stay a person's walks. 0 when paused. */
   pace: number;
 }
 
