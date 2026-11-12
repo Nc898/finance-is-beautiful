@@ -57,10 +57,10 @@ const STAND: Record<ItemKey, number> = { bread: TILL_STAND, eggs: 333, coffee: 3
 const SC_PLANE = SCALE.y + 6;
 /** his own clock against the wall clock: work at 1x, and the caps on work and walks at high speeds */
 const WORK_TIME = 2.1;
-const SERVE_TIME = 3.3;
-const WORK_CAP = 4;
-const WALK_BASE = 1.45;
-const WALK_CAP = 1.6;
+const SERVE_TIME = WORK_TIME;
+const WORK_CAP = 2.7;
+const WALK_BASE = 1;
+const WALK_CAP = 1.3;
 const WALK_EASE = 0.35;
 /** the weighed items, and the dial reads full at this many pounds */
 const WEIGHED: Record<ItemKey, boolean> = { bread: false, eggs: false, coffee: false, bananas: true, chicken: true, flour: true };
@@ -498,10 +498,11 @@ class GrocerImpl implements Grocer {
       this.inWalk = true;
       // a walk that has come to rest near the spot counts as there (he turns to face the way; the last few units are a
       // side-step): asking the walk for the exact spot made it overshoot by a stride's rounding and turn round again
+      const stopped = !f.walking && !f.gait.turning;
       const near = Math.abs(x - f.px) < 70 && f.facing(FACE_FRONT, 0.3);
       let done: boolean;
-      if (near) done = f.goTo(spot, FACE_FRONT, 3, true);
-      else if (!f.walking && !f.gait.turning && Math.abs(f.px - x) < 22) done = f.face(FACE_FRONT);
+      if (stopped && Math.abs(f.px - x) < 18) done = f.face(FACE_FRONT);
+      else if (near && stopped) done = f.goTo(spot, FACE_FRONT, 3, true);
       else done = f.goTo(spot, FACE_FRONT, 4);
       if (this.held) this.engage(0, 'carry', () => this.carryPt(this.held!.p), 0.5);
       else this.free(0);
@@ -668,7 +669,8 @@ class GrocerImpl implements Grocer {
     // the hand comes away a little and he watches the needle come round
     let t = 0;
     for (;;) {
-      this.engage(0, 'panOff', () => at(PAN.x + 22, SC_PLANE, SC_PLANE - (this.fx.panBase - p.gripH - 2) + 12), 0.55);
+      // (his hand comes right away: back to the counter's edge, clear of the pan, so only the piece is weighed)
+      this.engage(0, 'panOff', () => this.restPoints(this.fig.px)[0], 0.8, 8);
       this.lean = 0.1;
       this.look = dial;
       t += this.h;
