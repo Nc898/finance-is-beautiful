@@ -29,7 +29,7 @@ import { Mover, clamp, lerp, sstep } from '../../vine/scene/gardenerMath';
 import { BOARD_LINES, COUNTER, GROCER_FLOOR_Y, GROCER_SPOTS } from './geom';
 import { type Board, type BoardLine, type CreateGrocer, type Grocer, type GrocerIntent } from './partsApi';
 import { GrocerFigure, UNIT, type W3 } from './grocerFigure';
-import { buildGrocerSet } from './grocerArt';
+import { buildGrocerSet, fillHeadViews } from './grocerArt';
 import { BasketArt, layoutBasket, sortPieces, type PieceSpec } from './basket';
 
 const PI = Math.PI;
@@ -219,6 +219,10 @@ class GrocerImpl implements Grocer {
       if (!check()) return;
     }
     this.ready = true;
+    // then the head's in-between views, in the background (a smoother turn of the head; see HEAD_VIEWS)
+    void fillHeadViews(q, tick, () => check() && this.q === q).then((full) => {
+      if (full && this.q === q) this.fig.sprites(full);
+    });
   }
 
   place(intent: GrocerIntent, board: Board): void {

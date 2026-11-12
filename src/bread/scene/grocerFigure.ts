@@ -15,7 +15,7 @@
  * Hand 0 is his right hand (facing us it is on the screen's left), hand 1 his left. World points are W3: x, the
  * floor's depth y (world units, as GROCER_FLOOR_Y) and h above the floor; on the screen a point is at (x, y - h).
  */
-import { DIM, FOREARM, KAPPA, VIEWS } from '../../vine/scene/gardenerDims';
+import { DIM, FOREARM, KAPPA } from '../../vine/scene/gardenerDims';
 import { Gait, STANCE, type GaitGoal } from './grocerGait';
 import { LEG, WALK_BOB, WALK_PELVIS_ROLL, WALK_PELVIS_YAW, WALK_SWAY, WALK_THORAX_YAW, cyc, wristSwing } from '../../vine/scene/gardenerWalk';
 import { Mover, Spring1, clamp, ik3, lerp, lerp3, norm3, softMin, sstep, swing3, wrapPi, type IK3Out, type V3 } from '../../vine/scene/gardenerMath';
@@ -92,6 +92,10 @@ export class GrocerFigure {
   private readonly twist = new Spring1(0);
   private readonly headYaw = new Spring1(0);
   private readonly look = new Spring1(0);
+  /** where the head is heading: each look is smoothed twice (a spring chasing a spring), so a turn of the head eases
+   *  in and out instead of starting at full speed */
+  private readonly headYawT = new Spring1(0);
+  private readonly lookT2 = new Spring1(0);
   private readonly wWalk = new Mover(0);
   /** how firmly each hand is on its target (0 free … 1 there) */
   readonly wHold: [Mover, Mover] = [new Mover(0), new Mover(0)];
@@ -346,8 +350,10 @@ export class GrocerFigure {
     let tY = this.lookT ? this.lookT.yaw : 0;
     const tP = this.lookT ? this.lookT.pitch : this.crouchS.x > 0.3 ? 0.25 : 0;
     if (this.yaw.moving || this.gait.turning) tY = clamp(0.5 * wrapPi(this.yaw.target - this.yaw.v), -0.45, 0.45);
-    this.look.update(h, tP, 6);
-    this.headYaw.update(h, tY, 6);
+    this.lookT2.update(h, tP, 5);
+    this.headYawT.update(h, tY, 4);
+    this.look.update(h, this.lookT2.x, 5);
+    this.headYaw.update(h, this.headYawT.x, 4);
     let tw = 0;
     if (this.yaw.moving || this.gait.turning) tw = clamp(0.12 * wrapPi(this.yaw.target - this.yaw.v), -0.12, 0.12);
     this.twist.update(h, tw, 9);
@@ -361,6 +367,8 @@ export class GrocerFigure {
     this.wWalk.snap(0);
     this.look.snap(0);
     this.headYaw.snap(0);
+    this.lookT2.snap(0);
+    this.headYawT.snap(0);
     this.sway.snap(0);
     this.speed.snap(0);
     this.swingN.snap(0);
@@ -600,9 +608,10 @@ export class GrocerFigure {
     };
     /** two neighbouring painted views dissolved into each other (at his size a snap between views would show) */
     const view = (parts: Part[], psi: number, x: number, y: number, ang: number, sw = 1, alpha = 1) => {
-      const t = ((((psi / (2 * PI)) % 1) + 1) % 1) * VIEWS;
-      const k0 = Math.floor(t) % VIEWS;
-      const k1 = (k0 + 1) % VIEWS;
+      const n = parts.length;
+      const t = ((((psi / (2 * PI)) % 1) + 1) % 1) * n;
+      const k0 = Math.floor(t) % n;
+      const k1 = (k0 + 1) % n;
       const fr = t - Math.floor(t);
       if (fr < 0.5) {
         put(parts[k0]!, x, y, ang, 1, sw, alpha);

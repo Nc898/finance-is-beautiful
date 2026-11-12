@@ -20,6 +20,11 @@ import { Rand } from '../../scene/prng';
 import { deform, makeCanvas, tracePoly } from '../../scene/watercolor';
 import { brush, granulate, inkDashes, mix, paintForm, smoothPoly, type FormOpts, type Pt } from '../../river/scene/boatInk';
 import { VIEWS } from '../../vine/scene/gardenerDims';
+
+/** The head turns through more painted views than the body (7.5° apart, not 22.5°): his face is large on the screen,
+ *  and a glance passing through two or three views read as a jump. The set first carries the body's 16 (so the page
+ *  loads no slower); fillHeadViews paints the rest once the scene is up. */
+export const HEAD_VIEWS = 48;
 import { HEAD_SKIN, paintHead } from './grocerHead';
 
 export interface Part {
@@ -583,7 +588,7 @@ function paintTorsoView(psi: number, q: number, k: number): Part {
 
 /** the head, from just under the jaw to the crown (the neck is the torso's, under the collar): see grocerHead.ts */
 function paintHeadView(psi: number, q: number, k: number): Part {
-  return part(32, 33, 16, 30, q, (ctx) => paintHead(ctx, psi, k, q, [16, 30]), 0.3, 251 + k);
+  return part(32, 33, 16, 30, q, (ctx) => paintHead(ctx, psi, k, q, [16, 30]), 0.3, 251);
 }
 
 /* ------------------------------------------------------------------ the tea towel */
@@ -1144,10 +1149,10 @@ export function buildGrocerSet(q: number, tick: () => Promise<void>, check: () =
   const p = pending.get(key);
   if (p) return p;
   const run = (async (): Promise<GrocerSprites | null> => {
-    const views = async (f: (psi: number, k: number) => Part): Promise<Part[] | null> => {
+    const views = async (f: (psi: number, k: number) => Part, n = VIEWS): Promise<Part[] | null> => {
       const out: Part[] = [];
-      for (let k = 0; k < VIEWS; k++) {
-        out.push(f((k / VIEWS) * TAU, k));
+      for (let k = 0; k < n; k++) {
+        out.push(f((k / n) * TAU, k));
         if (k % 4 === 3) {
           await tick();
           if (!check()) return null;
@@ -1192,4 +1197,30 @@ export function buildGrocerSet(q: number, tick: () => Promise<void>, check: () =
   pending.set(key, run);
   void run.finally(() => pending.delete(key));
   return run;
+}
+
+/**
+ * The head's in-between views, painted one per tick after the scene is showing: returns the set with all HEAD_VIEWS
+ * of them (the 16 it had are every third, painted from the same seed at the same angles, so nothing changes where
+ * they were), or null if the scene went away meanwhile.
+ */
+export async function fillHeadViews(q: number, tick: () => Promise<void>, check: () => boolean): Promise<GrocerSprites | null> {
+  const key = q.toFixed(3);
+  const s = sets.get(key);
+  if (!s) return null;
+  if (s.head.length === HEAD_VIEWS) return s;
+  const step = HEAD_VIEWS / s.head.length;
+  const out: Part[] = [];
+  for (let k = 0; k < HEAD_VIEWS; k++) {
+    if (k % step === 0) {
+      out.push(s.head[k / step]!);
+      continue;
+    }
+    out.push(paintHeadView((k / HEAD_VIEWS) * TAU, q, k));
+    await tick();
+    if (!check() || sets.get(key) !== s) return null;
+  }
+  const full: GrocerSprites = { ...s, head: out };
+  sets.set(key, full);
+  return full;
 }

@@ -185,7 +185,9 @@ function scratchOf(w: number, h: number): { a: HTMLCanvasElement; b: HTMLCanvasE
 export function paintHead(ctx: CanvasRenderingContext2D, psi: number, k: number, q: number, pivot: [number, number]): void {
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
-  const rnd = new Rand(7310 + k * 13);
+  // (one seed for every view: the same strokes in neighbouring views, so a turn dissolves between them without shimmer)
+  const rnd = new Rand(7310);
+  void k;
   const V0: View = { cp: Math.cos(psi), sp: Math.sin(psi) };
   const SK = HEAD_SKIN;
   const P = (p: V): Pt => {
@@ -373,7 +375,7 @@ export function paintHead(ctx: CanvasRenderingContext2D, psi: number, k: number,
         if (vis < -0.05) continue;
         const lam = (a.lam + b.lam + d.lam + e.lam) / 4;
         // (a little wobble in where a wash stops, as a brush would leave it)
-        const wob = 0.06 * Math.sin(i * 1.7 + j * 2.3 + k);
+        const wob = 0.06 * Math.sin(i * 1.7 + j * 2.3 + psi * 2.5);
         // (two flat washes, as a storybook painter lays them: the shadow side, cool, and a little more in its core)
         const half = 0.36 * ss((0.4 - lam + wob) / 0.14);
         const core = 0.14 * ss((0.02 - lam + wob) / 0.12);
