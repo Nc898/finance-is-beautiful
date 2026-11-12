@@ -9,17 +9,18 @@
  * every cell's face on it, each face multiplied by the same glaze, so a face looks as if it were painted into the
  * glazed picture); per frame only the cells that are mid-flip are redrawn on it.
  *
- * A cell is a drum: blank, "$", "~", ".", "0" … "9" (the year's cells carry the digits only). To change, it flips flap
- * by flap along the drum until it shows its target: the top half falls over the bottom, shaded as it turns, with the
- * dark gap between the halves. The cells of a row start a few hundredths of a second apart, left to right. A new target
- * that arrives mid-flip is flipped on to: the flap in the air finishes its fall, and only the latest target is
- * remembered, so a cell is never more than a lap of the drum behind.
+ * A cell that must change does one flap, straight from its old glyph to its new one (blank, "$", "~", ".", "0" � "9"; the
+ * year's cells carry the digits): the top half of the old glyph falls over the bottom, shaded as it turns, revealing
+ * the new top, and lands showing the new bottom half on its back, with the dark gap between the halves. Nothing between
+ * is ever shown, so a glance at the board never reads a figure that is not the old or the new one. The cells of a
+ * row that change start a few hundredths of a second apart, left to right. A new target that arrives mid-flap lets the
+ * falling flap land and then flaps once more to the latest target, so a cell is never more than one target behind.
  */
 import type { BoardContent, ItemKey } from '../types';
 import { ITEMS, ITEM_KEYS } from '../types';
 import { BOARD, BOARD_FLAPS, BOARD_FRAME, PRICE_CELLS, YEAR_CELLS, type FlapSize } from './geom';
 import type { Board } from './partsApi';
-import { Rand, clamp, hashSeed } from '../../scene/prng';
+import { Rand, hashSeed } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
 import { smoothPoly } from '../../river/scene/boatInk';
 import { buildGlaze, glazePixels, type Glaze } from './light';
@@ -33,23 +34,15 @@ const P = Math.PI;
 
 const PRICE_DRUM = ' $~.0123456789';
 const YEAR_DRUM = '0123456789';
-/** the columns of a price that only ever hold a digit (the dollars' units and the two cents: "$0.51", "~$12.34"): their
- *  drums carry only the digits, so a change of a cent is a few flaps either way, not a lap past the symbols */
-const DIGIT_COLS = [4, 6, 7];
 /** how many painted variants of every glyph; a cell keeps its own */
 const VARIANTS = 4;
 
 /* ------------------------------------------------------------------ flap timing (seconds, the mechanism's own pace) */
 
-/** one flap's fall, when the target is near; quicker when the cell has far to go (a lap of the drum is 14 flaps) */
-const FLAP_SLOW = 0.06;
-const FLAP_FAST = 0.025;
-/** cells of a row start this much later, each, left to right */
-const RIPPLE = 0.03;
-
-/** a change is meant to be over in about this long however far round the drum it is, so the board keeps up with a month's change at 1x */
-const CHANGE_SPAN = 0.22;
-const flapTime = (togo: number): number => clamp(CHANGE_SPAN / Math.max(1, togo), FLAP_FAST, FLAP_SLOW);
+/** one flap's fall, from the old glyph straight to the new one: about 9 frames at 60 fps, so it reads as a flap */
+const FLAP = 0.15;
+/** the cells of a row that change start this much later, each, left to right */
+const RIPPLE = 0.02;
 
 /* ------------------------------------------------------------------ the numerals, as brush strokes */
 
@@ -340,6 +333,8 @@ interface Cell {
   /** the glyph it shows (an index in the drum) and the one it is going to */
   cur: number;
   tgt: number;
+  /** while a flap is falling: the glyph it lands on (the target when it began) */
+  to: number;
   /** a flap is falling: its progress 0 … 1, and how long the whole fall takes */
   flipping: boolean;
   p: number;
@@ -375,9 +370,10 @@ function buildCells(): Cell[] {
       variant: hashSeed(77, line, col) % VARIANTS,
       cur: 0,
       tgt: 0,
+      to: 0,
       flipping: false,
       p: 0,
-      dur: FLAP_SLOW,
+      dur: FLAP,
       delay: 0,
       dirty: true,
       age: 0,
@@ -393,7 +389,7 @@ function buildCells(): Cell[] {
   for (let i = 0; i < YEAR_CELLS; i++) mk('year', 0, i, YEAR_DRUM, CX - yw / 2 + i * (F.year.w + F.year.gap), F.yearTop, F.year);
   const row = (set: CellSet, line: number, top: number, sz: FlapSize): void => {
     const total = PRICE_CELLS * sz.w + (PRICE_CELLS - 1) * sz.gap;
-    for (let i = 0; i < PRICE_CELLS; i++) mk(set, line, i, DIGIT_COLS.includes(i) ? YEAR_DRUM : PRICE_DRUM, F.priceRight - total + i * (sz.w + sz.gap), top, sz);
+    for (let i = 0; i < PRICE_CELLS; i++) mk(set, line, i, PRICE_DRUM, F.priceRight - total + i * (sz.w + sz.gap), top, sz);
   };
   ITEM_KEYS.forEach((_, i) => row('row', i + 1, F.rowTops[i]!, F.row));
   row('total', 7, F.totalTop, F.total);
@@ -419,7 +415,7 @@ const keyOf = (c: BoardContent): string => `${c.year}|${ITEM_KEYS.map((k) => c.p
 /* ------------------------------------------------------------------ the board */
 
 /** the Board, and (for the harness) how many cells are not yet showing their target */
-export function createBoard(): Board & { pending(): number; ages(): number[] } {
+export function createBoard(): Board & { pending(): number; ages(): number[]; states(): { cur: string; to: string | null; tgt: string }[] } {
   const cells = buildCells();
   const FR = BOARD_FRAME;
   const fx0 = BOARD.x0 - FR.side;
@@ -831,7 +827,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[] } {
       L.drawImage(cur, 0, 0, fw, th, X, Y, fw, th);
       L.drawImage(cur, 0, th, fw, bh, X, hinge, fw, bh);
     } else {
-      const nxt = faceOf(c, (c.cur + 1) % c.drum.length);
+      const nxt = faceOf(c, c.to);
       const p = c.p;
       const s = p < 0.5 ? Math.cos(p * P) : -Math.cos(p * P);
       const sh = Math.sin(p * P);
@@ -935,7 +931,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[] } {
         const need = (1 - c.p) * c.dur;
         if (t >= need) {
           t -= need;
-          c.cur = (c.cur + 1) % c.drum.length;
+          c.cur = c.to;
           c.p = 0;
           c.flipping = false;
           c.dirty = true;
@@ -955,8 +951,9 @@ export function createBoard(): Board & { pending(): number; ages(): number[] } {
           t -= d;
           if (c.delay > 0) return;
         }
-        const togo = (c.tgt - c.cur + c.drum.length) % c.drum.length;
-        c.dur = flapTime(togo);
+        // one flap, straight to the latest target: nothing between is ever shown
+        c.to = c.tgt;
+        c.dur = FLAP;
         c.flipping = true;
         c.p = 0;
       }
@@ -966,7 +963,10 @@ export function createBoard(): Board & { pending(): number; ages(): number[] } {
   /* ---------------------------------------------------------------- the contract */
 
   const settledAges: number[] = [];
-  const api: Board & { pending(): number; ages(): number[] } = {
+  const api: Board & { pending(): number; ages(): number[]; states(): { cur: string; to: string | null; tgt: string }[] } = {
+    states() {
+      return cells.map((c) => ({ cur: c.drum[c.cur]!, to: c.flipping ? c.drum[c.to]! : null, tgt: c.drum[c.tgt]! }));
+    },
     ages() {
       return settledAges.splice(0);
     },

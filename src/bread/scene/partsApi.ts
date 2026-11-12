@@ -18,12 +18,12 @@ import type { BasketInputs, BoardContent } from '../types';
  * fixed enamel strip at the left; its price in flap cells at the right) and, under a painted rule, the total.
  *
  * Each price is right-aligned in a fixed row of cells wide enough for the longest it can be ("~$123.45"); unused
- * cells show a blank flap. A cell's flaps carry, in order: blank, "$", "~", ".", "0" … "9"; the year's cells, and
- * the price's dollar-units and two cents cells, carry only the digits (with the full drum a one-cent drop would cost
- * a lap of thirteen flaps, and the board would never rest at 1×). A cell that must change flips through its flaps in that order, one flap after another (the top
- * half falls over the bottom, with its shadow), until it shows the target, so a change takes longer the further the
- * target is round the drum, as a real board does. Cells start their flips a few hundredths of a second apart, left
- * to right, so a row ripples. A new target that arrives mid-flip is simply flipped on to (no restart).
+ * cells show a blank flap. A cell whose glyph changes does one flap, straight from its old glyph to the new one
+ * (about 0.15 s: the old top half falls over, its back landing as the new bottom half), never rolling through the
+ * glyphs between, so at any moment a cell reads its old figure, its new one, or a clean half-flap between them
+ * (rolling a drum showed false figures at a glance). Cells that change start a couple of hundredths of a second
+ * apart, left to right, so a row ripples; unchanged cells never move. A new target that arrives mid-flap lets the
+ * falling flap land, then flaps once more to the latest (never more than one target behind).
  *
  * The painting is the collection's: ink under watercolor, a wooden frame and a dark painted board, cream flaps with
  * hand-painted numerals (not a font), each cell a little different; nothing vector-flat or cloned.
