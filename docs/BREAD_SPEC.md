@@ -14,8 +14,11 @@ Statistics. It should feel like a record, not an illustration.
 Title "Bread and Butter": the everyday basics, and the job that pays for them. That is the comparison.
 
 **The owner's choices** (2026-11-11): price vs pay; a corner grocery (the collection's first indoor scene); the grocer
-as the one figure, re-chalking the prices by hand; six items priced since 1980; built with parallel builders, two at
-a time.
+as the one figure; six items priced since 1980; built with parallel builders, two at a time.
+**Changed 2026-11-12** (the owner: the board and the labels "don't update togethor at 1x speed, leaving the viewer
+confused. he also blocks the board while erasing and writing"): the chalkboard became a split-flap price board that
+keeps time with the labels, and the grocer's work became the basket (weighing and ringing it up), away from the
+board.
 
 ## The lesson (one sentence)
 Prices rise almost every year, but what matters is what they cost against what you earn: this week's groceries took
@@ -97,10 +100,12 @@ stands in the shop facing the counter; it never zooms.
 - **The shelves** (SHELVES, back wall): wooden shelves of tins, jars, packets, sacks and bottles, painted with care
   but kept a value or two quieter than the counter so the eye goes to the basket and the board. Nothing cloned: vary
   every tin, label and gap.
-- **The chalkboard** (BOARD, back wall right): a slate in a wooden frame, headed "This week's basket", the year
-  chalked large at the top, then six lines (item and price) and a ruled line with the total. Chalk is a soft,
-  slightly broken pale stroke with dust; the numbers are hand-written (the grocer's hand: a consistent, slightly
-  old-fashioned script, not a font).
+- **The price board** (BOARD, back wall right; the Board contract in partsApi.ts): a split-flap board in a wooden
+  frame, headed "This week's basket" on the top rail; the year in four flap cells; six rows, each the item's name on
+  a painted enamel strip and its price in flap cells; a painted rule and the total. It shows the same month as the
+  labels at every moment: when a figure changes its cells flip through their flaps to the new one (left to right, a
+  ripple along the row), at the mechanism's own pace. Cream flaps with hand-painted numerals (not a font), ink under
+  watercolor, each cell a little different. Estimated figures carry their "~" on a flap.
 - **The counter** (COUNTER, the middle ground): a long wooden counter, worn at the front edge, with a brass scale
   (SCALE), an old till (TILL), paper bags and string. **The basket** (BASKET) lies on it: two loaves, a carton of a
   dozen eggs, a tin or bag of coffee, a bunch of bananas, a whole chicken in butcher's paper, a 5 lb paper sack of
@@ -110,7 +115,7 @@ stands in the shop facing the counter; it never zooms.
   potatoes, greens) to frame the view, a mat by the door.
 - **The light**: a pendant lamp or two over the counter, warm pools of light on the counter and the grocer, cool
   daylight from the window falling across the left; long soft shadows. This palette (warm amber inside, slate and
-  rain-blue outside, chalk white, brown paper) is new to the collection.
+  rain-blue outside, cream enamel, brown paper) is new to the collection.
 - **Ambient** (all off in reduced motion): rain on the window, drips, a passer-by now and then, steam from a cup on
   the shelf behind the counter, dust in the lamplight.
 
@@ -118,24 +123,21 @@ stands in the shop facing the counter; it never zooms.
 says: Brick's figure.ts skeleton, turning through three-quarter views, costume sprites, pose cache; the orchard
 pickers' CMU-fitted walk for any steps):
 - A shopkeeper of middle age: rolled shirtsleeves, a waistcoat or a long canvas apron, a pencil behind the ear, a
-  cloth over the shoulder. Proportions from geom.ts (GROCER_H). Behind the counter his legs are hidden; he steps out
-  past the counter's end to reach the board (GROCER_SPOTS).
-- **His work is the prices.** The board shows what the grocer last chalked, not the true month: he goes along the
-  board line by line, wipes the old price with his cloth and chalks the new one (the chalk appears stroke by stroke
-  under his hand; the board's API takes the chalk tip's position). After the six lines he rubs out and writes the
-  total, and the year at the top. The board is chalked once a year, with January's prices (boardMonth in
-  app/text.ts): at 1× a year takes 6 s, about one pass (the year chalked last, so the board is never a new year over old prices), and between passes he waits by the board with his tools in
-  hand. At high speeds he skips straight to the latest year on each line. The month's exact figures are always in
-  the labels below the scene.
-- Between passes and when a quantity changes he tidies the basket: adds or takes away a loaf, an egg carton, a pound
-  of bananas, wraps or unwraps the chicken, sets the flour sack down. Paused, he finishes the line he is on, then
-  stands by the counter (idle: wiping it down, looking out at the rain).
-- `place(intent)` (scrubbing, reduced motion): the settled state: the board fully up to date for the month, the basket
-  complete, the grocer standing at the counter. Scrubbing rebuilds exactly.
+  cloth over the shoulder. Proportions from geom.ts (GROCER_H). He stays behind the counter, between the till and the
+  scale, and never stands in front of the board. His face and figure are storybook, never realistic (QUALITY_BAR).
+- **His work is the basket** (the 'serve' activity in partsApi.ts). While the timeline plays he rings up the week's
+  basket, round after round: along the counter from the bread to the flour, each item taken up in turn, the weighed
+  ones (bananas, chicken, flour) set on the brass scale (the needle swings round and settles), each set back in its
+  place and keyed into the till (the price flags pop up); after the flour he turns the till's crank, the drawer runs
+  out and he shuts it; a breath (a wipe of the counter, a look out at the rain), and round again. A round takes about
+  12 to 16 s at 1x; it is the shop's life, not a clock, so nothing on it has to match the timeline.
+- When a quantity changes he first adds or takes away pieces one at a time (from the shelf under the counter). Paused,
+  he finishes what is in his hands, then stands at the counter (idle: wiping it down, looking out at the rain).
+- `place(intent)` (scrubbing, reduced motion): the settled state: the basket complete, the till shut, the needle at
+  zero, the grocer at the counter. Scrubbing rebuilds exactly.
 - Quality bar (non-negotiable, copied into his brief): no teleports or snapped poses, every transition blended over
-  at least 0.25 s; no foot sliding; three-quarter turns; nothing passes through the counter, the board or the shelves;
-  the chalk appears only under the chalk's tip, the old price leaves only under the cloth, items move only in his
-  hands.
+  at least 0.25 s; no foot sliding; three-quarter turns; nothing passes through the counter, the till or the shelves;
+  items, the scale's pan, the till's keys, crank and drawer move only under his hands.
 
 **The labels** (DOM, the bottom band, positioned from labelAnchor, as the other demos' plates):
 - Left, the basket as a paper till receipt: "This week's basket" and the total for the month ("$9.16", live,
@@ -146,7 +148,8 @@ pickers' CMU-fitted walk for any steps):
 
 Camera: the whole shop always (no zoom); VIEW as Brick's layout.ts, adjusted. Performance: the shop, window frame,
 shelves, counter, floor and crates pre-rendered once per size; the rain, the board and the basket as their own
-layers; the grocer through the pose cache; the chalk text cached per line and repainted only as it is written. 60 fps
+layers; the grocer through the pose cache; the board's flaps cached as glyph sprites, each cell redrawn only while
+it flips. 60 fps
 at 1440 × 900. Determinism: the same month and basket give the same board, basket and labels.
 
 ## Introduction and notes (no scripted story)
@@ -192,10 +195,11 @@ Year and month readout top right of the scene (statement month; hidden while the
 - Engine and app: src/bread/engine/*, src/bread/app/* (store, loop, notes, text, ui), src/bread/main.ts,
   bread-and-butter.html, src/styles/bread.css; tests/bread/*, tests/e2e/bread.spec.ts.
 - The shop: scene/index.ts (the orchestrator), layout.ts, shop.ts (window, shelves, walls, floor, light), street.ts
-  (the view and the rain), counter.ts (counter, scale, till, bags), board.ts (the slate and the chalk), ambient.ts,
+  (the view and the rain), counter.ts (counter, scale, till, bags), board.ts (the split-flap price board), ambient.ts,
   cache.ts.
 - The grocer and the basket (items move only in his hands, so they are one part): scene/grocer.ts (actions, the
-  board passes, the basket), grocerArt.ts (costume), basket.ts (the six items' art, by quantity).
+  ringing up, the basket), grocerArt.ts and grocerHead.ts (costume), basket.ts (the six items' art, by quantity), and
+  the till's and the scale's moving parts (drawn in drawCounterTop).
 - Landing: the catalog entry (topic "inflation"; concept "Prices vs pay"; summary "Prices rise most years, but what
   counts is how many minutes of work your groceries cost."; search words groceries, food prices, wages, pay, cost of
   living, purchasing power, real wages, eggs), its painter and a preview baked from the real scene.
@@ -206,5 +210,8 @@ Builders two at a time, each with the brief template, the quality bar copied in,
 2. The shop (everything but the grocer and the basket; the board's slate and its chalk renderer with the write and
    wipe API in partsApi.ts).
 3. The grocer and the basket (after 2 has the board's API in place), driving the board and the counter.
+4. (2026-11-12) The split-flap price board, and the grocer's new work at the counter: two builders in parallel, one
+   owning board.ts and its harness, the other grocer.ts, counter.ts's moving parts and the grocer harness; the
+   coordinator wires index.ts.
 Then the coordinator's review of 2× crops and frame strips against the sister demos, fix lists, and only then the
 owner.

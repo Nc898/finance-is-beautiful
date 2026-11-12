@@ -153,12 +153,8 @@ test.describe('Bread and Butter', () => {
     expect(f!.board.total).toMatch(/^\$\d+\.\d\d$/);
     expect(f!.board.prices.eggs).toMatch(/^\$\d+\.\d\d$/);
     expect(f!.basket.qty).toEqual({ bread: 2, eggs: 1, coffee: 1, bananas: 3, chicken: 3, flour: 5 });
-    // the board is chalked once a year with January's prices: in January the label's total is the board's total
-    await scrub(page, at(2022, 1));
-    const jan = await page.evaluate(() => window.__bread.frame());
-    expect(jan!.board.year).toBe('2022');
-    expect((await labels(page)).total).toBe(jan!.board.total);
-    expect(f!.board.total).toBe(jan!.board.total);
+    // the board shows the same month as the labels: the label's total is the board's total
+    expect((await labels(page)).total).toBe(f!.board.total);
     await scrub(page, at(2026, 9));
     expect(await labels(page)).toMatchObject({ total: '$26.15', pay: '$1,239', minutes: '51', date: 'Sep 2026' });
     await scrub(page, at(2021, 7));

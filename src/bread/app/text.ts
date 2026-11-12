@@ -23,9 +23,9 @@ import {
 import type { BasketInputs, BoardContent, MonthRow, SeriesKey } from '../engine';
 
 /**
- * What the grocer's board should say for a month: the year, each item's price per unit ("$0.51"), the basket's total.
- * A price the BLS did not publish that month (filled by interpolation) is chalked with a "~" ("~$3.47", about), and so
- * is the total while any price is: the board never shows an estimate as if it were published.
+ * What the price board should say for a month: the year, each item's price per unit ("$0.51"), the basket's total.
+ * A price the BLS did not publish that month (filled by interpolation) shows a "~" ("~$3.47", about), and so does the
+ * total while any price is: the board never shows an estimate as if it were published.
  */
 export function boardFor(row: MonthRow): BoardContent {
   const price = (f: MonthRow['prices'][keyof MonthRow['prices']]) => (f.estimated ? '~' : '') + formatCents(f.value);
@@ -42,11 +42,6 @@ export function boardFor(row: MonthRow): BoardContent {
     },
     total: (anyEstimated ? '~' : '') + formatCents(row.basket),
   };
-}
-
-/** The month the board is chalked for: January of the shown month's year (the data starts in a January). */
-export function boardMonth(statementMonth: number): number {
-  return statementMonth - (statementMonth % 12);
 }
 
 export interface LabelText {

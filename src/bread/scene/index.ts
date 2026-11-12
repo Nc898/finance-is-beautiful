@@ -4,12 +4,11 @@
  * An interior, so the layers are fixed (geom.ts), not depth-sorted. Painted once per size: the room (paper, plaster,
  * window and street, shelves and goods, lamps, floor, the light; shop.ts), the counter with the till, scale and bags
  * (counter.ts) and the foreground crates. Per frame, back to front: the room; the street's life and the rain on the
- * glass (street.ts, ambient.ts); the chalkboard (board.ts: its lines repainted only while written or wiped); the
- * steam; the grocer; the counter; whatever lies or is held on it; the crates; the dust in the lamplight.
- * The grocer comes through the Grocer contract (the stand-in until the real one is swapped in at one line below).
+ * glass (street.ts, ambient.ts); the price board (board.ts: split flaps that click over to each month's prices with
+ * the labels); the steam; the grocer; the counter; whatever lies or is held on it (the basket, the scale's pan and
+ * needle, the till's moving parts); the crates; the dust in the lamplight.
  */
-import type { BoardContent, BreadFrame, BreadLabel, BreadSceneAPI, BreadScreenPoint } from '../types';
-import { ITEM_KEYS } from '../types';
+import type { BreadFrame, BreadLabel, BreadSceneAPI, BreadScreenPoint } from '../types';
 import { ensurePaperTile } from '../../scene/sprites';
 import { fitCamera, type Camera, type Insets } from './layout';
 import { CUP, paintBack } from './shop';
@@ -24,8 +23,6 @@ const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
 
 /** the labels' places in the bottom band, as world x (basket left, the minutes between, the pay right) */
 const LABEL_X: Record<BreadLabel, number> = { basket: 215, minutes: 445, pay: 680 };
-
-const sameBoard = (a: BoardContent, b: BoardContent): boolean => a.year === b.year && a.total === b.total && ITEM_KEYS.every((k) => a.prices[k] === b.prices[k]);
 
 export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
   const ctx = canvas.getContext('2d')!;
@@ -47,7 +44,7 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
   let resolveReady: () => void = () => {};
   const ready = new Promise<void>((r) => (resolveReady = r));
   let readyDone = false;
-  // dev harness: take the board over by hand (wipe and write a line) without the grocer setting it back
+  // dev harness: hold the board (drive its flips by hand) without the frame setting it
   const dev = { board, manual: false };
   if (import.meta.env.DEV) (window as unknown as { __breadScene: unknown }).__breadScene = dev;
 
@@ -121,21 +118,20 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
       if (!reduced) ambient.drawStreet(ctx, tSec);
       rain.draw(ctx, tSec, reduced);
 
-      // the grocer works toward what the board and the counter should show; a jump of the timeline or reduced motion
-      // places everything settled
+      // the board follows the month (its flaps click over with the labels); the grocer rings up the basket while the
+      // timeline plays. A jump of the timeline or reduced motion places everything settled
       const intent: GrocerIntent = {
-        activity: playing || !sameBoard(board.shown(), frame.board) ? 'work' : 'idle',
-        board: frame.board,
+        activity: playing ? 'serve' : 'idle',
         basket: frame.basket,
         pace: playing ? Math.max(0.1, frame.speed) : 0,
       };
-      if (dev.manual) {
-        // the harness holds the board
-      } else if (frame.scrubbed || reduced || !placed) {
-        grocer.place(intent, board);
+      if (frame.scrubbed || reduced || !placed) {
+        grocer.place(intent);
+        if (!dev.manual) board.set(frame.board);
         placed = true;
       } else {
-        grocer.update(dt, intent, board, tSec, false);
+        grocer.update(dt, intent, tSec, false);
+        if (!dev.manual) board.update(dt, frame.board);
       }
 
       board.draw(ctx);

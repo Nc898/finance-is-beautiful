@@ -1,46 +1,43 @@
 /**
- * The contracts between the scene's orchestrator (index.ts) and its two living parts (coordinator-owned): the
- * chalkboard (board.ts, built with the shop) and the grocer with the basket he handles (grocer.ts, basket.ts). The
- * orchestrator decides WHAT the board and the counter should show from the month and the reader's basket; the grocer
- * decides HOW and WHEN to get them there. Nothing on the board or the counter ever changes except under his hand.
+ * The contracts between the scene's orchestrator (index.ts) and its two living parts (coordinator-owned): the price
+ * board (board.ts) and the grocer with the basket he handles (grocer.ts, basket.ts, and the till's and the scale's
+ * moving parts). The orchestrator decides WHAT the board and the counter should show from the month and the reader's
+ * basket.
+ *
+ * The board keeps time with the labels: it is a split-flap price board, a mechanism on the wall, and its flaps
+ * click over to each month's prices as the timeline moves, so the board and the numbers under the scene always say
+ * the same thing. The grocer no longer touches it: his work is the basket on the counter.
  */
-import type { BasketInputs, BoardContent, ItemKey } from '../types';
-import type { Pt } from './geom';
+import type { BasketInputs, BoardContent } from '../types';
 
-/* ------------------------------------------------------------------ the chalkboard */
-
-/** A line of the board the grocer re-chalks ('title' is painted once and never changes). */
-export type BoardLine = 'year' | ItemKey | 'total';
-export const BOARD_LINE_ORDER: readonly BoardLine[] = ['year', 'bread', 'eggs', 'coffee', 'bananas', 'chicken', 'flour', 'total'];
+/* ------------------------------------------------------------------ the price board */
 
 /**
- * The slate and its chalk. It keeps what is written on each line and draws two kinds of change, both driven by the
- * grocer's hand so they happen only under it:
- * - wiping: the cloth sweeps along the line's price (on the year line, the whole year); the chalk fades under the
- *   cloth's path and leaves a soft smear of dust, never vanishing all at once;
- * - writing: the new text appears stroke by stroke along a hand-written path. `writeTip(line, text, t)` gives the
- *   chalk tip's position at progress t (0 … 1) so the hand can sit exactly on it, and `write(line, text, t)` shows
- *   the text up to that progress.
- * The handwriting is the grocer's own: a consistent, slightly old-fashioned chalk script (a small hand-made set of
- * strokes for the digits, "$", "." and the item names, not a font), with natural variation per glyph so repeated
- * digits are not clones; deterministic for the same text.
+ * A split-flap price board in its wooden frame (BOARD in geom.ts), headed "This week's basket" (painted on the
+ * frame's top rail, never flips). Below it: the year in four flap cells, then six rows (the item's name painted on a
+ * fixed enamel strip at the left; its price in flap cells at the right) and, under a painted rule, the total.
+ *
+ * Each price is right-aligned in a fixed row of cells wide enough for the longest it can be ("~$123.45"); unused
+ * cells show a blank flap. A cell's flaps carry, in order: blank, "$", "~", ".", "0" … "9" (the year's cells carry
+ * only the digits). A cell that must change flips through its flaps in that order, one flap after another (the top
+ * half falls over the bottom, with its shadow), until it shows the target, so a change takes longer the further the
+ * target is round the drum, as a real board does. Cells start their flips a few hundredths of a second apart, left
+ * to right, so a row ripples. A new target that arrives mid-flip is simply flipped on to (no restart).
+ *
+ * The painting is the collection's: ink under watercolor, a wooden frame and a dark painted board, cream flaps with
+ * hand-painted numerals (not a font), each cell a little different; nothing vector-flat or cloned.
  */
 export interface Board {
-  /** Paint (or reuse) the slate, frame and glyph strokes at this pixel density, between frames. */
+  /** Paint (or reuse) the frame, the strips and the flap glyphs at this pixel density, between frames. */
   prepare(pxPerUnit: number, tick: () => Promise<void>, check: () => boolean): Promise<void>;
-  /** what each line says now (the last text written there; '' once wiped) */
+  /** what the cells show now, once settled (the target until the flips arrive there) */
   shown(): BoardContent;
-  /** the cloth's position along a line at wiping progress t (0 … 1), for the grocer's left hand */
-  wipeTip(line: BoardLine, t: number): Pt;
-  /** wipe the line's text up to progress t (monotonic within one wipe; t = 1 leaves the line clear) */
-  wipe(line: BoardLine, t: number): void;
-  /** the chalk tip's position at progress t while writing `text` on `line`, for the grocer's right hand */
-  writeTip(line: BoardLine, text: string, t: number): Pt;
-  /** write `text` on the (clear) line up to progress t (t = 1: written, and it is then the line's text) */
-  write(line: BoardLine, text: string, t: number): void;
-  /** settled: every line says exactly `content` (scrubbing, reduced motion, the first paint) */
+  /** advance the flaps toward `content` by dtSec of wall time (the flips run at their own mechanical pace, not the
+   *  playback speed) */
+  update(dtSec: number, content: BoardContent): void;
+  /** settled at once on `content`, no flips (scrubbing, reduced motion, the first paint) */
   set(content: BoardContent): void;
-  /** draw the slate, the frame, the title and the chalk (layer 1 in geom.ts) */
+  /** draw the board (layer 1 in geom.ts) */
   draw(ctx: CanvasRenderingContext2D): void;
 }
 
@@ -51,50 +48,50 @@ export type CreateBoard = () => Board;
 
 export type GrocerActivity =
   /**
-   * Keep the board and the counter true. Whenever a line of the board differs from `board`, go to the board (walk
-   * past the counter's end) and re-chalk the lines that differ, top to bottom in BOARD_LINE_ORDER: wipe each (the
-   * cloth in his left hand, along wipeTip), then write the new text (the chalk in his right hand, along writeTip);
-   * the total last. A line's target is read as he starts that line, so at high speeds he writes the latest figure
-   * and skips the months between. Whenever the counter differs from `basket`, go to the counter and add or take away
-   * items one at a time (from under the counter or the shelf behind him; taken items go back there), with a visible
-   * reach for each. The board comes first, unless the basket changed and the board is already true.
+   * The timeline is playing: he rings up the week's basket, round after round. Along the counter from the bread to
+   * the flour, he takes up each item in turn (one piece of it is enough: a loaf, a carton, the tin, a bunch, the
+   * chicken, a sack); the weighed ones (bananas, chicken, flour) he sets on the brass scale's pan (SCALE), the needle
+   * swinging round and settling, then lifts off again; he sets each piece back in its place and keys it into the
+   * till (TILL: a press or two of its keys, the price flags popping up). After the flour he turns the till's crank:
+   * the drawer runs out with its ring and he shuts it. Then a breath (a wipe of the counter, a look out at the rain)
+   * and round again. Whenever the counter differs from `basket`, he first adds or takes away pieces one at a time
+   * (from the shelf under the counter, where taken pieces go back), as before.
    */
-  | 'work'
-  /** nothing to change (paused, or all true): stand at the counter, wipe it down, look out at the rain now and then */
+  | 'serve'
+  /** paused: he finishes what is in his hands (sets a piece down, lets go of the crank), then stands at the counter,
+   *  wipes it down, looks out at the rain now and then. A change to the basket while paused is still seen to. */
   | 'idle';
 
 export interface GrocerIntent {
   activity: GrocerActivity;
-  board: BoardContent;
   basket: BasketInputs;
-  /** How fast he works: 1 at 1× (a line wiped in about a quarter of a second and written in about half a second; a
-   *  full pass of the board in about two seconds, a year of the timeline), × the playback speed, capped at a brisk
-   *  pace. 0 (paused) lets him finish the stroke he is on, then idle. */
+  /** How fast he works: 1 at 1× (a person's own pace: a round of the basket in about 12 to 16 s), × the playback
+   *  speed, capped at a brisk pace; his walks stay a person's walks. 0 when paused. */
   pace: number;
 }
 
 /**
  * Continuity rules (as the orchard's pickers and the brick's crew):
  * - Position, facing and pose are continuous in time; every transition blends over ≥ 0.25 s; turning is through a
- *   three-quarter view, never a mirror flip. Steps keep pace with the floor (no sliding: the orchard pickers'
- *   CMU-fitted walk, over a shop's short distances).
- * - The chalk is in his right hand and the cloth in his left (over his shoulder when not in use); the chalk touches
- *   the board exactly at writeTip and the cloth at wipeTip. Items on the counter move only in his hands.
- * - Nothing passes through the counter, the board, the shelves or the till.
- * - Reduced motion: no movement at all; everything drawn settled (the board true, the basket complete, the grocer at
- *   the counter).
+ *   three-quarter view, never a mirror flip. Steps keep pace with the floor (no sliding: the CMU-fitted walk).
+ * - He stays behind the counter, between the till and the scale; he never stands in front of the board.
+ * - Items on the counter, the scale's pan, the till's keys and crank and its drawer move only under his hands; the
+ *   needle swings only while something is on the pan (and back to zero when it is lifted).
+ * - Nothing passes through the counter, the shelves or the till.
+ * - Reduced motion: no movement at all; everything drawn settled (the basket complete, the needle at zero, the till
+ *   shut, the grocer at the counter).
  */
 export interface Grocer {
   prepare(pxPerUnit: number, tick: () => Promise<void>, check: () => boolean): Promise<void>;
-  /** advance by dt seconds toward the intent, driving the board's wipe and write; tSec is the wall clock (breathing,
-   *  idle life) */
-  update(dtSec: number, intent: GrocerIntent, board: Board, tSec: number, reduced: boolean): void;
-  /** layer 2: the grocer himself (behind the counter, or in front of the board) */
+  /** advance by dt seconds toward the intent; tSec is the wall clock (breathing, idle life) */
+  update(dtSec: number, intent: GrocerIntent, tSec: number, reduced: boolean): void;
+  /** layer 2: the grocer himself (behind the counter) */
   drawFigure(ctx: CanvasRenderingContext2D): void;
-  /** layer 4: the basket on the counter top, and whatever he holds over it (drawn after the counter) */
+  /** layer 4: the basket on the counter top, the scale's pan and needle, the till's moving parts, and whatever he
+   *  holds over them (drawn after the counter) */
   drawCounterTop(ctx: CanvasRenderingContext2D): void;
-  /** the settled state for the intent: the board set true, the basket complete, the grocer at the counter */
-  place(intent: GrocerIntent, board: Board): void;
+  /** the settled state for the intent: the basket complete, the till shut, the needle at zero, him at the counter */
+  place(intent: GrocerIntent): void;
 }
 
 /** Implemented in src/bread/scene/grocer.ts (the basket's art in basket.ts) */
