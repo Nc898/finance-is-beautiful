@@ -15,7 +15,7 @@ const mo = document.getElementById('mo')!;
 const reduced = document.getElementById('reduced') as HTMLInputElement;
 const speedSel = document.getElementById('speed') as HTMLSelectElement;
 const playBtn = document.getElementById('play') as HTMLButtonElement;
-const dev = (): { board: Board & { pending(): number; ages(): number[] }; manual: boolean } => (window as unknown as { __breadScene: { board: Board & { pending(): number; ages(): number[] }; manual: boolean } }).__breadScene;
+const dev = (): { board: Board & { pending(): number; ages(): number[]; states(): { cur: string; to: string | null; tgt: string }[] }; manual: boolean } => (window as unknown as { __breadScene: { board: Board & { pending(): number; ages(): number[]; states(): { cur: string; to: string | null; tgt: string }[] }; manual: boolean } }).__breadScene;
 
 month.max = String(monthCount() - 1);
 const MPS = 2; // months per second at 1x: a year every 6 s
@@ -112,6 +112,7 @@ const h = {
   shown: () => dev().board.shown(),
   pending: () => dev().board.pending(),
   ages: () => dev().board.ages(),
+  states: () => dev().board.states(),
   target: () => content(),
 };
 (window as unknown as { __h: typeof h }).__h = h;
