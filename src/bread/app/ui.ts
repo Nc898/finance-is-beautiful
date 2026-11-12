@@ -151,6 +151,16 @@ export function createUI(store: Store, hooks: UIHooks): UI {
 
   let stageW = 0;
   const narrow = () => stageW < 700;
+  /** the least room between two labels in a row */
+  const LABEL_GAP = 20;
+  /** The headline goes under the receipt and the envelope on phones, and wherever the three will not sit side by side
+   *  (judged against the room left with the panel open, so opening it never changes the bottom band). */
+  const stacked = (): boolean => {
+    if (narrow()) return true;
+    const room = stageW - 16 - sideReserve();
+    // (some slack for a longer number than the one measured: "100 minutes")
+    return labels.basket.w + labels.minutes.w + 24 + labels.pay.w + 2 * LABEL_GAP > room;
+  };
 
   /* ---------------- live region ---------------- */
 
@@ -230,7 +240,7 @@ export function createUI(store: Store, hooks: UIHooks): UI {
   /** The bottom band holds the labels (the receipt and the envelope; on phones the headline too, under them). */
   function bottomBand(): number {
     let h = Math.max(labels.basket.h, labels.pay.h) + BOTTOM_PAD;
-    if (narrow()) h += labels.minutes.h + 6;
+    if (stacked()) h += labels.minutes.h + 6;
     return Math.ceil(h);
   }
 
@@ -303,11 +313,36 @@ export function createUI(store: Store, hooks: UIHooks): UI {
     const a = hooks.labelAnchor('basket');
     const b = hooks.labelAnchor('pay');
     const m = hooks.labelAnchor('minutes');
-    put('basket', a.x, a.y, range);
-    put('pay', b.x, b.y, range);
-    // wide: the headline between them; phones: under them
-    const below = Math.max(labels.basket.h, labels.pay.h) + Math.max(a.y, b.y) + 6;
-    put('minutes', narrow() ? (a.x + b.x) / 2 : m.x, narrow() ? below : m.y, range);
+    if (stacked()) {
+      // the receipt and the envelope at their places (pushed apart if they would touch), the headline under them
+      const [xa, xb] = row([a.x, b.x], [labels.basket.w, labels.pay.w], range);
+      put('basket', xa, a.y, range);
+      put('pay', xb, b.y, range);
+      const below = Math.max(labels.basket.h, labels.pay.h) + Math.max(a.y, b.y) + 6;
+      put('minutes', (xa + xb) / 2, below, range);
+      return;
+    }
+    // the three in a row at their places in the scene, pushed apart where they would touch
+    const [xa, xm, xb] = row([a.x, m.x, b.x], [labels.basket.w, labels.minutes.w, labels.pay.w], range);
+    put('basket', xa, a.y, range);
+    put('minutes', xm, m.y, range);
+    put('pay', xb, b.y, range);
+  }
+
+  /**
+   * Centres for boxes in a row, left to right: each as near its wanted centre as it can be, never closer to the next
+   * than LABEL_GAP, all inside the range. Boxes that would touch are pushed apart from the middle of their group.
+   */
+  function row(want: number[], w: number[], range: { lo: number; hi: number }): number[] {
+    const n = want.length;
+    const left = want.map((c, i) => c - w[i]! / 2);
+    // forward: each clear of the one before it; then back from the range's end; then from its start again
+    for (let i = 1; i < n; i++) left[i] = Math.max(left[i]!, left[i - 1]! + w[i - 1]! + LABEL_GAP);
+    left[n - 1] = Math.min(left[n - 1]!, range.hi - w[n - 1]!);
+    for (let i = n - 2; i >= 0; i--) left[i] = Math.min(left[i]!, left[i + 1]! - LABEL_GAP - w[i]!);
+    left[0] = Math.max(left[0]!, range.lo);
+    for (let i = 1; i < n; i++) left[i] = Math.max(left[i]!, left[i - 1]! + w[i - 1]! + LABEL_GAP);
+    return left.map((l, i) => l + w[i]! / 2);
   }
 
   function invalidate(): void {
