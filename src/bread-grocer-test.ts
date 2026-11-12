@@ -1,9 +1,9 @@
-/** Harness for the grocer and the basket in the shop: the month (the board's target), the basket's quantities, play
- *  and pause, 1x and 5x, scrubbing (the slider), reduced motion. Not part of the build. `window.__grocerTest` lets a
- *  capture script drive it. */
+/** Harness for the grocer and the basket in the shop: the month (the board follows it by itself), the basket's
+ *  quantities, play and pause, 1x and 5x, scrubbing (the slider), reduced motion. Not part of the build.
+ *  `window.__grocerTest` lets a capture script drive it. */
 import { createBreadScene } from './bread/scene/index';
 import { monthRow, statementMonth } from './bread/engine';
-import { boardFor, boardMonth } from './bread/app/text';
+import { boardFor } from './bread/app/text';
 import { LAST_MONTH, PLAY_RATE } from './bread/app/store';
 import type { BasketInputs, BreadFrame, ItemKey } from './bread/types';
 import { BASKET_LIMITS, DEFAULT_BASKET, ITEM_KEYS } from './bread/types';
@@ -85,7 +85,7 @@ const frame = (now: number) => {
     speed: st.playing ? st.speed : 1,
     month: st.month,
     statementMonth: sm,
-    board: boardFor(monthRow(st.basket, boardMonth(sm))),
+    board: boardFor(row),
     basket: st.basket,
     scrubbed: st.scrubbed,
     reducedMotion: reduced.checked,
@@ -111,20 +111,20 @@ requestAnimationFrame(loop);
     st.playing = false;
     st.scrubbed = true;
   },
-  /** take the clock over: render n frames of `ms` each, now; returns the worst contact and reach errors seen */
+  /** take the clock over: render n frames of `ms` each, now; returns the worst contact and reach errors seen, the
+   *  phases passed through and how many rounds were finished */
   advance(n: number, ms = 1000 / 60) {
     if (!st.manual) {
       st.manual = true;
       st.t = performance.now();
     }
-    let worst = { chalk: 0, cloth: 0, reach: 0, phases: [] as string[] };
+    const worst = { contact: {} as Record<string, number>, reach: 0, phases: [] as string[] };
     for (let i = 0; i < n; i++) {
       st.t += ms;
       frame(st.t);
-      const d = dbgOf() as { chalkErr: number; clothErr: number; reach: [number, number]; phase: string } | undefined;
+      const d = dbgOf() as { contact: number; contactKind: string; reach: [number, number]; phase: string } | undefined;
       if (d) {
-        worst.chalk = Math.max(worst.chalk, d.chalkErr);
-        worst.cloth = Math.max(worst.cloth, d.clothErr);
+        if (d.contactKind) worst.contact[d.contactKind] = Math.max(worst.contact[d.contactKind] ?? 0, d.contact);
         worst.reach = Math.max(worst.reach, d.reach[0], d.reach[1]);
         if (worst.phases[worst.phases.length - 1] !== d.phase) worst.phases.push(d.phase);
       }

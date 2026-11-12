@@ -50,27 +50,55 @@ export const LAMPS: { x: number; shadeY: number }[] = [
   { x: 590, shadeY: 92 },
 ];
 
-/* ------------------------------------------------------------------ the chalkboard */
+/* ------------------------------------------------------------------ the price board */
 
-/** the slate inside its frame, on the back wall to the right of the shelves */
+/** the dark board inside its frame, on the back wall to the right of the shelves (the frame is drawn outside it: a
+ *  side member FRAME wide, and the painted top rail above, which carries the title) */
 export const BOARD: Rect = { x0: 728, x1: 962, y0: 96, y1: 404 };
+export const BOARD_FRAME = { side: 13, rail: 30 } as const;
 
-/** the board's lines (world y of each line's baseline) and its columns (the item's name from nameX; the price right-
- *  aligned to priceX; the year centred on the board). 'title' is painted once ("This week's basket"), never re-chalked. */
+/** a size of flap cell (world units): the face, and the gap to its neighbour */
+export interface FlapSize {
+  w: number;
+  h: number;
+  gap: number;
+}
+
+/**
+ * The split flaps. Every price is PRICE_CELLS cells, right-aligned to priceRight (unused cells blank); the year is
+ * YEAR_CELLS digit cells centred on the board; the six rows run down from rowTops (ITEM_KEYS order), then the painted
+ * rule and the total. The item's name is painted on an enamel strip from nameX to the first cell of its row.
+ */
+export const PRICE_CELLS = 8;
+export const YEAR_CELLS = 4;
+export const BOARD_FLAPS = {
+  year: { w: 18, h: 30, gap: 1.8 } as FlapSize,
+  row: { w: 14.6, h: 25, gap: 1.2 } as FlapSize,
+  total: { w: 15.6, h: 28, gap: 1.3 } as FlapSize,
+  /** top y of the year cells, of each item's row (ITEM_KEYS order) and of the total's */
+  yearTop: 107,
+  rowTops: [150, 183, 216, 249, 282, 315] as readonly number[],
+  totalTop: 360,
+  /** the painted rule between the rows and the total */
+  ruleY: 352,
+  /** right edge of the last price cell, and the left edge of the name strips */
+  priceRight: 952,
+  nameX: 748,
+} as const;
+
+/** (kept for the grocer's old reach to the board until its rewrite lands) each line's baseline and the columns */
 export const BOARD_LINES: Record<'title' | 'year' | ItemKey | 'total', number> = {
   title: 128,
-  year: 168,
-  bread: 206,
-  eggs: 236,
-  coffee: 266,
-  bananas: 296,
-  chicken: 326,
-  flour: 356,
-  total: 392,
+  year: 137,
+  bread: 175,
+  eggs: 208,
+  coffee: 241,
+  bananas: 274,
+  chicken: 307,
+  flour: 340,
+  total: 388,
 };
-export const BOARD_COLUMNS = { nameX: 748, priceX: 944, ruleY: 372 } as const;
-/** chalk cap height (world units): the item lines, the year (larger) and the total */
-export const CHALK_SIZE = { line: 17, year: 26, total: 19 } as const;
+export const BOARD_COLUMNS = { nameX: BOARD_FLAPS.nameX, priceX: BOARD_FLAPS.priceRight, ruleY: BOARD_FLAPS.ruleY } as const;
 
 /* ------------------------------------------------------------------ the counter and what is on it */
 

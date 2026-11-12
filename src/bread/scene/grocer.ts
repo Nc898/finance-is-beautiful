@@ -1,83 +1,88 @@
 /**
- * The grocer and the basket he handles (the Grocer contract in partsApi.ts). He is the only reason anything on the
- * board or the counter changes.
+ * The grocer and the basket he handles (the Grocer contract in partsApi.ts). His work is the week's basket on the
+ * counter, between the till at its left end and the brass scale at its right. He never goes to the board.
  *
- * His work, each step finished before the next begins:
- *   board   when a line of the board differs from what it should say, he walks out past the counter's end to the
- *           board, takes the chalk from his apron pocket and the towel off his shoulder, and goes down the lines in
- *           PASS_ORDER: for each that differs he reads what it should say now, wipes the old figure with the
- *           towel in his left hand (the cloth exactly on the board's wipeTip), then chalks the new one with his right
- *           (the chalk's tip exactly on writeTip), stepping along the board between the year and the prices, up on
- *           his toes for the year, stooping a little for the total. While the timeline plays the months keep coming,
- *           so he keeps going; when it is paused he finishes the line he is on.
- *   basket  when the counter differs from the basket, he goes along behind the counter and adds or takes away one
- *           piece at a time (basket.ts): a stoop to the shelf under the counter, the piece lifted up and over and
- *           set in its place (or the reverse, the piece taken back down under the counter).
- *   idle    at the counter: his hands on its edge, now and then the towel off his shoulder to wipe it down, a
- *           glance out at the rain.
- * Between them the walks are walked (the orchard pickers' CMU-fitted walk, real time at 1x), every hand moves along
- * an eased path from where it is, and the chalk, the towel and the pieces move only in his hands.
+ * serve   round after round, each step finished before the next begins (written as one story, a generator that is
+ *         stepped by the clock, so what he does reads top to bottom):
+ *           along the counter from the bread to the flour he takes up one piece of each item; the weighed ones
+ *           (bananas, chicken, flour) he carries to the scale and sets on its pan (the pan dips, the needle swings and
+ *           settles), then lifts off again; each piece goes back in exactly its place. Then, at the till, he keys
+ *           the items in (a finger on a key, the key going down, the price flags popping up), turns the crank (his
+ *           hand on the knob through the turn), the cash drawer runs out, and he pushes it shut. A breath (the towel
+ *           over the counter, or a look out at the rain, once), and round again.
+ *         Whenever the counter differs from the basket he first adds or takes away pieces one at a time (from the
+ *         shelf under the counter, where taken pieces go back).
+ * idle    paused: he finishes what is in his hands (a piece set down, the crank let go, the drawer shut), goes to the
+ *         counter's middle, rests his hands on its edge, wipes it with the towel now and then, looks out at the rain.
+ *         A change to the basket while paused is still seen to.
+ * Between them the walks are walked (the orchard pickers' CMU-fitted walk, real steps), every hand moves along an
+ * eased path from where it is, and the pieces, the pan, the keys, the crank and the drawer move only in or under his
+ * hands (fixtures.ts: the mechanisms; their springs run on the wall clock).
  *
- * Pace: at 1x his work runs a little brisker than the wall clock (a line wiped and written in about three quarters of
- * a second), faster with the playback speed up to a brisk cap; his walks stay a person's walks. Paused, he finishes
- * the line (or the piece) in hand and goes back to the counter, except that a change the reader makes to the basket
- * while paused is still seen to: the piece fetched or put away and the total re-chalked.
+ * Pace: his own clock runs a little brisker than the wall clock at 1x (WORK_TIME), faster with the playback speed up
+ * to a brisk cap; his walks stay a person's walks. The idle life runs at the same rate as ever (its timings were tuned
+ * by the owner).
  */
-import type { BasketInputs, BoardContent, ItemKey } from '../types';
+import type { BasketInputs, ItemKey } from '../types';
 import { ITEM_KEYS } from '../types';
 import { Mover, clamp, lerp, sstep } from '../../vine/scene/gardenerMath';
-import { BOARD_LINES, COUNTER, GROCER_FLOOR_Y, GROCER_SPOTS } from './geom';
-import { type Board, type BoardLine, type CreateGrocer, type Grocer, type GrocerIntent } from './partsApi';
+import { COUNTER, GROCER_FLOOR_Y, GROCER_SPOTS, SCALE, TILL } from './geom';
+import type { CreateGrocer, Grocer, GrocerIntent } from './partsApi';
 import { GrocerFigure, UNIT, type W3 } from './grocerFigure';
 import { buildGrocerSet, fillHeadViews } from './grocerArt';
 import { BasketArt, layoutBasket, sortPieces, type PieceSpec } from './basket';
+import { CounterFixtures, DRAWER, PAN, TILL_BASE, keyPos, KEY_COLS } from './fixtures';
 
 const PI = Math.PI;
-/** the order he goes down the board: the prices and the total, then the year last, so the board never shows a new
- *  year over last year's prices */
-const PASS_ORDER: readonly BoardLine[] = ['bread', 'eggs', 'coffee', 'bananas', 'chicken', 'flour', 'total', 'year'];
 const STEP = 1 / 60;
 const FLOOR = GROCER_FLOOR_Y;
 /** the counter's back edge is this deep (world y) and its top this high above his floor: on the screen the top's back
  *  edge is at COUNTER.topBack */
 const BACK_D = FLOOR + 10;
 const COUNTER_H = BACK_D - COUNTER.topBack;
-/** the board's face, a short reach in front of him (world y) */
-const BOARD_D = FLOOR - 12;
 /** the shelf under the counter, where the pieces wait (world y and height): hidden by the counter */
 const UNDER: { y: number; h: number } = { y: FLOOR + 8, h: 80 };
-/** facing us at the counter; facing the board in three-quarter view, a little to its right */
 const FACE_FRONT = PI / 2;
-const FACE_BOARD = -PI / 2 + 0.42;
-/** where he stands (pelvis x) for the year, and for the prices and the total: the board's columns are well past
- *  GROCER_SPOTS.board, which is only where the counter ends */
-const STAND_YEAR_WIPE = 866;
-const STAND_YEAR_WRITE = 826;
-/** (the year is reached from the same floor line: a step in toward the wall left the walk landing short of it, and
- * re-walking to make it up) */
-const YEAR_Y = FLOOR;
-const STAND_PRICE = 904;
+/** where he stands (pelvis x) at the till and at the scale; and how far along the counter a hand reaches from where he
+ *  stands (lateral, from his right shoulder) before he steps along */
+const TILL_STAND = 207;
+const SCALE_STAND = 585;
+/** a piece on the counter is within his right hand's reach when it lies this far to his left … or right (world units
+ *  from his pelvis: his low reach is long toward his own right, which is the screen's left, and short across his body) */
+const REACH_L = 62;
+const REACH_R = 16;
+/** where he stands to take each item up (and the scale's) */
+const STAND: Record<ItemKey, number> = { bread: TILL_STAND, eggs: 333, coffee: 333, bananas: 431, chicken: 502, flour: 583 };
+/** the counter's surface at the scale's foot (screen y) */
+const SC_PLANE = SCALE.y + 6;
 /** his own clock against the wall clock: work at 1x, and the caps on work and walks at high speeds */
 const WORK_TIME = 2.1;
-const WORK_CAP = 2.7;
-const WALK_CAP = 1.3;
+const SERVE_TIME = 3.3;
+const WORK_CAP = 4;
+const WALK_BASE = 1.45;
+const WALK_CAP = 1.6;
 const WALK_EASE = 0.35;
-/** how long a wipe takes, and a write per character (his own seconds) */
-const WIPE_S = 0.34;
-const WRITE_CHAR_S = 0.085;
-const WRITE_MIN_S = 0.32;
-/** the chalk's tip from his fingers, and the towel's middle from his palm against the board (world: x, depth, h) */
-const CHALK: W3 = { x: 1, y: -3, h: 10.5 };
-/** for the year, high over his head, he holds the chalk by its end and points it up (a longer reach) */
-const CHALK_UP: W3 = { x: -1, y: -2, h: 15 };
-const WAD_BOARD: W3 = { x: 0, y: -4, h: 1 };
-const WAD_COUNTER: W3 = { x: 0, y: 1, h: -3 };
+/** the weighed items, and the dial reads full at this many pounds */
+const WEIGHED: Record<ItemKey, boolean> = { bread: false, eggs: false, coffee: false, bananas: true, chicken: true, flour: true };
+/** the keys he strikes for each item (row, column): a press or two, each item its own */
+const RING: Record<ItemKey, [number, number][]> = {
+  bread: [[1, 1]],
+  eggs: [[2, 2]],
+  coffee: [[0, 0]],
+  bananas: [[3, 3]],
+  chicken: [[2, 4]],
+  flour: [[1, 5]],
+};
+/** where the point of his finger is against the hand's grip point (world units, screen) */
+const FINGER = { x: 0, y: 3 };
 
 const ease = (t: number): number => sstep(clamp(t, 0, 1));
 const lerpW = (a: W3, b: W3, t: number): W3 => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), h: lerp(a.h, b.h, t) });
 const addW = (a: W3, b: W3, k = 1): W3 => ({ x: a.x + b.x * k, y: a.y + b.y * k, h: a.h + b.h * k });
-/** a point on the board's face from its screen point */
-const onBoard = (p: { x: number; y: number }): W3 => ({ x: p.x, y: BOARD_D, h: BOARD_D - p.y });
+
+/** the world point for a spot above the counter-top plane at `planeY` (screen y of the surface there), `hc` up from it:
+ *  its screen position is (x, planeY - hc) */
+const at = (x: number, planeY: number, hc: number): W3 => ({ x, y: planeY + COUNTER_H, h: COUNTER_H + hc });
 
 /** a hand target moving along an eased path from where it was to a (possibly moving) goal, with an optional lift */
 class HandPath {
@@ -134,66 +139,46 @@ class HandPath {
   }
 }
 
-type Phase =
-  | 'counter'
-  | 'leave'
-  | 'toBoard'
-  | 'arm'
-  | 'reach'
-  | 'wipe'
-  | 'shift'
-  | 'write'
-  | 'side'
-  | 'wait'
-  | 'disarm'
-  | 'toCounter'
-  | 'toPiece'
-  | 'piece';
+type Gen = Generator<void, void, void>;
 
-type IdleSub = 'rest' | 'take' | 'wipe' | 'put' | 'look';
-
-const lineText = (c: BoardContent, l: BoardLine): string => (l === 'year' ? c.year : l === 'total' ? c.total : c.prices[l]);
 const basketKey = (b: BasketInputs): string => ITEM_KEYS.map((k) => b.qty[k]).join(',');
 
 class GrocerImpl implements Grocer {
   private readonly fig: GrocerFigure;
   private readonly art = new BasketArt();
+  private readonly fx = new CounterFixtures();
   private readonly hands: [HandPath, HandPath] = [new HandPath(), new HandPath()];
   /** each hand is on a path (true) or hanging free */
   private readonly on: [boolean, boolean] = [false, false];
-  private phase: Phase = 'counter';
-  private t = 0;
-  private sub = 0;
-  /** the pieces on the counter, and the piece in his hand (drawn behind the counter or over it) */
+  private it: GrocerIntent = { activity: 'idle', basket: { qty: { bread: 0, eggs: 0, coffee: 0, bananas: 0, chicken: 0, flour: 0 } }, pace: 0 };
+  private script: Gen | null = null;
+  /** this step's length (his own seconds), and the time spent in the current wait */
+  private h = STEP;
+  /** the pieces on the counter, the piece in his hand (drawn behind the counter or over it) and the one on the pan */
   private onCounter = new Map<string, PieceSpec>();
   private drawOrder: PieceSpec[] = [];
   private held: { p: PieceSpec; over: boolean } | null = null;
-  private op: { p: PieceSpec; add: boolean } | null = null;
-  /** the board pass: the line in hand, its new text and the progress of its wipe or write */
-  private lineI = 0;
-  /** how he holds the chalk now (it turns in his fingers only while his hand travels, never mid-stroke) */
-  private chalk: W3 = { ...CHALK };
-  /** the stroke the line is at (where he stands for it) and the phase a step along the board leads to */
-  private stroke: 'wipe' | 'write' = 'wipe';
-  private sideNext: 'line' | 'shift' = 'line';
-  private line: BoardLine | null = null;
-  private text = '';
-  private prog = 0;
-  private armed = false;
+  private pan: PieceSpec | null = null;
+  /** the posture asked for this step (each action sets its own) */
+  private crouch = 0;
+  private lean = 0.02;
+  private look: { pitch: number; yaw: number } | null = null;
   /** the towel: 0 over the shoulder … 1 in the hand (a crossfade while the hand is at the shoulder) */
   private readonly towel = new Mover(0);
-  private idleSub: IdleSub = 'rest';
-  private idleT = 0;
   private idleN = 0;
+  private breathN = 0;
   private walkClock = 0;
+  private workK = WORK_TIME;
+  private inWalk = false;
   /** a change the reader made to the basket while paused, still to be seen to */
   private tend = false;
   private lastBasket = '';
-  private board: Board | null = null;
   private ready = false;
   private q = 0;
-  /** for the harness: how far the chalk and the towel are from the board's tips (world units) */
-  readonly debug = { chalkErr: 0, clothErr: 0, reach: [0, 0] as [number, number], phase: '' as string, line: '' as string, prog: 0, repaints: 0 };
+  /** for the harness: what he is doing and how well the hand meets what it touches (world units) */
+  readonly debug = { phase: '' as string, reach: [0, 0] as [number, number], repaints: 0, contact: 0, contactKind: '' as string, needle: 0, pan: 0, drawer: 0, pressErr: 0, rounds: 0, roundSec: 0 };
+  private roundT = 0;
+  private contact: { kind: string; err: number } | null = null;
 
   constructor() {
     this.fig = new GrocerFigure(GROCER_SPOTS.counter, FLOOR, FACE_FRONT);
@@ -207,7 +192,9 @@ class GrocerImpl implements Grocer {
     // the figure's parts at about the density they are drawn at (px per rig unit)
     const q = Math.round(pxPerUnit * UNIT * 1.1 * 8) / 8;
     this.art.setQuality(pxPerUnit);
+    this.fx.prepare(pxPerUnit);
     if (this.ready && Math.abs(q - this.q) < 0.2) return;
+    await tick();
     const set = await buildGrocerSet(q, tick, check);
     if (!set || !check()) return;
     this.q = q;
@@ -225,25 +212,21 @@ class GrocerImpl implements Grocer {
     });
   }
 
-  place(intent: GrocerIntent, board: Board): void {
-    this.board = board;
-    board.set(intent.board);
+  place(intent: GrocerIntent): void {
+    this.it = intent;
+    this.script = null;
     this.onCounter.clear();
     for (const p of layoutBasket(intent.basket.qty)) this.onCounter.set(p.id, p);
     this.drawOrder = sortPieces([...this.onCounter.values()]);
     this.held = null;
-    this.op = null;
-    this.line = null;
-    this.armed = false;
+    this.pan = null;
     this.tend = false;
     this.lastBasket = basketKey(intent.basket);
     this.walkClock = 0;
-    this.phase = 'counter';
-    this.idleSub = 'rest';
-    this.idleT = 0;
     this.idleN = 0;
+    this.breathN = 0;
     this.towel.snap(0);
-    this.chalk = { ...CHALK };
+    this.fx.reset();
     this.fig.chalk = null;
     this.fig.wad = null;
     this.fig.wadA = 0;
@@ -256,13 +239,15 @@ class GrocerImpl implements Grocer {
       this.on[i] = true;
     }
     this.fig.finish();
+    this.contact = null;
+    this.roundT = 0;
   }
 
-  update(dtSec: number, intent: GrocerIntent, board: Board, tSec: number, reduced: boolean): void {
+  update(dtSec: number, intent: GrocerIntent, tSec: number, reduced: boolean): void {
     void tSec;
-    this.board = board;
+    this.it = intent;
     if (reduced) {
-      this.place(intent, board);
+      this.place(intent);
       return;
     }
     const wall = clamp(Number.isFinite(dtSec) ? dtSec : 0, 0, 0.1);
@@ -273,31 +258,29 @@ class GrocerImpl implements Grocer {
       if (intent.pace <= 0) this.tend = true;
     }
     if (intent.pace > 0) this.tend = false;
-    // (a side-step along the board is part of the work, at the work's pace; the walks are a person's walks)
-    const walking = (this.fig.walking && this.phase !== 'side') || this.phase === 'toBoard' || this.phase === 'toCounter' || this.phase === 'toPiece';
+    // the mechanisms (the pan, the needle, the keys, the flags, the drawer) keep their own pace
+    this.fx.update(wall);
+    const walking = this.fig.walking || this.inWalk;
     this.walkClock += ((walking ? 1 : 0) - this.walkClock) * (1 - Math.exp(-wall / WALK_EASE));
     const pace = intent.pace > 0 ? intent.pace : 1;
-    const work = Math.min(WORK_TIME * pace, WORK_CAP);
-    const walk = Math.min(pace, WALK_CAP);
+    // (his idle life keeps the rate its timings were tuned at; the work is a little brisker)
+    const idle = this.phaseTag.startsWith('idle');
+    this.workK += ((idle ? WORK_TIME : SERVE_TIME) - this.workK) * (1 - Math.exp(-wall / 0.4));
+    const work = Math.min(this.workK * pace, WORK_CAP);
+    const walk = Math.min(WALK_BASE * pace, WALK_CAP);
     const rate = work + (walk - work) * this.walkClock;
     const dt = Math.min(wall * rate, 0.4);
     const n = Math.max(1, Math.ceil(dt / STEP - 1e-6));
-    for (let i = 0; i < n; i++) this.step(dt / n, intent);
+    for (let i = 0; i < n; i++) this.step(dt / n);
+    this.roundT += wall;
     this.fig.finish();
     this.fig.armLayers = [this.overCounter(0) || this.held !== null, this.overCounter(1)];
-    this.fig.atEase = this.phase === 'counter' && (this.idleSub === 'rest' || this.idleSub === 'look') && this.hands[0].done && this.hands[1].done && !this.fig.walking;
+    this.fig.atEase = this.atEase();
     this.measure();
   }
 
   drawFigure(ctx: CanvasRenderingContext2D): void {
     if (!this.fig.painted) return;
-    // a shadow on the boards where his feet show past the counter's end
-    if (this.fig.px > COUNTER.x1 - 30) {
-      ctx.save();
-      ctx.globalAlpha = clamp((this.fig.px - COUNTER.x1 + 30) / 40, 0, 1);
-      this.fig.drawShadow(ctx);
-      ctx.restore();
-    }
     this.fig.drawLit(ctx);
     if (this.held && !this.held.over) {
       this.drawHeld(ctx);
@@ -308,8 +291,9 @@ class GrocerImpl implements Grocer {
 
   drawCounterTop(ctx: CanvasRenderingContext2D): void {
     if (!this.fig.painted) return;
-    // a hand on the counter behind the pieces (resting on its edge, wiping it) goes under them; a hand among them
-    // (setting one down, taking one up) over them
+    // the moving parts of the scale and the till first; a hand on the counter behind the pieces (resting on its edge,
+    // wiping it) goes over them but under the pieces; a hand among them (setting one down, keying, turning the crank)
+    // goes over everything
     const over: (0 | 1)[] = [];
     for (const i of [0, 1] as const) {
       if (!this.overCounter(i)) continue;
@@ -317,6 +301,10 @@ class GrocerImpl implements Grocer {
       if (hw.y < BACK_D + 10) this.blitArm(ctx, i);
       else over.push(i);
     }
+    this.fx.drawScale(ctx);
+    if (this.pan) this.art.draw(ctx, this.pan, PAN.x, this.fx.panBase);
+    this.fx.drawTill(ctx);
+    this.fx.drawCrank(ctx);
     for (const p of this.drawOrder) this.art.draw(ctx, p);
     if (this.held && this.held.over) this.drawHeld(ctx);
     for (const i of over) this.blitArm(ctx, i);
@@ -336,6 +324,7 @@ class GrocerImpl implements Grocer {
 
   /** a hand over the counter top (resting on it, wiping it, setting a piece down) */
   private overCounter(i: 0 | 1): boolean {
+    if (!this.on[i]) return false;
     const hw = this.fig.hand(i);
     const hs = this.fig.handScreen(i);
     return !(hw.y < BACK_D - 1 || hs.y < COUNTER.topBack - 26 || hs.x < COUNTER.x0 || hs.x > COUNTER.x1 + 10);
@@ -368,27 +357,6 @@ class GrocerImpl implements Grocer {
     return { x: this.fig.px + dx, y: this.fig.footY + dd * 0.4, h: up * UNIT };
   }
 
-  /** the apron pocket's mouth (on his right, at the top of the thigh) */
-  private pocket(): W3 {
-    return this.bodyPt(11, 6, 56);
-  }
-
-  /** between strokes at the board: the chalk held up before his chest on the right, the towel on the left */
-  private chalkRest(): W3 {
-    return this.bodyPt(11, 7, 74);
-  }
-
-  private clothRest(): W3 {
-    return this.bodyPt(9, -9, 68);
-  }
-
-  /** the chalk held ready a little short of where the new figure starts, while the towel wipes */
-  private chalkHover(l: BoardLine): W3 {
-    const w = this.writeHand(l, this.text, 0);
-    const r = this.chalkRest();
-    return { x: lerp(w.x, r.x, 0.45), y: lerp(w.y, r.y, 0.45), h: lerp(w.h, r.h, 0.45) - 8 };
-  }
-
   /** the towel where it hangs down his chest from the left shoulder */
   private towelPt(): W3 {
     const s = this.fig.shoulderW(1);
@@ -396,33 +364,15 @@ class GrocerImpl implements Grocer {
     return { x: s.x + (f.x - this.fig.px) * 0.9, y: s.y + (f.y - this.fig.footY) * 0.9, h: s.h - 10 * UNIT };
   }
 
-  private standFor(l: BoardLine): { x: number; y: number } {
-    // (the year is wider than either hand reaches across him from one place: he wipes it from its right, then steps
-    // along to write it)
-    if (l === 'year') return { x: this.stroke === 'wipe' ? STAND_YEAR_WIPE : STAND_YEAR_WRITE, y: YEAR_Y };
-    return { x: STAND_PRICE, y: FLOOR };
-  }
-
-  private atStand(l: BoardLine): boolean {
-    const s = this.standFor(l);
-    return Math.abs(s.x - this.fig.px) <= 8 && Math.abs(s.y - this.fig.footY) <= 2.5;
+  private atEase(): boolean {
+    return this.phaseTag.startsWith('idle:rest') && this.hands[0].done && this.hands[1].done && !this.fig.walking;
   }
 
   /* ---------------------------------------------------------------- what needs doing */
 
-  /** the next line from index i that differs from what it should say, or -1 */
-  private nextLine(i: number, it: GrocerIntent): number {
-    const b = this.board!.shown();
-    for (let j = i; j < PASS_ORDER.length; j++) {
-      const l = PASS_ORDER[j]!;
-      if (lineText(b, l) !== lineText(it.board, l)) return j;
-    }
-    return -1;
-  }
-
   /** the next piece to add or take away (one item's top piece to remove before any of its additions), nearest first */
-  private nextOp(it: GrocerIntent): { p: PieceSpec; add: boolean } | null {
-    const target = new Map(layoutBasket(it.basket.qty).map((p) => [p.id, p]));
+  private nextOp(): { p: PieceSpec; add: boolean } | null {
+    const target = new Map(layoutBasket(this.it.basket.qty).map((p) => [p.id, p]));
     const cands: { p: PieceSpec; add: boolean }[] = [];
     for (const k of ITEM_KEYS) {
       const rem = [...this.onCounter.values()].filter((p) => p.key === k && !target.has(p.id)).sort((a, b) => b.idx - a.idx);
@@ -440,23 +390,22 @@ class GrocerImpl implements Grocer {
   }
 
   private pieceStand(p: PieceSpec): number {
-    return clamp(p.x + 16, COUNTER.x0 + 50, COUNTER.x1 - 40);
+    return clamp(p.x + 20, COUNTER.x0 + 50, COUNTER.x1 - 40);
   }
 
-  /**
-   * Walk to a spot and face a way. A walk that has come to rest near the spot counts as there (he turns to face the
-   * way, and any last few units are a side-step at the work itself): asking the walk for the exact spot made it
-   * overshoot by a stride's rounding, turn round, and overshoot again.
-   */
-  private arrive(spot: { x: number; y: number }, yaw: number): boolean {
-    const f = this.fig;
-    if (!f.walking && !f.gait.turning && Math.abs(f.px - spot.x) < 22) return f.face(yaw);
-    return f.goTo(spot, yaw, 4);
+  private firstPiece(k: ItemKey): PieceSpec | null {
+    const ps = [...this.onCounter.values()].filter((p) => p.key === k).sort((a, b) => a.idx - b.idx);
+    return ps[0] ?? null;
   }
 
-  /** may he work now: playing, or seeing to the reader's change */
-  private allowed(it: GrocerIntent): boolean {
-    return (it.activity === 'work' && it.pace > 0) || this.tend;
+  /** may he work now: the timeline is playing, or he is seeing to the reader's change */
+  private working(): boolean {
+    return (this.it.activity === 'serve' && this.it.pace > 0) || this.tend;
+  }
+
+  /** is there something to do now (a round, or a change to see to) */
+  private due(): boolean {
+    return this.working() && (this.it.activity === 'serve' || this.nextOp() !== null);
   }
 
   /* ---------------------------------------------------------------- hands */
@@ -475,437 +424,515 @@ class GrocerImpl implements Grocer {
     this.hands[i].key = '';
   }
 
-  private next(p: Phase): void {
-    this.phase = p;
-    this.t = 0;
-    this.sub = 0;
+  private phaseTag = '';
+  private tag(s: string): void {
+    this.phaseTag = s;
   }
 
   /* ---------------------------------------------------------------- the step */
 
-  private step(h: number, it: GrocerIntent): void {
+  private step(h: number): void {
     const f = this.fig;
-    const board = this.board!;
     f.begin();
-    this.t += h;
+    this.h = h;
     this.towel.update(h);
-    const ok = this.allowed(it);
-    // posture defaults (each phase sets its own)
-    let crouch = 0;
-    let lean = 0.02;
-    let tip = 0;
-    let look: { pitch: number; yaw: number } | null = null;
-
-    switch (this.phase) {
-      case 'counter': {
-        f.goTo({ x: GROCER_SPOTS.counter, y: FLOOR }, FACE_FRONT, 3);
-        const atCounter = Math.abs(f.px - GROCER_SPOTS.counter) < 6 && !f.walking;
-        const basketDue = ok && this.nextOp(it) !== null;
-        const boardDue = ok && this.nextLine(0, it) >= 0;
-        if (basketDue || boardDue) {
-          // off to work: the towel back over his shoulder if it is out, then let go of the counter
-          if (this.towel.target > 0 || this.towel.v > 0.01) {
-            if (this.idleSub !== 'put') {
-              this.idleSub = 'put';
-              this.idleT = 0;
-            }
-          } else {
-            this.next('leave');
-            break;
-          }
-        }
-        if (!atCounter) {
-          this.free(0);
-          this.free(1);
-          break;
-        }
-        const r = this.idle(h);
-        lean = r.lean;
-        look = r.look;
-        break;
-      }
-      case 'leave': {
-        // finish with the towel if it is in hand, then let go
-        if (this.towel.target > 0 || this.towel.v > 0.01) {
-          this.putTowelBack();
-          break;
-        }
-        this.free(0);
-        this.free(1);
-        if (this.t < 0.25) break;
-        const basketDue = ok && this.nextOp(it) !== null;
-        if (basketDue) this.startPiece(it);
-        else if (ok && this.nextLine(0, it) >= 0) {
-          this.lineI = this.nextLine(0, it);
-          this.next('toBoard');
-        } else this.next('counter');
-        break;
-      }
-      case 'toBoard': {
-        this.free(0);
-        this.free(1);
-        if (!ok && !this.armed) {
-          // the timeline stopped before he got there: back to the counter
-          this.next('toCounter');
-          break;
-        }
-        // (the first line that differs now: a year may have turned on the way)
-        if (this.nextLine(0, it) >= 0) this.lineI = this.nextLine(0, it);
-        const l = PASS_ORDER[Math.max(0, this.lineI)]!;
-        this.stroke = lineText(board.shown(), l) === '' ? 'write' : 'wipe';
-        if (this.arrive(this.standFor(l), FACE_BOARD)) this.next('arm');
-        break;
-      }
-      case 'arm': {
-        // the chalk out of the apron pocket (right hand), the towel off the shoulder (left)
-        look = { pitch: -0.1, yaw: 0.1 };
-        if (this.sub === 0) {
-          this.engage(0, 'pocket', () => this.pocket(), 0.38);
-          this.engage(1, 'towel', () => this.towelPt(), 0.42);
-          if (this.hands[0].done && !f.chalk) f.chalk = { ...this.chalk };
-          if (this.hands[1].done) this.towel.go(1, 0.28);
-          if (this.hands[0].done && this.hands[1].done && this.towel.v > 0.99) {
-            this.sub = 1;
-            this.t = 0;
-          }
-        } else {
-          this.engage(0, 'ready', () => this.chalkRest(), 0.35);
-          this.engage(1, 'ready', () => this.clothRest(), 0.35);
-          this.armed = true;
-          if (this.t > 0.12) this.startLine(it);
-        }
-        break;
-      }
-      case 'reach': {
-        // the towel to the start of the line's old figure (or straight to the chalk if the line is clear)
-        const l = this.line!;
-        ({ crouch, lean, tip, look } = this.posture(l));
-        if (lineText(board.shown(), l) === '') {
-          this.next('shift');
-          break;
-        }
-        this.engage(0, 'hover', () => this.chalkHover(l), 0.32);
-        this.engage(1, 'wipe0', () => this.wipeHand(l, 0), 0.3, 6);
-        // (and only once his reach has settled on it: up on his toes for the year, the shoulder lifted)
-        if (this.hands[1].done && this.fig.wHold[1].v > 0.999 && (this.fig.reachErr[1] < 0.2 || this.t > 1.2)) {
-          this.prog = 0;
-          this.next('wipe');
-        }
-        break;
-      }
-      case 'wipe': {
-        const l = this.line!;
-        ({ crouch, lean, tip, look } = this.posture(l));
-        // the cloth moves on only while his hand is on it (never ahead of his reach)
-        if (this.fig.reachErr[1] < 0.2 || this.t > 1.5) this.prog = Math.min(1, this.prog + h / WIPE_S);
-        board.wipe(l, this.prog);
-        this.engage(0, 'hover', () => this.chalkHover(l), 0.32);
-        this.hands[1].track('wipe', this.wipeHand(l, this.prog));
-        if (this.prog >= 1) {
-          this.stroke = 'write';
-          if (this.atStand(l)) this.next('shift');
-          else {
-            this.sideNext = 'shift';
-            this.next('side');
-          }
-        }
-        break;
-      }
-      case 'shift': {
-        // the towel comes away, the chalk to the start of the new figure
-        const l = this.line!;
-        ({ crouch, lean, tip, look } = this.posture(l));
-        this.engage(1, 'ready', () => this.clothRest(), 0.3);
-        this.engage(0, 'write0', () => this.writeHand(l, this.text, 0), 0.26, 4);
-        if (this.hands[0].done && this.fig.wHold[0].v > 0.999 && (this.fig.reachErr[0] < 0.2 || this.t > 1.2)) {
-          this.prog = 0;
-          this.next('write');
-        }
-        break;
-      }
-      case 'write': {
-        const l = this.line!;
-        ({ crouch, lean, tip, look } = this.posture(l));
-        const dur = Math.max(WRITE_MIN_S, WRITE_CHAR_S * this.text.length + 0.1);
-        if (this.fig.reachErr[0] < 0.2 || this.t > 2.5) this.prog = Math.min(1, this.prog + h / dur);
-        board.write(l, this.text, this.prog);
-        this.engage(1, 'ready', () => this.clothRest(), 0.3);
-        this.hands[0].track('write', this.writeHand(l, this.text, this.prog));
-        if (this.prog >= 1) {
-          this.engage(0, 'ready', () => this.chalkRest(), 0.3);
-          this.line = null;
-          this.lineI++;
-          this.afterLine(it);
-        }
-        break;
-      }
-      case 'side': {
-        // a step or two along the board, still facing it
-        const l = this.sideNext === 'shift' ? this.line! : PASS_ORDER[this.lineI]!;
-        this.engage(0, 'ready', () => this.chalkRest(), 0.3);
-        this.engage(1, 'ready', () => this.clothRest(), 0.3);
-        ({ look } = this.posture(l));
-        if (f.goTo(this.standFor(l), FACE_BOARD, 4, true)) {
-          if (this.sideNext === 'shift') this.next('shift');
-          else this.startLine(it);
-        }
-        break;
-      }
-      case 'wait': {
-        // by the board between years: the chalk and the towel lowered to his sides, an eye on the board
-        this.engage(0, 'low', () => this.bodyPt(7, 10, 52), 0.5);
-        this.engage(1, 'low', () => this.bodyPt(5, -10, 52), 0.5);
-        look = { pitch: -0.15, yaw: 0.05 };
-        if (this.t < 0.3) break;
-        if (!ok || this.nextOp(it)) this.next('disarm');
-        else if (this.nextLine(0, it) >= 0) {
-          this.lineI = this.nextLine(0, it);
-          this.startLine(it);
-        }
-        break;
-      }
-      case 'disarm': {
-        // the chalk back in the pocket, the towel back over the shoulder
-        if (this.sub === 0) {
-          this.engage(0, 'pocket', () => this.pocket(), 0.36);
-          this.engage(1, 'towel', () => this.towelPt(), 0.4);
-          if (this.hands[0].done && f.chalk) f.chalk = null;
-          if (this.hands[1].done) this.towel.go(0, 0.28);
-          if (this.hands[0].done && this.hands[1].done && this.towel.v < 0.01) {
-            this.sub = 1;
-            this.t = 0;
-          }
-        } else {
-          this.free(0);
-          this.free(1);
-          this.armed = false;
-          if (this.t > 0.1) {
-            if (ok && this.nextOp(it)) this.startPiece(it);
-            else this.next('toCounter');
-          }
-        }
-        break;
-      }
-      case 'toCounter': {
-        this.free(0);
-        this.free(1);
-        if (ok && this.nextOp(it) && !this.armed) {
-          this.startPiece(it);
-          break;
-        }
-        if (ok && !this.armed && f.px > COUNTER.x1 && this.nextLine(0, it) >= 0 && !this.fig.walking) {
-          // the board needs him again before he has gone
-          this.lineI = this.nextLine(0, it);
-          this.next('toBoard');
-          break;
-        }
-        if (this.arrive({ x: GROCER_SPOTS.counter, y: FLOOR }, FACE_FRONT)) {
-          this.idleSub = 'rest';
-          this.idleT = 0;
-          this.next('counter');
-        }
-        break;
-      }
-      case 'toPiece': {
-        this.free(0);
-        this.free(1);
-        const p = this.op!.p;
-        const x = this.pieceStand(p);
-        const near = Math.abs(x - f.px) < 70 && f.facing(FACE_FRONT, 0.3);
-        if (near ? f.goTo({ x, y: FLOOR }, FACE_FRONT, 3, true) : this.arrive({ x, y: FLOOR }, FACE_FRONT)) this.next('piece');
-        break;
-      }
-      case 'piece': {
-        const r = this.pieceWork(h, it);
-        crouch = r.crouch;
-        lean = r.lean;
-        look = r.look;
-        break;
-      }
-    }
-    f.crouchT = crouch;
-    f.leanT = lean;
-    f.tipT = tip;
-    f.lookT = look;
+    this.crouch = 0;
+    this.lean = 0.02;
+    this.look = null;
+    this.inWalk = false;
+    this.contact = null;
+    this.script ??= this.main();
+    this.script.next();
+    // the hand that is not working rests on the counter's edge when he stands still (it hangs free while he walks)
+    if (!this.inWalk && !f.walking && !this.on[1] && this.towel.target === 0 && this.towel.v < 0.01) this.engage(1, 'rest', () => this.restPoints(this.fig.px)[1], 0.7);
+    f.crouchT = this.crouch;
+    f.leanT = this.lean;
+    f.tipT = 0;
+    f.lookT = this.look;
     // the towel: in his hand as it comes off the shoulder, over the shoulder as it goes back
     const tw = this.towel.v;
     f.drapeA = 1 - tw;
     f.wadA = tw;
-    f.wad = tw > 0.001 ? (this.phase === 'counter' || this.phase === 'leave' ? WAD_COUNTER : this.armed || this.phase === 'arm' || this.phase === 'disarm' ? WAD_BOARD : WAD_COUNTER) : null;
-    if (this.phase !== 'write') {
-      const want = this.line === 'year' ? CHALK_UP : CHALK;
-      const k = 1 - Math.exp(-h / 0.08);
-      this.chalk = { x: lerp(this.chalk.x, want.x, k), y: lerp(this.chalk.y, want.y, k), h: lerp(this.chalk.h, want.h, k) };
-    }
-    if (f.chalk) f.chalk = this.chalk;
+    f.wad = tw > 0.001 ? { x: 0, y: 1, h: -3 } : null;
     for (const i of [0, 1] as const) {
-      if (this.on[i]) f.hold(i, this.hands[i].step(h), 1, 0.22);
+      if (this.on[i]) f.hold(i, this.hands[i].step(h), 1, 0.3);
       else f.hold(i, null, 0, 0.36);
     }
     f.step(h);
   }
 
-  /** after a line: the next that differs, a new pass from the top while the months keep coming, or put the tools
-   *  away (to the basket, or back to the counter) */
-  private afterLine(it: GrocerIntent): void {
-    const ok = this.allowed(it);
-    if (!ok) {
-      this.next('disarm');
-      return;
-    }
-    let j = this.nextLine(this.lineI, it);
-    if (j < 0) {
-      // the pass is done: the basket first if it is not true, else round again while the board still differs
-      if (this.nextOp(it)) {
-        this.next('disarm');
-        return;
+  /* ---------------------------------------------------------------- the story */
+
+  private *main(): Gen {
+    for (;;) {
+      if (this.working()) {
+        if (this.nextOp()) {
+          yield* this.tendBasket();
+          yield;
+          continue;
+        }
+        if (this.it.activity === 'serve' && this.it.pace > 0) {
+          yield* this.round();
+          yield;
+          continue;
+        }
       }
-      j = this.nextLine(0, it);
-      if (j < 0) {
-        // the board is true for this year: while the timeline plays he waits by it for the next, tools in hand
-        // (the board changes once a year; walking back to the counter and out again each time would leave it behind)
-        this.next(it.activity === 'work' && it.pace > 0 ? 'wait' : 'disarm');
-        return;
+      yield* this.idleBeat();
+      yield;
+    }
+  }
+
+  /** wait for a condition that issues its own requests every step */
+  private *until(fn: () => boolean): Gen {
+    while (!fn()) yield;
+  }
+
+  /**
+   * Walk to a spot on the floor and face the counter (a short shuffle when it is only a step or two). Hands: free, or
+   * the right hand carrying what it holds.
+   */
+  private *walkTo(x: number): Gen {
+    const f = this.fig;
+    const spot = { x, y: FLOOR };
+    for (;;) {
+      this.inWalk = true;
+      // a walk that has come to rest near the spot counts as there (he turns to face the way; the last few units are a
+      // side-step): asking the walk for the exact spot made it overshoot by a stride's rounding and turn round again
+      const near = Math.abs(x - f.px) < 70 && f.facing(FACE_FRONT, 0.3);
+      let done: boolean;
+      if (near) done = f.goTo(spot, FACE_FRONT, 3, true);
+      else if (!f.walking && !f.gait.turning && Math.abs(f.px - x) < 22) done = f.face(FACE_FRONT);
+      else done = f.goTo(spot, FACE_FRONT, 4);
+      if (this.held) this.engage(0, 'carry', () => this.carryPt(this.held!.p), 0.5);
+      else this.free(0);
+      this.free(1);
+      if (this.held) this.lean = 0.06;
+      if (done) return;
+      yield;
+    }
+  }
+
+  /** the right hand with a piece, carried before him over the counter (the hand goes where he goes) */
+  private carryPt(p: PieceSpec): W3 {
+    return at(this.fig.px - 18, 440, p.gripH + 14);
+  }
+
+  /**
+   * Move the right hand along a path to a (moving) goal and wait until it is there: the path run out, the arm's reach
+   * settled on it. `hold` keeps posture; `tol` is how near the hand must be (world units).
+   */
+  private *reach0(key: string, to: () => W3, dur: number, arc = 0, o: { crouch?: number; lean?: number; look?: { pitch: number; yaw: number } | null; tol?: number; minT?: number } = {}): Gen {
+    let t = 0;
+    for (;;) {
+      this.engage(0, key, to, dur, arc);
+      this.crouch = o.crouch ?? 0;
+      this.lean = o.lean ?? 0.1;
+      this.look = o.look === undefined ? null : o.look;
+      t += this.h;
+      const settled = this.fig.reachErr[0] < (o.tol ?? 0.35) && this.fig.wHold[0].v > 0.97;
+      if (this.hands[0].done && t >= (o.minT ?? 0) && (settled || t > dur + 1.2)) return;
+      yield;
+    }
+  }
+
+  /** where a hand takes a piece (on the counter) */
+  private gripPt(p: PieceSpec): W3 {
+    return at(p.x, p.base, p.gripH);
+  }
+
+  private lookAt(p: PieceSpec): { pitch: number; yaw: number } {
+    return { pitch: 0.4, yaw: clamp((this.fig.px - p.x) / 220, -0.3, 0.3) };
+  }
+
+  /* ---------------------------------------------------------------- a round */
+
+  private *round(): Gen {
+    this.roundT = 0;
+    const rung: ItemKey[] = [];
+    // along the counter from the bread to the flour: one piece of each
+    for (const k of ITEM_KEYS) {
+      if (!this.working()) return;
+      if (this.nextOp()) {
+        yield* this.tendBasket();
+        if (!this.working()) return;
+      }
+      const p = this.firstPiece(k);
+      if (!p) continue;
+      yield* this.handle(p);
+      rung.push(k);
+    }
+    // at the till: key each in, then the crank and the drawer
+    if (rung.length) {
+      yield* this.walkTo(TILL_STAND);
+      yield* this.settle(0.25);
+      let first = true;
+      for (const k of rung) {
+        if (!first && !this.working()) break;
+        first = false;
+        yield* this.ring(k);
+      }
+      yield* this.crankAndDrawer();
+    }
+    this.debug.rounds++;
+    this.debug.roundSec = this.roundT;
+    // a breath
+    if (this.working()) yield* this.breath();
+  }
+
+  /** stand a moment (own seconds), hands free */
+  private *settle(sec: number): Gen {
+    let t = 0;
+    while (t < sec) {
+      this.free(0);
+      this.free(1);
+      t += this.h;
+      yield;
+    }
+  }
+
+  /** one item: to its place, a piece taken up, weighed if it is a weighed one, and set back in its place */
+  private *handle(p: PieceSpec): Gen {
+    this.tag(`${p.key}:to`);
+    yield* this.standFor(p.x, STAND[p.key]);
+    this.tag(`${p.key}:take`);
+    yield* this.takeUp(p);
+    if (WEIGHED[p.key]) {
+      yield* this.standFor(PAN.x, SCALE_STAND, true);
+      this.tag(`${p.key}:weigh`);
+      yield* this.weigh(p);
+      yield* this.standFor(p.x, STAND[p.key]);
+    } else {
+      // a look at it in his hand
+      this.tag(`${p.key}:look`);
+      let t = 0;
+      while (t < 0.15) {
+        this.engage(0, 'lift', () => this.liftPt(p), 0.5);
+        this.lean = 0.1;
+        this.look = { pitch: 0.2, yaw: 0 };
+        t += this.h;
+        yield;
       }
     }
-    this.lineI = j;
-    const l = PASS_ORDER[j]!;
-    this.stroke = lineText(this.board!.shown(), l) === '' ? 'write' : 'wipe';
-    this.sideNext = 'line';
-    if (!this.atStand(l)) this.next('side');
-    else this.startLine(it);
+    this.tag(`${p.key}:set`);
+    yield* this.setDown(p);
   }
 
-  /** begin the line at lineI: read what it should say now */
-  private startLine(it: GrocerIntent): void {
-    let j = this.nextLine(this.lineI, it);
-    if (j < 0) j = this.nextLine(0, it);
-    if (j < 0) {
-      this.next('disarm');
-      return;
+  /** walk along only if the target is out of a hand's reach from where he stands */
+  private *standFor(x: number, stand: number, high = false): Gen {
+    const dx = x - this.fig.px;
+    // (reaching up to the pan he reaches further across himself)
+    const inReach = high ? dx > -110 && dx < 75 : dx > -REACH_L && dx < REACH_R;
+    if (inReach && this.fig.facing(FACE_FRONT, 0.4) && !this.fig.walking) return;
+    yield* this.walkTo(clamp(stand, COUNTER.x0 + 50, COUNTER.x1 - 40));
+  }
+
+  private liftPt(p: PieceSpec): W3 {
+    return at(p.x, p.base, p.gripH + 16);
+  }
+
+  /** a piece taken up off the counter by its grip: the hand comes down over it, takes hold, lifts it clear */
+  private *takeUp(p: PieceSpec): Gen {
+    const look = this.lookAt(p);
+    yield* this.reach0('hover', () => at(p.x, p.base, p.gripH + 14), 0.7, 4, { lean: 0.14, look });
+    yield* this.reach0('grip', () => this.gripPt(p), 0.5, 0, { lean: 0.16, look, tol: 0.5 });
+    this.onCounter.delete(p.id);
+    this.drawOrder = sortPieces([...this.onCounter.values()]);
+    this.held = { p, over: true };
+    yield* this.reach0('lift', () => this.liftPt(p), 0.6, 0, { lean: 0.12, look });
+  }
+
+  /** the piece, still in his hand, set down in its place; the hand comes away */
+  private *setDown(p: PieceSpec): Gen {
+    const look = this.lookAt(p);
+    yield* this.reach0('set', () => this.gripPt(p), 0.6, 4, { lean: 0.16, look, tol: 0.5 });
+    this.held = null;
+    this.onCounter.set(p.id, p);
+    this.drawOrder = sortPieces([...this.onCounter.values()]);
+    yield* this.reach0('off', () => at(p.x + 3, p.base, p.gripH + 16), 0.5, 0, { lean: 0.1, look });
+    this.free(0);
+  }
+
+  /** the pan's resting spot for a piece's grip (the pan dips under it) */
+  private panGrip(p: PieceSpec): W3 {
+    return at(PAN.x, SC_PLANE, SC_PLANE - (this.fx.panBase - p.gripH - 2));
+  }
+
+  /** the piece on the pan: it dips, the needle swings round and settles, he reads it and lifts it off */
+  private *weigh(p: PieceSpec): Gen {
+    const dial = { pitch: -0.18, yaw: -0.3 };
+    yield* this.reach0('panSet', () => this.panGrip(p), 0.8, 8, { lean: 0.14, look: dial, tol: 0.5 });
+    // let go: it stands on the pan, which dips
+    this.held = null;
+    this.pan = p;
+    this.fx.load(p.size);
+    // the hand comes away a little and he watches the needle come round
+    let t = 0;
+    for (;;) {
+      this.engage(0, 'panOff', () => at(PAN.x + 22, SC_PLANE, SC_PLANE - (this.fx.panBase - p.gripH - 2) + 12), 0.55);
+      this.lean = 0.1;
+      this.look = dial;
+      t += this.h;
+      if (t > 0.55 && this.fx.needleNear && t > 0.8) break;
+      if (t > 3) break;
+      yield;
     }
-    this.lineI = j;
-    const l = PASS_ORDER[j]!;
-    this.stroke = lineText(this.board!.shown(), l) === '' ? 'write' : 'wipe';
-    this.sideNext = 'line';
-    if (!this.atStand(l)) {
-      this.next('side');
-      return;
+    // back to it, hold it, and lift it off: the needle returns to zero
+    yield* this.reach0('panBack', () => this.panGrip(p), 0.55, 3, { lean: 0.14, look: dial, tol: 0.5 });
+    this.pan = null;
+    this.held = { p, over: true };
+    this.fx.load(0);
+    yield* this.reach0('panUp', () => at(PAN.x - 6, SC_PLANE, SC_PLANE - (PAN.restBase - p.gripH - 2) + 16), 0.55, 0, { lean: 0.12, look: dial });
+  }
+
+  /* ---------------------------------------------------------------- the till */
+
+  /** key one item in: a finger on a key, the key down under it, the price flags popping up (a press or two) */
+  private *ring(k: ItemKey): Gen {
+    this.tag(`${k}:key`);
+    const presses = RING[k];
+    const look = { pitch: 0.3, yaw: 0.2 };
+    for (let n = 0; n < presses.length; n++) {
+      const [r, c] = presses[n]!;
+      const kp = keyPos(r, c);
+      const idx = r * KEY_COLS + c;
+      const hover = (): W3 => at(kp.x - FINGER.x, TILL_BASE, TILL_BASE - (kp.y - FINGER.y) + 7);
+      const touch = (): W3 => at(kp.x - FINGER.x, TILL_BASE, TILL_BASE - (kp.y - FINGER.y) - 0.4);
+      yield* this.reach0('keyHover' + k + n, hover, 0.5, 2, { lean: 0.16, look, tol: 0.6 });
+      // down onto the key: it goes down under the finger
+      let t = 0;
+      for (;;) {
+        this.engage(0, 'keyTouch' + k + n, touch, 0.28);
+        this.lean = 0.18;
+        this.look = look;
+        t += this.h;
+        const hs = this.fig.handScreen(0);
+        const err = Math.hypot(hs.x + FINGER.x - kp.x, hs.y + FINGER.y - kp.y);
+        this.contact = { kind: 'key', err };
+        if (this.hands[0].done && this.fig.reachErr[0] < 0.6) break;
+        if (t > 1.5) break;
+        yield;
+      }
+      this.fx.key(idx, true);
+      {
+        const hs = this.fig.handScreen(0);
+        this.debug.pressErr = Math.max(this.debug.pressErr, Math.hypot(hs.x + FINGER.x - kp.x, hs.y + FINGER.y - kp.y));
+      }
+      if (n === presses.length - 1) this.fx.showFlags();
+      let held = 0;
+      while (held < 0.14) {
+        this.engage(0, 'keyTouch' + k + n, touch, 0.28);
+        this.lean = 0.18;
+        this.look = look;
+        held += this.h;
+        yield;
+      }
+      this.fx.key(idx, false);
     }
-    this.line = l;
-    this.text = lineText(it.board, l);
-    this.next('reach');
+    // the hand rises a little off the keys
+    yield* this.reach0('keyAway' + k, () => {
+      const [r, c] = presses[presses.length - 1]!;
+      const kp = keyPos(r, c);
+      return at(kp.x - FINGER.x, TILL_BASE, TILL_BASE - (kp.y - FINGER.y) + 9);
+    }, 0.4, 0, { lean: 0.14, look, tol: 1 });
   }
 
-  /** how he stands to a line: up on his toes for the year, stooping a little for the total; looking at the line */
-  private posture(l: BoardLine): { crouch: number; lean: number; tip: number; look: { pitch: number; yaw: number } } {
-    const y = BOARD_LINES[l];
-    const pitch = clamp((y - 250) / 260, -0.5, 0.35);
-    if (l === 'year') return { crouch: 0, lean: 0.2, tip: 0.55, look: { pitch: -0.5, yaw: 0.05 } };
-    if (l === 'total') return { crouch: 0.16, lean: 0.1, tip: 0, look: { pitch, yaw: 0.15 } };
-    return { crouch: 0, lean: 0.06, tip: 0, look: { pitch, yaw: 0.15 } };
+  /** a hand on the knob through the turn; the drawer runs out; he pushes it shut with his hand */
+  private *crankAndDrawer(): Gen {
+    this.tag('crank');
+    const fx = this.fx;
+    const look = { pitch: 0.3, yaw: 0.25 };
+    const knobPt = (th: number): W3 => {
+      const kn = fx.knobAt(th);
+      return at(kn.x, TILL_BASE, TILL_BASE - kn.y);
+    };
+    const th0 = fx.theta;
+    yield* this.reach0('crankIn', () => knobPt(th0), 0.7, 5, { lean: 0.16, look, tol: 0.5 });
+    // a turn and a quarter, slow to start, brisk through the middle, easing off
+    const turn = 2 * PI * 1.0;
+    const dur = 1.1;
+    let t = 0;
+    let ejected = false;
+    fx.hideFlags();
+    while (t < dur) {
+      t += this.h;
+      const u = ease(t / dur);
+      fx.theta = th0 + turn * u;
+      this.hands[0].track('crank', knobPt(fx.theta));
+      this.on[0] = true;
+      this.lean = 0.16;
+      this.look = look;
+      const hs = this.fig.handScreen(0);
+      const kn = fx.knobAt();
+      this.contact = { kind: 'crank', err: Math.hypot(hs.x - kn.x, hs.y - kn.y) };
+      if (!ejected && u > 0.8) {
+        fx.ejectDrawer();
+        ejected = true;
+      }
+      yield;
+    }
+    fx.theta = th0 + turn;
+    if (!ejected) fx.ejectDrawer();
+    // let go: the hand comes off the knob and down to the drawer's plate
+    yield* this.reach0('drawerIn', () => at(TILL.x + 6, TILL_BASE, TILL_BASE - (fx.drawerTop + 9)), 0.65, 5, { lean: 0.18, look, tol: 0.7 });
+    // and pushes it shut: the plate goes back with the hand
+    t = 0;
+    const pushDur = 0.6;
+    const y0 = fx.drawerTop + 9;
+    for (;;) {
+      t += this.h;
+      const u = ease(t / pushDur);
+      const y = lerp(y0, DRAWER.top + 9, u);
+      this.hands[0].track('push', at(TILL.x + 6, TILL_BASE, TILL_BASE - y));
+      this.on[0] = true;
+      this.lean = 0.18;
+      this.look = look;
+      const hs = this.fig.handScreen(0);
+      fx.pushDrawer(hs.y - 9 - DRAWER.top);
+      this.contact = { kind: 'drawer', err: Math.abs(hs.y - (fx.drawerTop + 9)) };
+      if (u >= 1) break;
+      yield;
+    }
+    fx.pushDrawer(0);
+    fx.releaseDrawer();
+    yield* this.reach0('drawerOff', () => at(TILL.x + 6, TILL_BASE, TILL_BASE - (DRAWER.top + 9) + 14), 0.5, 0, { lean: 0.12, look, tol: 1 });
+    this.free(0);
   }
 
-  /** his left hand while the towel is at progress t along a line */
-  private wipeHand(l: BoardLine, t: number): W3 {
-    return addW(onBoard(this.board!.wipeTip(l, t)), WAD_BOARD, -1);
+  /* ---------------------------------------------------------------- the counter, idle */
+
+  /** go to the counter's middle (hands free on the way, the towel put back if it is out) */
+  private *goHome(): Gen {
+    yield* this.putTowel();
+    if (Math.abs(this.fig.px - GROCER_SPOTS.counter) > 6 || this.fig.walking) yield* this.walkTo(GROCER_SPOTS.counter);
   }
 
-  /** his right hand while the chalk's tip is at progress t along a text */
-  private writeHand(l: BoardLine, text: string, t: number): W3 {
-    return addW(onBoard(this.board!.writeTip(l, text, t)), this.chalk, -1);
-  }
-
-  /** put the towel back over his shoulder (from the counter) */
-  private putTowelBack(): void {
+  private *putTowel(): Gen {
+    if (!(this.towel.target > 0 || this.towel.v > 0.01)) return;
     this.engage(1, 'towelBack', () => this.towelPt(), 0.45, 8);
-    if (this.hands[1].done) this.towel.go(0, 0.28);
-    if (this.towel.v < 0.01 && this.towel.target === 0) this.free(1);
+    yield* this.until(() => {
+      this.engage(1, 'towelBack', () => this.towelPt(), 0.45, 8);
+      if (this.hands[1].done) this.towel.go(0, 0.28);
+      return this.towel.v < 0.01 && this.towel.target === 0;
+    });
+    this.free(1);
   }
-
-  /* ---------------------------------------------------------------- the counter */
 
   /**
    * At the counter with nothing to do: hands on its edge, a breath; now and then the towel off his shoulder to wipe
    * the counter down in slow rounds; once in a while a long look out at the rain. One thing at a time, never a
    * glance to and fro.
    */
-  private idle(h: number): { lean: number; look: { pitch: number; yaw: number } | null } {
+  private *idleBeat(): Gen {
     const f = this.fig;
-    this.idleT += h;
-    const rest = this.restPoints(f.px);
-    let look: { pitch: number; yaw: number } | null = null;
-    let lean = 0.05;
-    switch (this.idleSub) {
-      case 'rest': {
-        this.engage(0, 'rest', () => rest[0], 0.6);
-        this.engage(1, 'rest', () => rest[1], 0.6);
-        // what comes after a rest: the towel twice for every look out of the window
-        if (this.idleT > 3.6) {
-          this.idleN++;
-          this.idleSub = this.idleN % 3 === 2 ? 'look' : 'take';
-          this.idleT = 0;
-        }
-        break;
-      }
-      case 'take': {
-        this.engage(0, 'rest', () => rest[0], 0.6);
-        this.engage(1, 'towel', () => this.towelPt(), 0.5, 4);
-        if (this.hands[1].done) this.towel.go(1, 0.3);
-        if (this.towel.v > 0.99) {
-          this.idleSub = 'wipe';
-          this.idleT = 0;
-        }
-        look = { pitch: 0.2, yaw: -0.25 };
-        break;
-      }
-      case 'wipe': {
-        // slow rounds on the counter just in front of him, behind the basket
-        this.engage(0, 'rest', () => rest[0], 0.6);
-        const cx = f.px + 18;
-        const at = (s: number): W3 => ({ x: cx + 16 * Math.sin(s * 2.6), y: BACK_D + 3 + 1.5 * Math.cos(s * 2.6), h: COUNTER_H + 1 });
-        this.engage(1, 'wipeC', () => at(this.idleT), 0.5, 5);
-        if (this.hands[1].done) this.hands[1].track('wipeC', at(this.idleT));
-        lean = 0.12;
-        look = { pitch: 0.42, yaw: -0.2 };
-        if (this.idleT > 3.4) {
-          this.idleSub = 'put';
-          this.idleT = 0;
-        }
-        break;
-      }
-      case 'put': {
-        this.engage(0, 'rest', () => rest[0], 0.6);
-        this.putTowelBack();
-        if (this.towel.v < 0.01 && this.towel.target === 0 && this.idleT > 0.4) {
-          this.idleSub = 'rest';
-          this.idleT = 0;
-        }
-        break;
-      }
-      case 'look': {
-        // out of the window at the rain, the hands still on the counter
-        this.engage(0, 'rest', () => rest[0], 0.6);
-        this.engage(1, 'rest', () => rest[1], 0.6);
-        const k = sstep(clamp(this.idleT / 0.6, 0, 1)) * sstep(clamp((3.2 - this.idleT) / 0.6, 0, 1));
-        look = { pitch: -0.06 * k, yaw: 0.95 * k };
-        if (this.idleT > 3.2) {
-          this.idleSub = 'rest';
-          this.idleT = 0;
-        }
-        break;
-      }
+    yield* this.goHome();
+    const rest = (): [W3, W3] => this.restPoints(f.px);
+    // rest
+    this.tag('idle:rest');
+    let t = 0;
+    while (t < 3.6) {
+      this.engage(0, 'rest', () => rest()[0], 0.6);
+      this.engage(1, 'rest', () => rest()[1], 0.6);
+      this.lean = 0.05;
+      t += this.h;
+      if (this.due()) return;
+      yield;
     }
-    return { lean, look };
-  }
-
-  private startPiece(it: GrocerIntent): void {
-    this.op = this.nextOp(it);
-    if (!this.op) {
-      this.next('toCounter');
+    this.idleN++;
+    if (this.idleN % 3 === 2) {
+      // out of the window at the rain, the hands still on the counter
+      this.tag('idle:look');
+      t = 0;
+      while (t < 3.2) {
+        this.engage(0, 'rest', () => rest()[0], 0.6);
+        this.engage(1, 'rest', () => rest()[1], 0.6);
+        const k = sstep(clamp(t / 0.6, 0, 1)) * sstep(clamp((3.2 - t) / 0.6, 0, 1));
+        this.look = { pitch: -0.06 * k, yaw: 0.95 * k };
+        this.lean = 0.05;
+        t += this.h;
+        if (this.due()) return;
+        yield;
+      }
       return;
     }
-    this.next('toPiece');
+    yield* this.wipeCounter(3.4, true);
+  }
+
+  /** the towel off the shoulder, a few slow rounds on the counter just in front of him, the towel back */
+  private *wipeCounter(sec: number, resting: boolean): Gen {
+    const f = this.fig;
+    const rest = (): [W3, W3] => this.restPoints(f.px);
+    this.tag('idle:take');
+    // take the towel
+    yield* this.until(() => {
+      this.engage(0, 'rest', () => rest()[0], 0.6);
+      this.engage(1, 'towel', () => this.towelPt(), 0.5, 4);
+      if (this.hands[1].done) this.towel.go(1, 0.3);
+      this.look = { pitch: 0.2, yaw: -0.25 };
+      this.lean = 0.05;
+      return this.towel.v > 0.99;
+    });
+    // wipe
+    this.tag('idle:wipe');
+    let t = 0;
+    const cx = f.px + 18;
+    const pt = (s: number): W3 => ({ x: cx + 16 * Math.sin(s * 2.6), y: BACK_D + 3 + 1.5 * Math.cos(s * 2.6), h: COUNTER_H + 1 });
+    while (t < sec) {
+      this.engage(0, 'rest', () => rest()[0], 0.6);
+      this.engage(1, 'wipeC', () => pt(t), 0.5, 5);
+      if (this.hands[1].done) this.hands[1].track('wipeC', pt(t));
+      this.lean = 0.12;
+      this.look = { pitch: 0.42, yaw: -0.2 };
+      t += this.h;
+      if (resting && this.due() && t > 0.4) break;
+      yield;
+    }
+    // put the towel back
+    this.tag('idle:put');
+    t = 0;
+    yield* this.until(() => {
+      this.engage(0, 'rest', () => rest()[0], 0.6);
+      this.engage(1, 'towelBack', () => this.towelPt(), 0.45, 8);
+      if (this.hands[1].done) this.towel.go(0, 0.28);
+      t += this.h;
+      return this.towel.v < 0.01 && this.towel.target === 0 && t > 0.4;
+    });
+    this.free(1);
+  }
+
+  /** the breath between rounds: the towel over the counter, or a look out at the rain, once and not back and forth */
+  private *breath(): Gen {
+    const f = this.fig;
+    this.breathN++;
+    const rest = (): [W3, W3] => this.restPoints(f.px);
+    yield* this.settle(0.15);
+    if (this.breathN % 2 === 0) {
+      this.tag('breath:look');
+      let t = 0;
+      while (t < 2.4) {
+        this.engage(0, 'rest', () => rest()[0], 0.6);
+        this.engage(1, 'rest', () => rest()[1], 0.6);
+        const k = sstep(clamp(t / 0.6, 0, 1)) * sstep(clamp((2.4 - t) / 0.6, 0, 1));
+        this.look = { pitch: -0.06 * k, yaw: 0.95 * k };
+        this.lean = 0.05;
+        t += this.h;
+        yield;
+      }
+    } else {
+      yield* this.wipeCounter(1.8, false);
+    }
+  }
+
+  /* ---------------------------------------------------------------- the basket: adding and taking away */
+
+  private *tendBasket(): Gen {
+    for (;;) {
+      const op = this.nextOp();
+      if (!op || !this.working()) break;
+      this.tag(`op:${op.p.key}`);
+      yield* this.standFor(op.p.x, this.pieceStand(op.p));
+      yield* this.pieceWork(op);
+    }
+    this.free(0);
   }
 
   /**
@@ -913,128 +940,55 @@ class GrocerImpl implements Grocer {
    * set in its place; to take away, the reverse. The piece is drawn behind the counter while it is below the top's
    * edge and over it once it is lifted clear.
    */
-  private pieceWork(h: number, it: GrocerIntent): { crouch: number; lean: number; look: { pitch: number; yaw: number } | null } {
-    void h;
-    const op = this.op!;
+  private *pieceWork(op: { p: PieceSpec; add: boolean }): Gen {
     const p = op.p;
-    const grip: W3 = { x: p.x, y: p.base + COUNTER_H, h: COUNTER_H + p.gripH };
+    const grip: W3 = at(p.x, p.base, p.gripH);
     const apex: W3 = { x: p.x + 4, y: UNDER.y - 1, h: COUNTER_H + p.gripH + 20 };
     const under: W3 = { x: p.x + 8, y: UNDER.y, h: UNDER.h };
-    const lookDown = { pitch: 0.45, yaw: clamp((p.x - this.fig.px) / 200, -0.3, 0.3) };
-    let crouch = 0;
-    let lean = 0.1;
-    const done = () => {
-      this.free(0);
-      this.op = null;
-      if (this.allowed(it) && this.nextOp(it)) this.startPiece(it);
-      else if (this.allowed(it) && this.nextLine(0, it) >= 0) {
-        this.lineI = this.nextLine(0, it);
-        this.next('toBoard');
-      } else this.next('toCounter');
-    };
+    const look = { pitch: 0.45, yaw: clamp((p.x - this.fig.px) / 200, -0.3, 0.3) };
     if (op.add) {
-      switch (this.sub) {
-        case 0: // down to the shelf under the counter
-          crouch = 0.8;
-          lean = 0.34;
-          this.engage(0, 'under', () => under, 0.55);
-          if (this.hands[0].done && this.t > 0.55) {
-            this.held = { p, over: false };
-            this.sub = 1;
-            this.t = 0;
-          }
-          break;
-        case 1: // up with it, clear of the counter's edge
-          crouch = 0.1;
-          lean = 0.14;
-          this.engage(0, 'apex', () => apex, 0.55);
-          if (this.hands[0].done) {
-            this.held!.over = true;
-            this.sub = 2;
-            this.t = 0;
-          }
-          break;
-        case 2: // over and down into its place
-          lean = 0.16;
-          this.engage(0, 'set', () => grip, 0.45, 3);
-          if (this.hands[0].done) {
-            this.held = null;
-            this.onCounter.set(p.id, p);
-            this.drawOrder = sortPieces([...this.onCounter.values()]);
-            this.sub = 3;
-            this.t = 0;
-          }
-          break;
-        case 3: // the hand comes away
-          lean = 0.1;
-          this.engage(0, 'off', () => addW(grip, { x: 2, y: -4, h: 14 }), 0.25);
-          if (this.hands[0].done) done();
-          break;
-      }
+      // down to the shelf under the counter, up with it, over and down into its place, the hand comes away
+      yield* this.reach0('under', () => under, 0.7, 0, { crouch: 0.8, lean: 0.34, look, minT: 0.7 });
+      this.held = { p, over: false };
+      yield* this.reach0('apex', () => apex, 0.65, 0, { crouch: 0.1, lean: 0.14, look });
+      this.held.over = true;
+      yield* this.reach0('set', () => grip, 0.55, 3, { lean: 0.16, look });
+      this.held = null;
+      this.onCounter.set(p.id, p);
+      this.drawOrder = sortPieces([...this.onCounter.values()]);
+      yield* this.reach0('off', () => addW(grip, { x: 2, y: -4, h: 14 }), 0.4, 0, { lean: 0.1, look });
     } else {
-      switch (this.sub) {
-        case 0: // a reach to the piece
-          lean = 0.16;
-          this.engage(0, 'take', () => grip, 0.5, 6);
-          if (this.hands[0].done) {
-            this.onCounter.delete(p.id);
-            this.drawOrder = sortPieces([...this.onCounter.values()]);
-            this.held = { p, over: true };
-            this.sub = 1;
-            this.t = 0;
-          }
-          break;
-        case 1: // up and back over the counter's edge
-          lean = 0.12;
-          this.engage(0, 'apex', () => apex, 0.5, 2);
-          if (this.hands[0].done) {
-            this.held!.over = false;
-            this.sub = 2;
-            this.t = 0;
-          }
-          break;
-        case 2: // down onto the shelf under the counter
-          crouch = 0.8;
-          lean = 0.34;
-          this.engage(0, 'under', () => under, 0.55);
-          if (this.hands[0].done) {
-            this.held = null;
-            this.sub = 3;
-            this.t = 0;
-          }
-          break;
-        case 3: // and up again
-          crouch = 0;
-          this.free(0);
-          if (this.t > 0.3) done();
-          break;
+      yield* this.reach0('take', () => grip, 0.6, 6, { lean: 0.16, look });
+      this.onCounter.delete(p.id);
+      this.drawOrder = sortPieces([...this.onCounter.values()]);
+      this.held = { p, over: true };
+      yield* this.reach0('apex', () => apex, 0.6, 2, { lean: 0.12, look });
+      this.held.over = false;
+      yield* this.reach0('under', () => under, 0.7, 0, { crouch: 0.8, lean: 0.34, look });
+      this.held = null;
+      // and up again
+      let t = 0;
+      while (t < 0.4) {
+        this.free(0);
+        this.lean = 0.1;
+        t += this.h;
+        yield;
       }
     }
-    return { crouch, lean, look: lookDown };
   }
 
   /* ---------------------------------------------------------------- for the harness */
 
   private measure(): void {
     const d = this.debug;
-    d.phase = this.phase + (this.phase === 'counter' ? ':' + this.idleSub : '');
-    d.line = this.line ?? '';
-    d.prog = this.prog;
+    d.phase = this.phaseTag;
     d.reach = [this.fig.reachErr[0], this.fig.reachErr[1]];
     d.repaints = this.fig.repaints;
-    d.chalkErr = 0;
-    d.clothErr = 0;
-    if (this.line && this.phase === 'write') {
-      const tip = this.board!.writeTip(this.line, this.text, this.prog);
-      const g = this.fig.handScreen(0);
-      const c = this.chalk;
-      d.chalkErr = Math.hypot(g.x + c.x - tip.x, g.y + c.y - c.h - tip.y);
-    }
-    if (this.line && this.phase === 'wipe') {
-      const tip = this.board!.wipeTip(this.line, this.prog);
-      const g = this.fig.handScreen(1);
-      d.clothErr = Math.hypot(g.x + WAD_BOARD.x - tip.x, g.y + WAD_BOARD.y - WAD_BOARD.h - tip.y);
-    }
+    d.contact = this.contact ? this.contact.err : 0;
+    d.contactKind = this.contact ? this.contact.kind : '';
+    d.needle = this.fx.needleOff;
+    d.pan = this.fx.panDip;
+    d.drawer = this.fx.drawerOut;
   }
 }
 

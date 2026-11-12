@@ -1,7 +1,9 @@
 /**
  * The counter and what is fixed on it (layer 3 in geom.ts), and the foreground crates (layer 5), each painted once per
  * size as a sprite on transparent paper: the long counter with its worn top and panelled front, the old brass till
- * at the left end, the scale at the right, paper bags and a ball of twine with its loose end. Ink first, then the
+ * at the left end, the scale at the right, paper bags and a ball of twine with its loose end. What moves (the scale's
+ * pan and needle; the till's keys, price flags, crank and cash drawer) is left out: fixtures.ts paints it as sprites of
+ * its own for the grocer to work. Ink first, then the
  * washes, as the shelves; lit from the upper left (the window) and warmed from above (the lamps).
  */
 import { Rand, clamp } from '../../scene/prng';
@@ -10,6 +12,7 @@ import { COUNTER, CRATES, SCALE, TILL } from './geom';
 import { INK, LIGHT, SHADE, blobPoly, grain, lit, lightAt, mix, mottle, patchWash, pen, plank, rectPoly, ribbon, spriteCtx, wash, washField } from './paint';
 import { apple, greens, potato } from './goods';
 import { glazeSprite } from './light';
+import { KEY_COLS, KEY_ROWS, keyPos } from './fixtures';
 
 export interface Sprite {
   cv: HTMLCanvasElement;
@@ -277,8 +280,8 @@ export function paintCounter(q: number): Sprite {
   // the end of the counter at the left, a hair of end grain
   wash(ctx, [x0 - 6, topBack, x0 - 11, topBack + 4, x0 - 11, lip, x0 - 6, lip], '#8A5A30', 0.9, rnd, 2, 0.01);
 
-  paintTill(ctx, rnd);
-  paintScale(ctx, rnd);
+  paintTill(ctx, new Rand(55101));
+  paintScale(ctx, new Rand(55102));
   paintBags(ctx, rnd);
   grain(ctx, '#3A2616', box.x, box.y, box.w, box.h, 0, 0.18, 611);
   // the room's light: the top faces the lamps, the front turns away from them; what stands on the top catches them
@@ -369,39 +372,20 @@ function paintTill(ctx: CanvasRenderingContext2D, rnd: Rand): void {
   pen(ctx, x0, base - 20, x0, base, 0.7, INK, 0.65, rnd, 0.15);
   pen(ctx, x1, base - 20, x1, base, 0.7, INK, 0.7, rnd, 0.15);
   wash(ctx, rectPoly(x0, base - 20, x1, base, rnd, 0.3), '#5E3A22', 0.95, rnd, 3, 0.01);
-  wash(ctx, rectPoly(x0 + 4, base - 16, x1 - 4, base - 3, rnd, 0.3), BRASS, 0.92, rnd, 2, 0.01);
-  ctx.fillStyle = rgba(BRASS_L, 0.55);
-  ribbon(ctx, [x0 + 5, base - 15, x1 - 5, base - 15], 1, 0.9);
-  ctx.fillStyle = rgba(BRASS_D, 0.5);
-  ribbon(ctx, [x0 + 5, base - 4, x1 - 5, base - 4], 1.2, 0.9);
-  wash(ctx, rectPoly(cx - 7, base - 11, cx + 7, base - 8, rnd, 0.2), BRASS_D, 0.95, rnd, 2, 0.01);
-  // scrollwork stated in a few pen strokes on the plate
-  for (const s of [-1, 1]) {
-    ctx.strokeStyle = rgba(BRASS_D, 0.7);
-    ctx.lineWidth = 0.45;
-    ctx.beginPath();
-    ctx.moveTo(cx + s * 12, base - 9);
-    ctx.bezierCurveTo(cx + s * 16, base - 14, cx + s * 21, base - 6, cx + s * 18, base - 6);
-    ctx.stroke();
-  }
+  // the opening the drawer runs out of (its front plate, the pull and the scrollwork are the drawer's own sprite)
+  wash(ctx, rectPoly(x0 + 1, base - 20, x1 - 1, base - 1, rnd, 0.3), '#2B1A10', 0.97, rnd, 2, 0.01);
   // the keyboard: a sloped brass deck with four rows of keys
   wash(ctx, [x0 + 1, base - 20, x1 - 1, base - 20, x1 - 4, base - 38, x0 + 4, base - 38], '#B8923E', 0.95, rnd, 3, 0.01);
   pen(ctx, x0 + 4, base - 38, x0 + 1, base - 20, 0.6, INK, 0.55, rnd, 0.1);
   pen(ctx, x1 - 4, base - 38, x1 - 1, base - 20, 0.6, INK, 0.6, rnd, 0.1);
-  for (let r = 0; r < 4; r++) {
-    for (let k = 0; k < 6; k++) {
-      const kx = x0 + 7 + k * 8.4 + rnd.range(-0.3, 0.3) + (r % 2) * 0.8;
-      const ky = base - 23.5 - r * 4.1;
+  // (each key's cap is a sprite of its own, fixtures.ts; here the well it sits in)
+  for (let r = 0; r < KEY_ROWS; r++) {
+    for (let k = 0; k < KEY_COLS; k++) {
+      const { x: kx, y: ky } = keyPos(r, k);
       ctx.fillStyle = rgba('#2E2418', 0.5);
       ctx.beginPath();
       ctx.ellipse(kx + 0.5, ky + 0.8, 2.4, 1.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = rgba(rnd.chance(0.2) ? '#D9C79A' : '#EDE3C6', 0.95);
-      ctx.beginPath();
-      ctx.ellipse(kx, ky, 2.3, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = rgba(INK, 0.5);
-      ctx.fillRect(kx - 0.5, ky - 0.4, rnd.range(0.7, 1.2), 0.7);
     }
   }
   // the tablet above: a window with the amount flags, a brass crest
@@ -411,8 +395,6 @@ function paintTill(ctx: CanvasRenderingContext2D, rnd: Rand): void {
     const fx = x0 + 16 + i * 6.8;
     ctx.fillStyle = rgba(INK, 0.6);
     ctx.fillRect(fx, base - 51, 3.6, 7);
-    ctx.fillStyle = rgba('#F0E8CC', 0.9);
-    ctx.fillRect(fx + 0.6, base - 49.5, 2.4, 1.6);
   }
   ctx.fillStyle = rgba(BRASS_L, 0.6);
   ribbon(ctx, [x0 + 9, base - 55, x1 - 9, base - 55], 1, 0.9);
@@ -420,16 +402,14 @@ function paintTill(ctx: CanvasRenderingContext2D, rnd: Rand): void {
   wash(ctx, [cx - 6, base - 56, cx + 6, base - 56, cx + 3, base - 63, cx - 3, base - 63], BRASS, 0.95, rnd, 2, 0.02);
   pen(ctx, cx - 6, base - 56, cx - 3, base - 63, 0.5, INK, 0.5, rnd, 0.1);
   pen(ctx, cx + 6, base - 56, cx + 3, base - 63, 0.5, INK, 0.5, rnd, 0.1);
-  // the crank at the side
-  ctx.strokeStyle = rgba(BRASS_D, 0.95);
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(x1, base - 28);
-  ctx.lineTo(x1 + 6, base - 33);
-  ctx.stroke();
+  // the crank's boss at the side (the arm and knob turn in his hand: fixtures.ts)
   ctx.fillStyle = rgba('#5E3A22', 0.95);
   ctx.beginPath();
-  ctx.arc(x1 + 6.5, base - 33.5, 2.2, 0, Math.PI * 2);
+  ctx.arc(x1 + 1.5, base - 28, 2.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = rgba(BRASS_L, 0.5);
+  ctx.beginPath();
+  ctx.arc(x1 + 0.9, base - 28.7, 0.9, 0, Math.PI * 2);
   ctx.fill();
   // light on the left of every brass face
   ctx.fillStyle = rgba(BRASS_L, 0.4);
@@ -480,38 +460,10 @@ function paintScale(ctx: CanvasRenderingContext2D, rnd: Rand): void {
     ctx.fillStyle = rgba(INK, 0.55);
     ctx.fillRect(cx + Math.cos(a) * (R - 11.5) - 0.7, dy + Math.sin(a) * (R - 11.5) - 0.5, 1.4, 1);
   }
-  // the needle at rest, a little over zero, and the hub
-  const na = -Math.PI * 0.85 + 0.12;
-  ctx.strokeStyle = rgba('#7A2E26', 0.95);
-  ctx.lineWidth = 0.9;
-  ctx.beginPath();
-  ctx.moveTo(cx - Math.cos(na) * 3, dy - Math.sin(na) * 3);
-  ctx.lineTo(cx + Math.cos(na) * (R - 5), dy + Math.sin(na) * (R - 5));
-  ctx.stroke();
-  ctx.fillStyle = rgba(BRASS_D, 0.95);
-  ctx.beginPath();
-  ctx.arc(cx, dy, 1.9, 0, Math.PI * 2);
-  ctx.fill();
   // the glass's glint
   ctx.fillStyle = rgba('#FFFFFF', 0.35);
   ribbon(ctx, [cx - 12, dy - 10, cx - 6, dy - 15, cx + 1, dy - 16.5], 1.6, 0.8);
-  // the stem and the platter above it: a shallow brass tray
-  wash(ctx, [cx - 3, dy - R + 1, cx + 3, dy - R + 1, cx + 3, dy - R - 12, cx - 3, dy - R - 12], BRASS_D, 0.95, rnd, 2, 0.02);
-  const py = dy - R - 13;
-  wash(ctx, [cx - 31, py - 1, cx + 31, py - 1, cx + 26, py + 4, cx - 26, py + 4], BRASS, 0.97, rnd, 3, 0.015);
-  ctx.fillStyle = rgba(BRASS_L, 0.7);
-  ctx.beginPath();
-  ctx.ellipse(cx, py - 1, 31, 3.4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = rgba(INK, 0.6);
-  ctx.lineWidth = 0.6;
-  ctx.stroke();
-  ctx.fillStyle = rgba(BRASS_D, 0.4);
-  ctx.beginPath();
-  ctx.ellipse(cx + 3, py - 0.4, 24, 2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = rgba(SHADE, 0.2);
-  ribbon(ctx, [cx + 22, py, cx + 27, py + 3], 3, 0.8);
+  // (the stem and the pan above the dial, and the needle, are fixtures.ts: they move)
 }
 
 /* ------------------------------------------------------------------ bags and twine */
