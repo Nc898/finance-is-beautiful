@@ -128,7 +128,9 @@ test.describe('Bread and Butter', () => {
     await scrub(page, at(2022, 8));
     expect(await labels(page)).toMatchObject({ date: 'Aug 2022', unit: 'minutes of work' });
     const f = await page.evaluate(() => window.__bread.frame());
-    expect(f).toMatchObject({ statementMonth: at(2022, 8), scrubbed: false, reducedMotion: false });
+    // (reduced motion follows the reader's setting: on in the reduced-motion project, off in the others)
+    const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+    expect(f).toMatchObject({ statementMonth: at(2022, 8), scrubbed: false, reducedMotion: reduced });
     // a jump is flagged on exactly one frame
     const flags = await page.evaluate(
       () =>
