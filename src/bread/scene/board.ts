@@ -9,7 +9,7 @@
  * every cell's face on it, each face multiplied by the same glaze, so a face looks as if it were painted into the
  * glazed picture); per frame only the cells that are mid-flip are redrawn on it.
  *
- * A cell that must change does one flap, straight from its old glyph to its new one (blank, "$", "~", ".", "0" … "9"; the
+ * A cell that must change does one flap, straight from its old glyph to its new one (blank, "$", "~", ".", "0" â€¦ "9"; the
  * year's cells carry the digits): the top half of the old glyph falls over the bottom, shaded as it turns, revealing
  * the new top, and lands showing the new bottom half on its back, with the dark gap between the halves. Nothing between
  * is ever shown, so a glance at the board never reads a figure that is not the old or the new one. The cells of a
