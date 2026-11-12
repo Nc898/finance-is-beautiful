@@ -187,7 +187,7 @@ Final report (concise): files, captures, contract issues, anything not verified.
 | On a Roll | snowball vs avalanche | winter hillside, pines, falling snow | snowballs that grow as snow (interest) settles | climbers push the balls down; birds |
 | Brick by Brick | 15 vs 30-year mortgage | **spring** building site, blossom | houses built brick by brick; interest bricks go to the lender's cart | builders, the lender's cart |
 | Low-Hanging Fruit | employer match | late-summer orchard | fruit picked into baskets and planted as orchards | pickers |
-| Bread and Butter | prices vs pay, with **real data** (BLS prices and median pay, 1980 to now) | **indoors**: a lamplit corner grocery on a rainy morning | the grocer re-chalks a price board by hand as the years pass; the headline is the minutes of work a week's basket costs | the grocer |
+| Bread and Butter | prices vs pay, with **real data** (BLS prices and median pay, 1980 to now) | **indoors**: a lamplit corner grocery on a rainy morning | a split-flap price board that clicks over with the months; the headline is the minutes of work a week's basket costs | the grocer, ringing up the basket at the counter |
 
 A new demo needs a centerpiece that is not "a tree whose size is money". Time to Grow owns that image. Planted
 orchards reuse trees, but there the trees are an outcome of the pickers' work, not the whole picture. It also needs
@@ -228,6 +228,8 @@ a season and setting not in this table.
 | Generic UI: a pill button and a card popup | "remove the pill and text around the button. menu popup is too big"; "use any applicable UI skills for UI" | The menu is just its hand-drawn icon, opening onto a small patch of watercolor wash |
 | The grocer's face, overcorrected (Bread) | "the grocers face looks a little uncanny and too realistic for the art style. tone it down a little." | A storybook face: small dark dabs for eyes (no whites, irises or lids), no wrinkles or long cheek lines, a small soft nose, the moustache one soft shape with a few strokes, simple rosy planes. Between a peg doll and a portrait |
 | Rain missing from the shop door's glass (Bread) | "rain is not showing through the door" | Every pane of glass shows the same weather. The rain falls behind anything hung in front of the glass (the door's bell) |
+| The grocer re-chalking the board (Bread) | "the grocers and chalkboard need to be worked on to make sense with the year and number shown on the bottom of the demo. these don't update togethor at 1x speed, leaving the viewer confused. he also blocks the board while erasing and writing." | A split-flap price board that shows the labels' month at every moment, and a new job for the grocer away from it (weighing and ringing up the basket). The owner chose this from three options; he had said the grocer "can have a different role" |
+| A split-flap board rolling through digits (Bread) | (caught in review before the owner saw it: a glance read "$6.75" while the receipt said $8.95) | Each changed cell flaps once, straight from the old figure to the new; at any moment it reads the old figure, the new one or a clean half-flap |
 | Labels overlapping at a narrower width (Bread) | "this is off." (a screenshot of the receipt, headline and envelope running into each other) | The labels are pushed apart in a row, with the headline under the others where three won't fit. Checked from 390 to 1920 px, panel open and closed |
 
 ### Finish checks for every element
@@ -291,9 +293,11 @@ should flow, move, and feel together" appear in almost every request.
 - Pace that reads: "the entire raking process looks better but is too slow"; walks at a human cadence. The speed
   slider scales everything together.
 - **Work must keep up with the timeline it shows.** The grocer's board fell years behind its labels at 1×. A legible
-  pass took him about 6.5 s, but a year lasted 2 s. Measure how long the work takes against the timeline before
-  setting the speed, and choose with the owner what gives: here, 1× slowed to 6 s a year, with the board chalked
-  once a year.
+  pass took him about 6.5 s, but a year lasted 2 s. Slowing 1× and chalking yearly still left the board a year
+  behind and him in front of it, and the owner found it confusing. The lesson: a figure the reader must compare
+  with the labels can't be produced by a person's hand at the timeline's pace. Give it a mechanism that keeps time
+  (the split-flap board), and give the person work that doesn't have to match the clock (ringing up the basket).
+  Measure the work against the timeline before committing to a design.
 - Counters move like statements. "i dont like how the amount remaining counter constantly goes down over time
   instead of going down with payment/increasing with interest... it just makes the demo feel a bit less real."
 - The picture and the numbers agree at every moment. "the vine growth and the money left does not match up" was a
@@ -375,6 +379,9 @@ Work through this list, and say in the report which items were done and which co
 - **Commit subjects:** `Demo Name: what changed, in plain words`. Author `Nick <nlevichilds@gmail.com>`.
 - **Commits:** small and readable, one concern each.
 - **Branches:** work unrelated to an approved task goes on its own branch, with a draft PR.
+- **Encoding:** every source file is UTF-8. A builder once saved an ellipsis in the Windows code page: the dev server
+  accepted it, the production build failed. Before a push, run `npx vite build` and check its exit status itself (not
+  through a pipe, whose status is the last command's).
 - **Line endings:** the repo mixes CRLF and LF (it began on Windows). Don't let an editor or OS rewrite whole files.
   A 49-line change must not show as 1,477 lines. Check `git diff --stat -w --ignore-cr-at-eol` against the plain
   stat before you commit.
@@ -528,4 +535,10 @@ concepts are his to choose.
   - the board lagging the labels by years: 1× slowed and the board made yearly
   - the grocer repainted, then "uncanny and too realistic for the art style. tone it down a little."
   - "rain is not showing through the door"; the overlapping labels: "this is off."
+  - "Merge and push live"
+- **Nov 12 · Bread and Butter:**
+  - "the grocers head turns in too few frames and looks off"; then "he turns his head too slow it looks unnatural"
+    (48 head views, a glance in about a third of a second, eased)
+  - the board and the labels "don't update togethor at 1x speed"; he "blocks the board"; "he can have a different
+    role": chose a split-flap board and the grocer serving at the counter, on a new branch, built by Sonnet builders
   - "Merge and push live"

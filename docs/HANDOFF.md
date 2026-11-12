@@ -1,4 +1,4 @@
-# Handoff, 2026-11-11
+# Handoff, 2026-11-12
 
 For the next session picking up this repo (cloud or local).
 
@@ -40,9 +40,10 @@ npx playwright test         # browser tests; the config starts its own server on
 
 ## State of `master` at handoff
 
-Head is the commit that adds this file, on top of `253557a`, which is pushed and live. Verified at `253557a`: type
-check clean, 649 unit tests pass, and the full browser suite passes (693 tests, about 2 hours locally; the scene
-builds of the older demos are slow).
+Head is the commit that adds this file, on top of `2af5949`, which is pushed and live. Verified at `2af5949`: type
+check clean, 649 unit tests pass, the 52 Bread browser tests pass, and the production build succeeds. The full
+browser suite (693 tests, about 2 hours locally) last passed at `253557a`, before the Nov 12 changes, which touched
+only Bread and Butter.
 
 ### Done since the last handoff (Nov 5 to 11)
 
@@ -55,11 +56,14 @@ builds of the older demos are slow).
 4. **Bread and Butter** (new, built with the recipe in QUALITY_BAR section 3; spec `docs/BREAD_SPEC.md`):
    - Real BLS prices for six items and median weekly pay, monthly from January 1980 (`scripts/fetch-bread-data.mjs`
      writes `src/bread/engine/data.ts`; re-run it to update). The headline is the minutes of work the basket costs.
-   - A lamplit corner grocery on a rainy morning; the grocer wipes and re-chalks the board by hand and handles the
-     basket one piece at a time. The chalk and the cloth stay on the board's stroke tips (checked every frame).
-   - The board is chalked once a year with January's prices, the year last; 1× is a year every 6 s (about 4.7
-     minutes in all). The labels carry the month's exact figures.
-   - The grocer has his own head painter (`grocerHead.ts`) in a storybook register, by the owner's direction.
+   - A lamplit corner grocery on a rainy morning. **Since Nov 12** (owner's choice, see QUALITY_BAR's rejected
+     table): a split-flap price board (`board.ts`) shows the same month as the labels at every moment, each changed
+     cell flapping once from the old figure to the new; the grocer (`grocer.ts`) rings up the basket at the counter
+     (weighs on the scale, letting go while the needle swings; keys the till; turns the crank; shuts the drawer) at
+     his natural pace (a round about 33 s) and never goes to the board. The till's and the scale's moving parts are
+     in `fixtures.ts`, left out of the baked counter. 1× is a year every 6 s (about 4.7 minutes in all).
+   - The grocer has his own head painter (`grocerHead.ts`) in a storybook register, by the owner's direction: 48
+     head views (16 at load, the rest painted in the background), a glance in about a third of a second.
    - Landing card: theme `grocer` (twine and price tags, chalkboard slate); preview baked by
      `scripts/bake-bread-preview.mjs`.
 
@@ -105,8 +109,14 @@ builds of the older demos are slow).
    - the sleeve reads as a pale box when the grocer's upper arm points at the viewer (reaching under the counter);
    - his nose is faint in three-quarter view, and the skin a little pink-orange;
    - in a turn, two head views cross-fade, so the pencil or an ear can show twice for a frame or two;
-   - one hand shape for every grip; the basket pieces are a little small, and the wrapped chicken reads weakly;
+   - one hand shape for every grip (a key press reads as a knuckle press); the basket pieces are a little small,
+     and the wrapped chicken reads weakly;
+   - the till's drawer slides toward the viewer and he presses it from above (a simplification);
+   - his legs are hidden behind the counter all round, so foot sliding couldn't be checked by eye;
+   - the harness's frame times show spikes (the pose cache repaints nearly every frame while he moves); the real
+     page held 60 fps headless, about 2 ms of work a frame;
    - not checked on a real GPU or a modest machine, or on phones beyond the label layout.
+   - `geom.ts` keeps BOARD_LINES and BOARD_COLUMNS, now unused by the grocer; they can go.
 2. **Slow scene builds:** Nip It in the Bud and Low-Hanging Fruit take 8 to 10 s to build their scenes. The owner
    said "Not now"; don't start on it unasked.
 3. **Two open draft PRs from the cloud session (Nov 5):** #2 "A Little Off the Top" (fees demo, judged a rehash of
@@ -134,7 +144,9 @@ builds of the older demos are slow).
 - **Git author:** `Nick <nlevichilds@gmail.com>`. End commit messages with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Pushing:** push only when the user asks. They review before pushing. A push to `master` is a release: Vercel
-  puts it live within a minute or two.
+  puts it live within a minute or two. Run `npx vite build` first and check its exit status directly (a failed
+  build once went out because the check read a pipe's status); Vercel keeps serving the last good build if one
+  fails.
 - **The full browser suite rewrites `docs/screens/e2e/*.png`.** Restore them (`git checkout -- docs/screens`) unless
   the change is meant to update them.
 - **The shared gait is used by four demos** (snow, brick, vine, orchard). Changes to `climberGait.ts` must be
