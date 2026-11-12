@@ -350,10 +350,11 @@ export class GrocerFigure {
     let tY = this.lookT ? this.lookT.yaw : 0;
     const tP = this.lookT ? this.lookT.pitch : this.crouchS.x > 0.3 ? 0.25 : 0;
     if (this.yaw.moving || this.gait.turning) tY = clamp(0.5 * wrapPi(this.yaw.target - this.yaw.v), -0.45, 0.45);
-    this.lookT2.update(h, tP, 5);
-    this.headYawT.update(h, tY, 4);
-    this.look.update(h, this.lookT2.x, 5);
-    this.headYaw.update(h, this.headYawT.x, 4);
+    // (each stage quick: a glance takes about a third of a second on the wall clock, easing in and out)
+    this.lookT2.update(h, tP, 9);
+    this.headYawT.update(h, tY, 8);
+    this.look.update(h, this.lookT2.x, 9);
+    this.headYaw.update(h, this.headYawT.x, 8);
     let tw = 0;
     if (this.yaw.moving || this.gait.turning) tw = clamp(0.12 * wrapPi(this.yaw.target - this.yaw.v), -0.12, 0.12);
     this.twist.update(h, tw, 9);
