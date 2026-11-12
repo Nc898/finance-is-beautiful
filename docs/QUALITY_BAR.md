@@ -187,6 +187,7 @@ Final report (concise): files, captures, contract issues, anything not verified.
 | On a Roll | snowball vs avalanche | winter hillside, pines, falling snow | snowballs that grow as snow (interest) settles | climbers push the balls down; birds |
 | Brick by Brick | 15 vs 30-year mortgage | **spring** building site, blossom | houses built brick by brick; interest bricks go to the lender's cart | builders, the lender's cart |
 | Low-Hanging Fruit | employer match | late-summer orchard | fruit picked into baskets and planted as orchards | pickers |
+| Bread and Butter | prices vs pay, with **real data** (BLS prices and median pay, 1980 to now) | **indoors**: a lamplit corner grocery on a rainy morning | the grocer re-chalks a price board by hand as the years pass; the headline is the minutes of work a week's basket costs | the grocer |
 
 A new demo needs a centerpiece that is not "a tree whose size is money". Time to Grow owns that image. Planted
 orchards reuse trees, but there the trees are an outcome of the pickers' work, not the whole picture. It also needs
@@ -225,6 +226,9 @@ a season and setting not in this table.
 | Garden walls, houses, dirt paths, hills (Brick, Vine) | "remake these walls"; "the house artwork needs a bit of a touch up"; "the houses have a slight white edge"; "touch up on the dirt paths and grass"; "touchup the background hills" | Watercolor drystone; no sliver of paper around a finished house; meadow washes, granulating earth, broken ruts; lit and shaded slopes, a patchwork of fields and hedgerows, woods in clusters |
 | Vector-looking leaves on the landing page | "the leaves look off" | Painted leaves, not vector shapes |
 | Generic UI: a pill button and a card popup | "remove the pill and text around the button. menu popup is too big"; "use any applicable UI skills for UI" | The menu is just its hand-drawn icon, opening onto a small patch of watercolor wash |
+| The grocer's face, overcorrected (Bread) | "the grocers face looks a little uncanny and too realistic for the art style. tone it down a little." | A storybook face: small dark dabs for eyes (no whites, irises or lids), no wrinkles or long cheek lines, a small soft nose, the moustache one soft shape with a few strokes, simple rosy planes. Between a peg doll and a portrait |
+| Rain missing from the shop door's glass (Bread) | "rain is not showing through the door" | Every pane of glass shows the same weather. The rain falls behind anything hung in front of the glass (the door's bell) |
+| Labels overlapping at a narrower width (Bread) | "this is off." (a screenshot of the receipt, headline and envelope running into each other) | The labels are pushed apart in a row, with the headline under the others where three won't fit. Checked from 390 to 1920 px, panel open and closed |
 
 ### Finish checks for every element
 
@@ -242,6 +246,12 @@ a season and setting not in this table.
   in front." Feet stand on the ground. Things in front draw in front.
 - **Text sits in the picture.** "Lets have the numbers under the signs actually fit in the signs otherwise why are
   the signs there."
+- **A big figure needs its own painting.** The shared figure rig was made for small crews. The grocer is about five
+  times their size, so its shortcuts showed (a peg-doll face, tube limbs, mitten hands, balloon sleeves). Up close a
+  figure needs a painted face, hands with fingers and cloth folds, but in the collection's storybook register, never
+  realistic (see the rejected table).
+- **Labels at every width.** No two labels or notes overlap at any stage width, with the panel open or closed. Measure
+  the boxes, don't eyeball one size.
 
 ---
 
@@ -280,6 +290,10 @@ should flow, move, and feel together" appear in almost every request.
   figures, piles, labels. The same month with the same inputs always gives the same picture.
 - Pace that reads: "the entire raking process looks better but is too slow"; walks at a human cadence. The speed
   slider scales everything together.
+- **Work must keep up with the timeline it shows.** The grocer's board fell years behind its labels at 1×. A legible
+  pass took him about 6.5 s, but a year lasted 2 s. Measure how long the work takes against the timeline before
+  setting the speed, and choose with the owner what gives: here, 1× slowed to 6 s a year, with the board chalked
+  once a year.
 - Counters move like statements. "i dont like how the amount remaining counter constantly goes down over time
   instead of going down with payment/increasing with interest... it just makes the demo feel a bit less real."
 - The picture and the numbers agree at every moment. "the vine growth and the money left does not match up" was a
@@ -302,6 +316,14 @@ stepped. "It's moving at about 5 fps" on Brick was a release-blocking failure. M
   less time to grow, never a damaged one.
 - A short assumptions note on every demo: illustration only, steady growth, what is not modeled, not advice.
 - No live market data, forecasts or recommendations.
+- **Real historical data** (Bread and Butter):
+  - Fetched by a script (`scripts/fetch-bread-data.mjs`), never typed by hand.
+  - Sources cited on the page and in the spec.
+  - Unpublished months are filled by a straight line and always marked: "estimated" on the labels, "~" on the board.
+  - Never headline one cherry-picked comparison ("today vs 1980"). Walk through the eras and say what the starting
+    year was.
+  - When part of the picture shows a different figure from the labels (the board chalks January's prices for the
+    year), the spec and the e2e tests say so.
 
 ---
 
@@ -497,3 +519,13 @@ concepts are his to choose.
   - "movement (walking motion/hip drop) feels a little unnatural... reference the CMU motion capture work"
 - **Nov 9:** "the cloud session did not have a full picture of my quality expectations... the new demo is a rehashed
   and worse quality time to grow."
+- **Nov 11 · Bread and Butter:**
+  - asked for a price and inflation demo that would "feel very grounded and real"
+  - chose the weekly shop, price vs pay, a corner grocery and the grocer, from a brainstorm
+  - asked whether starting in 1980 skews it (the peak of high inflation); kept, but never headlined
+  - added the food-at-home index; core CPI gets one explanatory line only
+  - "Show me first", then "Fresh Opus painter" for the shop, and "needs more on the walls too"
+  - the board lagging the labels by years: 1× slowed and the board made yearly
+  - the grocer repainted, then "uncanny and too realistic for the art style. tone it down a little."
+  - "rain is not showing through the door"; the overlapping labels: "this is off."
+  - "Merge and push live"
