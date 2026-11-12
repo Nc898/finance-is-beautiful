@@ -30,6 +30,40 @@ export const EAVES = [
 ] as const;
 export const PAVEMENT_Y = 318;
 
+/** the glass in the top of the shop door (shop.ts paints the view through it; the rain falls past it as past the window) */
+export const DOOR_GLASS: Rect = { x0: -92, x1: -10, y0: 92, y1: 330 };
+/** the bell on its spring, hung inside the door in front of its glass (as shop.ts paints it: centred on the door's leaf,
+ *  x -49, from its top at y 70): the rain outside passes behind it */
+const BELL_X = -49;
+const DOOR_TOP = 70;
+
+/** the bell and its spring as a closed outline (traced with the glass and filled even-odd, so they cut it out) */
+function traceBell(ctx: CanvasRenderingContext2D): void {
+  const bx = BELL_X;
+  const t = DOOR_TOP;
+  ctx.moveTo(bx - 7.5, t + 36.5);
+  ctx.lineTo(bx + 7.5, t + 36.5);
+  ctx.lineTo(bx + 11.5, t + 51.5);
+  ctx.lineTo(bx + 2, t + 53);
+  ctx.lineTo(bx + 2, t + 55.5);
+  ctx.lineTo(bx - 2, t + 55.5);
+  ctx.lineTo(bx - 2, t + 53);
+  ctx.lineTo(bx - 11.5, t + 51.5);
+  ctx.closePath();
+  // the spring: the painted curve (bx - 20, t + 10) -> (bx, t + 38), widened to a ribbon
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= 10; i++) {
+    const u = i / 10;
+    const a = (1 - u) ** 3, b = 3 * (1 - u) ** 2 * u, c = 3 * (1 - u) * u * u, d = u ** 3;
+    pts.push([a * (bx - 20) + b * (bx - 20) + c * (bx - 4) + d * bx, a * (t + 10) + b * (t + 26) + c * (t + 26) + d * (t + 38)]);
+  }
+  const w = 1.6;
+  ctx.moveTo(pts[0]![0] - w, pts[0]![1]);
+  for (const [x, y] of pts) ctx.lineTo(x - w, y + w * 0.4);
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i]![0] + w, pts[i]![1] - w * 0.4);
+  ctx.closePath();
+}
+
 export function clipPanes(ctx: CanvasRenderingContext2D): void {
   ctx.beginPath();
   for (const p of PANES) ctx.rect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0);
@@ -378,8 +412,22 @@ interface Drop {
 
 export class GlassRain {
   private drops: Drop[] = [];
-  /** falling rain outside: x, phase, speed, length */
+  /** falling rain outside: x, phase, speed, length (past the window, and past the door's glass) */
   private falling: number[] = [];
+  private doorFalling: number[] = [];
+
+  private streaks(ctx: CanvasRenderingContext2D, list: number[], t: number, top: number, H: number): void {
+    ctx.beginPath();
+    for (let i = 0; i < list.length; i += 4) {
+      const x = list[i]!;
+      const u = (list[i + 1]! + (t * list[i + 2]!) / H) % 1;
+      const y = top + u * H;
+      const l = list[i + 3]!;
+      ctx.moveTo(x - u * 4, y);
+      ctx.lineTo(x - u * 4 - l * 0.16, y + l);
+    }
+    ctx.stroke();
+  }
 
   constructor() {
     const rnd = new Rand(40523);
@@ -392,28 +440,34 @@ export class GlassRain {
       }
     });
     for (let i = 0; i < 80; i++) this.falling.push(rnd.range(34, 244), rnd.next(), rnd.range(150, 230), rnd.range(6, 13));
+    // the door's glass: the same rain past it and drops running down it (pane -1)
+    const d = DOOR_GLASS;
+    const dn = Math.max(2, Math.round(((d.x1 - d.x0) * (d.y1 - d.y0)) / 1100));
+    for (let i = 0; i < dn; i++) {
+      const travel = rnd.range(30, (d.y1 - d.y0) * 0.6);
+      this.drops.push({ x: rnd.range(d.x0 + 5, d.x1 - 5), y0: rnd.range(d.y0 + 2, d.y1 - travel - 2), travel, period: rnd.range(9, 22), phase: rnd.next(), r: rnd.range(1, 1.9), pane: -1 });
+    }
+    for (let i = 0; i < 28; i++) this.doorFalling.push(rnd.range(d.x0 + 2, d.x1 + 6), rnd.next(), rnd.range(150, 230), rnd.range(6, 13));
   }
 
   /** rain falling past the window, and the drops running on the glass: clipped to the panes */
   draw(ctx: CanvasRenderingContext2D, tSec: number, reduced: boolean): void {
     const t = reduced ? 4.2 : tSec;
     ctx.save();
-    clipPanes(ctx);
-    // falling rain: fine slanted streaks, lighter than the dull street
-    const H = 330;
+    ctx.beginPath();
+    for (const p of PANES) ctx.rect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0);
+    const dg = DOOR_GLASS;
+    ctx.rect(dg.x0, dg.y0, dg.x1 - dg.x0, dg.y1 - dg.y0);
+    traceBell(ctx);
+    ctx.clip('evenodd');
+    // falling rain: fine slanted streaks, lighter than the dull street (none in reduced motion)
     ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(214,226,234,0.2)';
     ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    for (let i = 0; i < (reduced ? 0 : this.falling.length); i += 4) {
-      const x = this.falling[i]!;
-      const u = (this.falling[i + 1]! + (reduced ? 0 : t * this.falling[i + 2]! / H)) % 1;
-      const y = 70 + u * H;
-      const l = this.falling[i + 3]!;
-      ctx.moveTo(x - u * 4, y);
-      ctx.lineTo(x - u * 4 - l * 0.16, y + l);
+    if (!reduced) {
+      this.streaks(ctx, this.falling, t, 70, 330);
+      this.streaks(ctx, this.doorFalling, t, dg.y0 - 14, dg.y1 - dg.y0 + 14);
     }
-    ctx.stroke();
     // drops on the glass: each runs in fits (slow, quick, slow), leaving a wet track, and gathers again at the top
     for (const d of this.drops) {
       const u = (t / d.period + d.phase) % 1;

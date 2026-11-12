@@ -15,7 +15,7 @@ import { LAMPS, SHELVES, WINDOW, type Pt } from './geom';
 import { viewX, viewY, type Camera } from './layout';
 import { INK, LIGHT, SHADE, blobPoly, face, grain, lit, mix, mottle, outline, patchWash, pen, plank, rectPoly, ribbon, wash, washField } from './paint';
 import { bottle, crateOfThings, jar, packet, sack, tin } from './goods';
-import { GLASS, PANES, paintDoorView, paintGlass, paintStreet } from './street';
+import { DOOR_GLASS, GLASS, PANES, paintDoorView, paintGlass, paintStreet } from './street';
 import { buildGlaze, glazePixels } from './light';
 import { paintClutter, paintFloorClutter } from './walls';
 
@@ -337,7 +337,7 @@ function paintDoor(ctx: CanvasRenderingContext2D, S: number, vx: { x0: number; x
   const gx0 = x0 + 12;
   const gx1 = x1 - 16;
   // the glass: the street further along, out of focus, rain on the pane
-  paintDoorView(ctx, S, { x0: gx0, x1: gx1, y0: top + 22, y1: 330 });
+  paintDoorView(ctx, S, DOOR_GLASS);
   ctx.fillStyle = rgba('#F4F8F8', 0.08);
   ctx.beginPath();
   ctx.moveTo(gx0 + 18, top + 22);
