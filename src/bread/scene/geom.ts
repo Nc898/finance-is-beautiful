@@ -73,6 +73,8 @@ export interface FlapSize {
  */
 export const PRICE_CELLS = 8;
 export const YEAR_CELLS = 4;
+/** the month's letter cells, left of the year (a space of one cell between): "JAN" */
+export const MONTH_CELLS = 3;
 export const BOARD_FLAPS = {
   year: { w: 18, h: 30, gap: 1.8 } as FlapSize,
   row: { w: 14.6, h: 25, gap: 1.2 } as FlapSize,

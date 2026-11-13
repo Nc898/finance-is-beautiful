@@ -1,6 +1,6 @@
 /**
  * The price board (the Board contract in partsApi.ts): a split-flap board in a wooden frame, headed "This week's
- * basket" on a painted rail. The year is four flap cells; each of the six items has its name on a painted enamel strip
+ * basket" on a painted rail. The month is three letter cells and, after a space, the year four digit cells; each of the six items has its name on a painted enamel strip
  * and its price in a row of eight flap cells; under a painted rule is the total.
  *
  * Painted once per size (prepare): the frame, the dark board and the troughs and wells the cells sit in, glazed with
@@ -18,7 +18,7 @@
  */
 import type { BoardContent, ItemKey } from '../types';
 import { ITEMS, ITEM_KEYS } from '../types';
-import { BOARD, BOARD_FLAPS, BOARD_FRAME, PRICE_CELLS, YEAR_CELLS, type FlapSize } from './geom';
+import { BOARD, BOARD_FLAPS, BOARD_FRAME, MONTH_CELLS, PRICE_CELLS, YEAR_CELLS, type FlapSize } from './geom';
 import type { Board } from './partsApi';
 import { Rand, hashSeed } from '../../scene/prng';
 import { deform, makeCanvas, rgba, tracePoly } from '../../scene/watercolor';
@@ -34,6 +34,8 @@ const P = Math.PI;
 
 const PRICE_DRUM = ' $~.0123456789';
 const YEAR_DRUM = '0123456789';
+/** the capitals the month cells show (JAN … DEC) */
+const MONTH_DRUM = 'ABCDEFGJLMNOPRSTUVY';
 /** how many painted variants of every glyph; a cell keeps its own */
 const VARIANTS = 4;
 
@@ -88,6 +90,27 @@ const GLYPHS: Record<string, Stroke[]> = {
   ],
   '~': [{ p: [0.02, 0.62, 0.2, 0.42, 0.42, 0.42, 0.56, 0.56, 0.74, 0.66, 0.96, 0.42], s: true, w: 0.9 }],
   '.': [{ p: [0.5, 0.86, 0.5, 0.99], w: 0.95 }],
+
+  // the capitals the twelve months need, in the same hand: upright, the downstrokes heavy, the crossbars thin
+  A: [{ p: [0.02, 1.0, 0.5, 0.0] }, { p: [0.5, 0.0, 0.98, 1.0] }, { p: [0.2, 0.68, 0.8, 0.68], w: 0.85 }],
+  B: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.02, ...ell(0.5, 0.26, 0.38, 0.24, 1.5 * P, 2.5 * P, 10), 0.12, 0.5] }, { p: [0.12, 0.5, ...ell(0.5, 0.745, 0.42, 0.255, 1.5 * P, 2.5 * P, 12), 0.12, 0.998] }],
+  C: [{ p: ell(0.54, 0.5, 0.48, 0.5, 1.8 * P, 0.2 * P, 20) }],
+  D: [{ p: [0.1, -0.01, 0.1, 1.01], w: 1.05 }, { p: [0.1, 0.02, ...ell(0.45, 0.5, 0.45, 0.48, 1.5 * P, 2.5 * P, 14), 0.1, 0.98] }],
+  E: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.03, 0.92, 0.03], w: 0.9 }, { p: [0.12, 0.5, 0.76, 0.5], w: 0.85 }, { p: [0.12, 0.98, 0.94, 0.98], w: 0.9 }],
+  F: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.03, 0.92, 0.03], w: 0.9 }, { p: [0.12, 0.5, 0.76, 0.5], w: 0.85 }],
+  G: [{ p: [...ell(0.52, 0.5, 0.48, 0.5, 1.8 * P, 0.05 * P, 22), 0.97, 0.52, 0.56, 0.52] }],
+  J: [{ p: [0.72, 0.0, 0.72, 0.72, ...ell(0.42, 0.72, 0.3, 0.27, 0, 0.95 * P, 10)] }],
+  L: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.98, 0.92, 0.98], w: 0.9 }],
+  M: [{ p: [0.06, 1.01, 0.06, 0.0], w: 1.05 }, { p: [0.06, 0.0, 0.5, 0.72], w: 0.9 }, { p: [0.5, 0.72, 0.94, 0.0], w: 0.9 }, { p: [0.94, 0.0, 0.94, 1.01], w: 1.05 }],
+  N: [{ p: [0.1, 1.01, 0.1, 0.0], w: 1.05 }, { p: [0.1, 0.0, 0.9, 1.0], w: 0.9 }, { p: [0.9, 1.01, 0.9, 0.0], w: 1.05 }],
+  O: [{ p: ell(0.5, 0.5, 0.48, 0.5, 1.3 * P, 3.4 * P, 26) }],
+  P: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.02, ...ell(0.5, 0.27, 0.38, 0.25, 1.5 * P, 2.5 * P, 12), 0.12, 0.52] }],
+  R: [{ p: [0.12, -0.01, 0.12, 1.01], w: 1.05 }, { p: [0.12, 0.02, ...ell(0.5, 0.27, 0.38, 0.25, 1.5 * P, 2.5 * P, 12), 0.12, 0.52] }, { p: [0.46, 0.52, 0.92, 1.0], w: 0.95 }],
+  S: [{ p: [0.86, 0.2, 0.66, 0.04, 0.36, 0.03, 0.14, 0.2, 0.2, 0.4, 0.5, 0.5, 0.8, 0.6, 0.88, 0.8, 0.66, 0.97, 0.34, 0.97, 0.1, 0.8], s: true }],
+  T: [{ p: [0.02, 0.03, 0.98, 0.03], w: 0.9 }, { p: [0.5, 0.03, 0.5, 1.01], w: 1.05 }],
+  U: [{ p: [0.1, 0.0, 0.1, 0.65, ...ell(0.5, 0.65, 0.4, 0.35, P, 0, 12), 0.9, 0.0] }],
+  V: [{ p: [0.02, 0.0, 0.5, 1.0] }, { p: [0.5, 1.0, 0.98, 0.0] }],
+  Y: [{ p: [0.02, 0.0, 0.5, 0.52] }, { p: [0.98, 0.0, 0.5, 0.52] }, { p: [0.5, 0.52, 0.5, 1.01], w: 1.05 }],
 };
 
 /** the ink the numerals are painted in (a soft black, warm) */
@@ -385,8 +408,12 @@ function buildCells(): Cell[] {
       rh: 0,
     });
   };
+  // the month (three letters), a space of one cell, and the year (four digits), centred together
+  const mw = MONTH_CELLS * F.year.w + (MONTH_CELLS - 1) * F.year.gap;
   const yw = YEAR_CELLS * F.year.w + (YEAR_CELLS - 1) * F.year.gap;
-  for (let i = 0; i < YEAR_CELLS; i++) mk('year', 0, i, YEAR_DRUM, CX - yw / 2 + i * (F.year.w + F.year.gap), F.yearTop, F.year);
+  const x0 = CX - (mw + F.year.w + yw) / 2;
+  for (let i = 0; i < MONTH_CELLS; i++) mk('year', 0, i, MONTH_DRUM, x0 + i * (F.year.w + F.year.gap), F.yearTop, F.year);
+  for (let i = 0; i < YEAR_CELLS; i++) mk('year', 0, MONTH_CELLS + i, YEAR_DRUM, x0 + mw + F.year.w + i * (F.year.w + F.year.gap), F.yearTop, F.year);
   const row = (set: CellSet, line: number, top: number, sz: FlapSize): void => {
     const total = PRICE_CELLS * sz.w + (PRICE_CELLS - 1) * sz.gap;
     for (let i = 0; i < PRICE_CELLS; i++) mk(set, line, i, PRICE_DRUM, F.priceRight - total + i * (sz.w + sz.gap), top, sz);
@@ -399,6 +426,7 @@ function buildCells(): Cell[] {
 /** what each cell should show for a content, as its characters (the year's 4 digits, 6 prices of 8, the total's 8) */
 function cellChars(c: BoardContent): string[] {
   const out: string[] = [];
+  for (const ch of c.month.toUpperCase().padEnd(MONTH_CELLS, 'A').slice(0, MONTH_CELLS)) out.push(ch);
   const year = c.year.padStart(YEAR_CELLS, '0').slice(-YEAR_CELLS);
   for (const ch of year) out.push(ch);
   const price = (s: string) => {
@@ -410,7 +438,7 @@ function cellChars(c: BoardContent): string[] {
   return out;
 }
 
-const keyOf = (c: BoardContent): string => `${c.year}|${ITEM_KEYS.map((k) => c.prices[k]).join('|')}|${c.total}`;
+const keyOf = (c: BoardContent): string => `${c.month}|${c.year}|${ITEM_KEYS.map((k) => c.prices[k]).join('|')}|${c.total}`;
 
 /* ------------------------------------------------------------------ the board */
 
@@ -433,7 +461,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[]; st
   const faces: Record<CellSet, Map<string, HTMLCanvasElement[]>> = { year: new Map(), row: new Map(), total: new Map() };
   let allDirty = true;
 
-  let target: BoardContent = { year: '', prices: { bread: '', eggs: '', coffee: '', bananas: '', chicken: '', flour: '' }, total: '' };
+  let target: BoardContent = { month: '', year: '', prices: { bread: '', eggs: '', coffee: '', bananas: '', chicken: '', flour: '' }, total: '' };
   let targetKey = '';
 
   /* ---------------------------------------------------------------- the painting under the faces */
@@ -771,7 +799,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[]; st
 
   const paintFaces = async (tick: () => Promise<void>, check: () => boolean): Promise<boolean> => {
     const sets: [CellSet, FlapSize, string, number][] = [
-      ['year', BOARD_FLAPS.year, YEAR_DRUM, 1000],
+      ['year', BOARD_FLAPS.year, YEAR_DRUM + MONTH_DRUM, 1000],
       ['row', BOARD_FLAPS.row, PRICE_DRUM, 2000],
       ['total', BOARD_FLAPS.total, PRICE_DRUM, 3000],
     ];
@@ -893,7 +921,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[]; st
 
   const setTargets = (content: BoardContent, immediate: boolean): void => {
     const key = keyOf(content);
-    target = { year: content.year, prices: { ...content.prices }, total: content.total };
+    target = { month: content.month, year: content.year, prices: { ...content.prices }, total: content.total };
     if (!immediate && key === targetKey) return;
     targetKey = key;
     const chars = cellChars(content);
@@ -997,7 +1025,7 @@ export function createBoard(): Board & { pending(): number; ages(): number[]; st
       allDirty = true;
     },
     shown() {
-      return { year: target.year, prices: { ...target.prices }, total: target.total };
+      return { month: target.month, year: target.year, prices: { ...target.prices }, total: target.total };
     },
     update(dtSec, content) {
       setTargets(content, false);
