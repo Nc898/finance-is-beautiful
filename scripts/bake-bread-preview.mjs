@@ -1,8 +1,8 @@
 // Usage: node scripts/bake-bread-preview.mjs [port] [month]   (dev server running, default :5180)
 // Paints the landing page's Bread and Butter still with the real scene: the timeline is set in the mid-1980s and
-// played a moment so the grocer is at his board with the chalk in hand; the page chrome is hidden, and the painting
-// (the counter, the basket, the grocer and the board) is written to public/assets/preview-bread.webp. Re-run after
-// changing the scene's art.
+// played until the grocer is weighing at the scale (the board flips with the months); the page chrome is hidden, and
+// the painting (the counter, the basket, the grocer, the produce and the board) is written to
+// public/assets/preview-bread.webp. Re-run after changing the scene's art.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const PW = process.env.PLAYWRIGHT_PATH ?? 'playwright';
@@ -20,14 +20,13 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.addInitScript(() => sessionStorage.setItem('fib-intro-seen:bread-and-butter', '1'));
 await page.goto(`http://localhost:${port}/bread-and-butter.html`);
 await page.waitForSelector('body[data-ready="1"]', { state: 'attached', timeout: 120000 });
-// the whole stage for the painting: the controls folded away, the timeline set just before a new year, then played
-// so the grocer walks out to re-chalk the board
+// the whole stage for the painting: the controls folded away, the timeline set, then played until he is weighing
 await page.locator('#panel-toggle').click();
 await page.evaluate((m) => window.__bread.actions.scrubTo(m), at);
 await page.waitForTimeout(1500);
 await page.evaluate(() => window.__bread.actions.play());
-await page.waitForFunction(() => /^(reach|wipe|shift|write)/.test(window.__grocer?.debug?.phase ?? ''), null, { timeout: 30000 });
-await page.waitForTimeout(250);
+await page.waitForFunction(() => /weigh/.test(String(window.__grocer?.debug?.phase ?? '')), null, { timeout: 90000 });
+await page.waitForTimeout(600);
 await page.evaluate(() => window.__bread.actions.pause());
 await page.waitForTimeout(100);
 await page.addStyleTag({ content: '.overlay, .caption, .masthead, .year-readout, .panel-toggle, .loader, .labels, .label { display: none !important; }' });
@@ -44,7 +43,7 @@ const dataUrl = await page.evaluate(async (b64) => {
   const cw = W * 0.52;
   const ch = (cw * 5) / 7;
   const cx = W * 0.32;
-  const cy = H * 0.22;
+  const cy = H * 0.15;
   const cv = document.createElement('canvas');
   cv.width = 1300;
   cv.height = Math.round((1300 * 5) / 7);
