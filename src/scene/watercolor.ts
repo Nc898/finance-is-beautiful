@@ -917,13 +917,8 @@ export function makeDeepSoil(seed: number, W: number, H: number, u: number, band
   return cv;
 }
 
-/**
- * A weathered split-rail fence along the back of the meadow, painted like the trees: warm wood washes
- * lit from the upper left, grain strokes, a broken sepia contour, and grass tufts at the post feet.
- * Kept a touch pale so it sits behind the trees. Draws into ctx at ground line gy (px), u = px per
- * world unit, spanning x from 0 to W. Deterministic for a seed.
- */
-export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number, u: number, seed = 61, avoid: number[] = []): void {
+/** Post positions of the fence (shared by paintFence and the meadow painter, which grows grass around them). */
+function fenceLayout(W: number, gy: number, u: number, seed: number, avoid: number[]) {
   const rnd = new Rand(seed);
   const base = gy - 7 * u; // set back a little from where the trees stand
   const gap = 74 * u;
@@ -934,6 +929,37 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
     for (const ax of avoid) if (Math.abs(px - ax) < 22 * u) px = ax + (px < ax ? -22 : 22) * u;
     posts.push({ x: px, top: base - rnd.range(33, 39) * u, lean: rnd.range(-0.05, 0.05), w: rnd.range(5.6, 6.8) * u });
   }
+  return { rnd, base, posts };
+}
+export function fencePostXs(W: number, gy: number, u: number, seed = 61, avoid: number[] = []): number[] {
+  return fenceLayout(W, gy, u, seed, avoid).posts.map((p) => p.x);
+}
+
+/** a patch of lichen: small pale grey-green and ochre rosettes */
+function lichen(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rnd: Rand, u: number): void {
+  const n = rnd.int(5, 11);
+  for (let i = 0; i < n; i++) {
+    const a = rnd.range(0, 6.28);
+    const d = Math.sqrt(rnd.next()) * r;
+    const rr = rnd.range(0.25, 0.65) * u;
+    ctx.fillStyle = rnd.chance(0.65) ? `rgba(204,212,160,${rnd.range(0.4, 0.65).toFixed(2)})` : `rgba(218,190,96,${rnd.range(0.4, 0.6).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, rr, rr * 0.8, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * A weathered split-rail fence along the back of the meadow, painted like the trees: warm wood washes
+ * lit from the upper left, grain strokes, silvering, knots, lichen, nail heads, a broken sepia contour, and grass
+ * tufts at the post feet. Each post and rail gets its own tint and wear, so none repeats.
+ * Kept a touch pale so it sits behind the trees. Draws into ctx at ground line gy (px), u = px per
+ * world unit, spanning x from 0 to W. Deterministic for a seed. `lm` scales the thinnest line widths
+ * (1 when u is device px; smaller when the context is scaled up).
+ */
+export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number, u: number, seed = 61, avoid: number[] = [], lm = 1): void {
+  const { rnd, base, posts } = fenceLayout(W, gy, u, seed, avoid);
+  const fx = new Rand(seed * 13 + 7); // wear and detail: its own stream, so the layout above never shifts
   const postX = (p: (typeof posts)[number], y: number) => p.x + (base - y) * p.lean;
   ctx.save();
   // back meadow: a soft, feathered strip of grass for the fence to stand in
@@ -981,10 +1007,14 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
       g.addColorStop(1, 'rgba(112,82,58,0.95)');
       ctx.fillStyle = g;
       ctx.fill(rail);
+      // each rail is its own board: a warm or grey-green glaze over the wash
+      ctx.fillStyle = fx.chance(0.5) ? `rgba(${fx.int(150, 190)},${fx.int(120, 150)},${fx.int(84, 110)},${fx.range(0.06, 0.16).toFixed(2)})` : `rgba(${fx.int(150, 176)},${fx.int(148, 170)},${fx.int(128, 148)},${fx.range(0.08, 0.18).toFixed(2)})`;
+      ctx.fill(rail);
       // grain: a few long thin strokes along the rail
       ctx.strokeStyle = 'rgba(82,58,40,0.35)';
-      ctx.lineWidth = Math.max(0.6, 0.35 * u);
-      for (let k = 0; k < 3; k++) {
+      ctx.lineWidth = Math.max(0.6 * lm, 0.35 * u);
+      const grains = fx.int(3, 6);
+      for (let k = 0; k < grains; k++) {
         const off = rnd.range(-0.3, 0.3) * t;
         const s0 = rnd.range(0.05, 0.4);
         const s1 = rnd.range(0.55, 0.95);
@@ -993,10 +1023,43 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
         ctx.quadraticCurveTo(mx, my + off, xa + (xb - xa) * s1, ya + (yb - ya) * s1 + off + sag * Math.sin(Math.PI * s1));
         ctx.stroke();
       }
+      // silvered, sun-bleached patches and a lit top edge
+      const patches = fx.int(1, 3);
+      for (let k = 0; k < patches; k++) {
+        const tt = fx.range(0.12, 0.88);
+        const px = xa + (xb - xa) * tt;
+        const py = ya + (yb - ya) * tt + sag * Math.sin(Math.PI * tt) - t * fx.range(0.05, 0.25);
+        ctx.fillStyle = `rgba(190,188,170,${fx.range(0.16, 0.3).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.ellipse(px, py, fx.range(5, 15) * u, t * 0.22, (yb - ya) / (xb - xa), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(238,216,178,0.5)';
+      ctx.lineWidth = Math.max(0.5 * lm, 0.4 * u);
+      ctx.beginPath();
+      ctx.moveTo(xa + 2 * u, ya - t * 0.36);
+      ctx.quadraticCurveTo(mx, my - t * 0.36 - sag * 0.2, xb - 2 * u, yb - t * 0.36);
+      ctx.stroke();
+      // a knot on some boards
+      if (fx.chance(0.45)) {
+        const tt = fx.range(0.2, 0.8);
+        const kx = xa + (xb - xa) * tt;
+        const ky = ya + (yb - ya) * tt + sag * Math.sin(Math.PI * tt) + fx.range(-0.2, 0.2) * t;
+        ctx.strokeStyle = 'rgba(70,48,34,0.5)';
+        ctx.fillStyle = 'rgba(86,58,40,0.5)';
+        ctx.lineWidth = Math.max(0.5 * lm, 0.3 * u);
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, 1.5 * u, 0.9 * u, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, 2.6 * u, 1.5 * u, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (fx.chance(0.4)) lichen(ctx, xa + (xb - xa) * fx.range(0.15, 0.85), (ya + yb) / 2 - t * 0.3 + sag * 0.7, 3 * u, fx, u);
       // broken ink contour, heavier underneath
       ctx.setLineDash([18 * u, 3 * u, 7 * u, 2 * u]);
       ctx.strokeStyle = 'rgba(52,38,28,0.6)';
-      ctx.lineWidth = Math.max(0.7, 0.42 * u);
+      ctx.lineWidth = Math.max(0.7 * lm, 0.42 * u);
       ctx.stroke(rail);
       ctx.setLineDash([]);
     }
@@ -1030,10 +1093,22 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
     g.addColorStop(1, 'rgba(100,72,52,0.96)');
     ctx.fillStyle = g;
     ctx.fill(path);
+    // each post has its own tint: some silvered grey, some warmer
+    ctx.fillStyle = fx.chance(0.5) ? `rgba(${fx.int(150, 180)},${fx.int(112, 140)},${fx.int(76, 100)},${fx.range(0.08, 0.2).toFixed(2)})` : `rgba(${fx.int(160, 184)},${fx.int(158, 178)},${fx.int(138, 156)},${fx.range(0.12, 0.24).toFixed(2)})`;
+    ctx.fill(path);
+    // moss and damp at the foot
+    {
+      const mg = ctx.createLinearGradient(0, base - h * 0.26, 0, base);
+      mg.addColorStop(0, 'rgba(96,132,72,0)');
+      mg.addColorStop(1, `rgba(78,112,62,${fx.range(0.3, 0.5).toFixed(2)})`);
+      ctx.fillStyle = mg;
+      ctx.fill(path);
+    }
     // grain and a check or two
     ctx.strokeStyle = 'rgba(78,54,38,0.38)';
-    ctx.lineWidth = Math.max(0.6, 0.32 * u);
-    for (let k = 0; k < 4; k++) {
+    ctx.lineWidth = Math.max(0.6 * lm, 0.32 * u);
+    const grains = fx.int(4, 7);
+    for (let k = 0; k < grains; k++) {
       const off = rnd.range(-0.32, 0.3) * w;
       const y0 = p.top + rnd.range(0.05, 0.4) * h;
       const y1 = y0 + rnd.range(0.25, 0.55) * h;
@@ -1042,6 +1117,37 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
       ctx.lineTo(postX(p, y1) + off + rnd.range(-0.3, 0.3) * u, Math.min(base - u, y1));
       ctx.stroke();
     }
+    // a long split (check) down one post, with a lit lip
+    if (fx.chance(0.7)) {
+      const off = fx.range(-0.22, 0.22) * w;
+      const y0 = p.top + fx.range(0.02, 0.2) * h;
+      const y1 = y0 + fx.range(0.25, 0.5) * h;
+      ctx.strokeStyle = 'rgba(48,32,24,0.62)';
+      ctx.lineWidth = Math.max(0.6 * lm, 0.4 * u);
+      ctx.beginPath();
+      ctx.moveTo(postX(p, y0) + off, y0);
+      ctx.quadraticCurveTo(postX(p, (y0 + y1) / 2) + off + fx.range(-0.6, 0.6) * u, (y0 + y1) / 2, postX(p, y1) + off + fx.range(-0.5, 0.5) * u, y1);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(232,206,168,0.4)';
+      ctx.lineWidth = Math.max(0.5 * lm, 0.25 * u);
+      ctx.beginPath();
+      ctx.moveTo(postX(p, y0) + off + 0.5 * u, y0 + 0.5 * u);
+      ctx.lineTo(postX(p, y1) + off + 0.5 * u, y1);
+      ctx.stroke();
+    }
+    // a lit edge down the left side (light from the upper left)
+    ctx.strokeStyle = 'rgba(240,220,184,0.45)';
+    ctx.lineWidth = Math.max(0.5 * lm, 0.4 * u);
+    ctx.beginPath();
+    ctx.moveTo(postX(p, p.top + 2 * u) - w * 0.36, p.top + 2 * u);
+    ctx.lineTo(postX(p, base - 6 * u) - w * 0.36, base - 6 * u);
+    ctx.stroke();
+    // silvered weathering and lichen
+    ctx.fillStyle = `rgba(190,188,170,${fx.range(0.16, 0.28).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.ellipse(postX(p, p.top + h * 0.3), p.top + h * fx.range(0.18, 0.42), w * 0.3, h * 0.09, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (fx.chance(0.6)) lichen(ctx, postX(p, p.top + h * 0.45) + fx.range(-0.2, 0.2) * w, p.top + h * fx.range(0.3, 0.6), 2.4 * u, fx, u);
     // weathered top: a darker end-grain cap
     ctx.fillStyle = 'rgba(96,70,50,0.5)';
     ctx.beginPath();
@@ -1050,16 +1156,39 @@ export function paintFence(ctx: CanvasRenderingContext2D, W: number, gy: number,
     // broken sepia contour
     ctx.setLineDash([14 * u, 2.5 * u, 6 * u, 2 * u]);
     ctx.strokeStyle = 'rgba(46,34,26,0.65)';
-    ctx.lineWidth = Math.max(0.7, 0.45 * u);
+    ctx.lineWidth = Math.max(0.7 * lm, 0.45 * u);
     ctx.stroke(path);
     ctx.setLineDash([]);
+    // nail heads where the two rails meet the post, with a rust streak below
+    for (const hh of [27, 13.5]) {
+      for (let q = 0; q < 2; q++) {
+        const ny = base - (hh + fx.range(-0.8, 0.8)) * u + (q ? 1.1 : -0.9) * u;
+        const nx = postX(p, ny) + (q ? 1 : -1) * fx.range(0.5, 1.2) * u;
+        ctx.fillStyle = 'rgba(44,34,30,0.9)';
+        ctx.beginPath();
+        ctx.arc(nx, ny, 0.5 * u, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(214,200,176,0.7)';
+        ctx.beginPath();
+        ctx.arc(nx - 0.15 * u, ny - 0.15 * u, 0.17 * u, 0, Math.PI * 2);
+        ctx.fill();
+        if (fx.chance(0.6)) {
+          ctx.strokeStyle = 'rgba(122,72,42,0.38)';
+          ctx.lineWidth = Math.max(0.5 * lm, 0.28 * u);
+          ctx.beginPath();
+          ctx.moveTo(nx, ny + 0.5 * u);
+          ctx.lineTo(nx + fx.range(-0.2, 0.2) * u, ny + fx.range(1.6, 3.4) * u);
+          ctx.stroke();
+        }
+      }
+    }
     // grass tufts hiding the foot of the post
     for (let k = 0; k < 7; k++) {
       const gx = postX(p, base) + rnd.range(-1.4, 1.4) * w;
       const len = rnd.range(3, 7.5) * u;
       const lean = rnd.range(-0.5, 0.5);
       ctx.strokeStyle = rnd.chance(0.5) ? 'rgba(98,142,62,0.85)' : 'rgba(132,168,80,0.8)';
-      ctx.lineWidth = Math.max(0.6, 0.5 * u);
+      ctx.lineWidth = Math.max(0.6 * lm, 0.5 * u);
       ctx.beginPath();
       ctx.moveTo(gx, base + 1.2 * u);
       ctx.quadraticCurveTo(gx + lean * len * 0.3, base - len * 0.6, gx + lean * len, base - len);

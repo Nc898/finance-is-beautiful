@@ -10,7 +10,7 @@ import { WORLD } from './types';
 import type { SceneAPI, SceneFrame, SceneOptions, ScreenPoint, TreeAnchors } from './types';
 import { TreePainter } from './treePainter';
 import { ensureSprites, type Sprites } from './sprites';
-import { applyBackdrop, fitCamera, type Backdrop, type Camera, type Insets } from './backdrop';
+import { applyBackdrop, fitCamera, CLOSE_MIN_ZOOM, type Backdrop, type Camera, type Insets } from './backdrop';
 import { getModel } from './treeView';
 import { H } from './treeModel';
 import { clamp, smoothstep } from './prng';
@@ -47,7 +47,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     canvas.width = Math.round(size.w * c.dpr);
     canvas.height = Math.round(size.h * c.dpr);
     const my = ++gen;
-    void Promise.all([ensureSprites(c.s * c.dpr), applyBackdrop(canvas, c)]).then(([sp, b]) => {
+    void Promise.all([ensureSprites(c.s * c.dpr), applyBackdrop(canvas, c, insets, c.ox0 + WORLD.treeX.A * c.s)]).then(([sp, b]) => {
       if (destroyed || my !== gen) return;
       sprites = sp;
       bg = b;
@@ -235,7 +235,19 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
       if (bg) {
         const gd = bg.ground.width / c.cssW;
         ctx.setTransform(c.dpr * A, 0, 0, c.dpr * A, c.dpr * Bx, c.dpr * By);
-        ctx.drawImage(bg.ground, 0, bg.groundTop, bg.ground.width / gd, bg.ground.height / gd);
+        // the opening close-up looks at a window of the ground painted at a higher density; it fades in as the
+        // camera nears the seed, so the zoomed start is crisp and the pull-back shows no seam
+        const close = z > CLOSE_MIN_ZOOM && frame.camera ? bg.closeFor(c.ox0 + frame.camera.focus.x * c.s) : null;
+        const kc = close ? smoothstep(clamp((z - CLOSE_MIN_ZOOM) / 0.5, 0, 1)) : 0;
+        if (kc < 1) {
+          ctx.globalAlpha = 1 - kc;
+          ctx.drawImage(bg.ground, 0, bg.groundTop, bg.ground.width / gd, bg.ground.height / gd);
+        }
+        if (close && kc > 0) {
+          ctx.globalAlpha = kc;
+          ctx.drawImage(close.canvas, close.x0, bg.groundTop + close.y0, close.w, close.h);
+        }
+        ctx.globalAlpha = 1;
         ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
       }
       for (const t of frame.trees) {
