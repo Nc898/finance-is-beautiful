@@ -19,8 +19,10 @@ import { Ambient } from './ambient';
 import { createBoard } from './board';
 import { createGrocer } from './grocer';
 import type { Board, Grocer, GrocerIntent } from './partsApi';
+import { yieldTask } from '../../shared/yieldTask';
+import { settledLayout } from '../../shared/settledLayout';
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 /** the labels' places in the bottom band, as world x (basket left, the minutes between, the pay right) */
 const LABEL_X: Record<BreadLabel, number> = { basket: 215, minutes: 445, pay: 680 };
@@ -56,6 +58,10 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
     const my = ++gen;
     const alive = () => !destroyed && my === gen;
     void (async () => {
+      // the labels' band is measured with the page's fonts: wait for them (and a frame for the band to be re-measured)
+      // so the scene is painted once at its final size, not thrown away when the fonts land
+      await settledLayout();
+      if (!alive()) return;
       const tile = await ensurePaperTile();
       if (!alive()) return;
       await tick();

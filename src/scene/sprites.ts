@@ -9,6 +9,7 @@ import {
   SPRITE_KINDS, SPRITE_POOL, makeClumpSprite, makeMoundSprite, makePaperTile, makeShadowSprite, makeCanvas, makeUnderSprite,
   type SpriteKind,
 } from './watercolor';
+import { yieldTask } from '../shared/yieldTask';
 
 export interface Spr {
   src: CanvasImageSource;
@@ -36,7 +37,7 @@ export function bucketFor(pxPerUnit: number): number {
 }
 
 const whole = (c: HTMLCanvasElement): Spr => ({ src: c, sx: 0, sy: 0, sw: c.width, sh: c.height });
-const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+const tick = () => yieldTask();
 
 const cache = new Map<number, Promise<Sprites>>();
 let bakedPromise: Promise<Sprites | null> | null = null;

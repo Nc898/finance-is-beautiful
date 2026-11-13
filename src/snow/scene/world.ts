@@ -15,6 +15,7 @@ import { hazeSprite, layPine, makePine, type PineKind, type PineSprite } from '.
 import { paintMountains, type View } from './mountains';
 import { paintBank, paintFinish, paintLanes, paintScatter, paintSnowfield } from './ground';
 import { paintBridge, paintCreek } from './creek';
+import { yieldTask } from '../../shared/yieldTask';
 
 export interface WorldLayer {
   cv: HTMLCanvasElement;
@@ -60,7 +61,7 @@ export function viewOf(c: Camera, margin = 50): View {
   return { xmin: -c.ox / c.s - margin, xmax: (c.cssW - c.ox) / c.s + margin, ymax: (c.cssH - c.oy) / c.s + margin * 0.4 };
 }
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 type Pool = Record<PineKind, PineSprite[]>;
 

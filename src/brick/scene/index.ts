@@ -27,8 +27,9 @@ import { createBuilder } from './builder';
 import { createBricklayer } from './bricklayer';
 import type { Bricklayer, BricklayerIntent, Builder, BuilderIntent } from './crewApi';
 import { SCAFFOLD } from './geom';
+import { yieldTask } from '../../shared/yieldTask';
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 /** something drawn in depth order: its depth (the ground y it stands on) and how to draw it */
 interface Item {

@@ -17,6 +17,7 @@ import { Boats } from './boats';
 import { FLOW_K, WaterLayer } from './water';
 import { School, buildFishSprites } from './fish';
 import { Bird, StartLine, makeMilepost, makeMooringPost, makeReedClump, reedSpecs, type Sprite } from './props';
+import { yieldTask } from '../../shared/yieldTask';
 
 /** Extra (non-contract) methods the app can use. */
 export interface RiverSceneExtras {
@@ -63,7 +64,7 @@ export function createRiverScene(canvas: HTMLCanvasElement): RiverSceneAPI & Riv
   let lastZ = { a: 1, bx: 0, by: 0 };
   let postUs: number[] = [-1, -0.5, 0, 0.5, 1];
 
-  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+  const tick = () => yieldTask();
 
   const layout = () => {
     if (size.w <= 0 || size.h <= 0) return;

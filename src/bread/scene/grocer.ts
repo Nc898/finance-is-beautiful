@@ -206,10 +206,14 @@ class GrocerImpl implements Grocer {
       if (!check()) return;
     }
     this.ready = true;
-    // then the head's in-between views, in the background (a smoother turn of the head; see HEAD_VIEWS)
-    void fillHeadViews(q, tick, () => check() && this.q === q).then((full) => {
-      if (full && this.q === q) this.fig.sprites(full);
-    });
+    // then the head's in-between views, in the background (a smoother turn of the head; see HEAD_VIEWS), once the page
+    // is showing: started at once, they made the first frames uneven, and the page waits for smooth frames to appear
+    const fill = () =>
+      void fillHeadViews(q, tick, () => check() && this.q === q).then((full) => {
+        if (full && this.q === q) this.fig.sprites(full);
+      });
+    const idle = (globalThis as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    setTimeout(() => (idle ? idle(fill, { timeout: 2000 }) : fill()), 1500);
   }
 
   place(intent: GrocerIntent): void {

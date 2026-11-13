@@ -21,6 +21,7 @@ import type { Camera } from './layout';
 import { LOANS } from '../types';
 import type { Sprites } from '../../scene/sprites';
 import type { SpriteKind } from '../../scene/watercolor';
+import { yieldTask } from '../../shared/yieldTask';
 
 export interface WorldLayer {
   cv: HTMLCanvasElement;
@@ -34,7 +35,7 @@ interface View {
   y1: number;
 }
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 /** the blossom trees beside the houses (behind the houses' fronts: a house's outline hides any crown it overlaps) */
 const SIDE_TREES: SpringTree[] = SIDE_BLOSSOMS.map((p, i) => ({ seed: [5203, 5309][i]!, x: p.x, y: p.y, k: 0.33, m: 1, kit: 'blossom' as const, haze: 0, flip: i === 1 }));

@@ -21,6 +21,7 @@ import { barn, church, farmhouse, oast } from './farm';
 import { HEDGE_Y, paintLongGrass, paintMeadow, paintPath, paintPlots, paintTrack, paintTreeShade } from './ground';
 import { paintVerges } from './flowers';
 import type { Camera } from './layout';
+import { yieldTask } from '../../shared/yieldTask';
 
 export interface WorldLayer {
   cv: HTMLCanvasElement;
@@ -34,7 +35,7 @@ interface View {
   y1: number;
 }
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 export const ridgeFar = (x: number): number => 222 + 9 * Math.sin(x / 170 + 0.4) + 6 * Math.sin(x / 71 + 2.3) + 2.5 * Math.sin(x / 29);
 /** the middle range rises to a low crest on the right, where the farm stands */

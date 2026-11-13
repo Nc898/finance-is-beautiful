@@ -25,13 +25,14 @@ import { renderFarmTree, type FarmTreeArt, type TreeSprite } from './farmTree';
 import { blit, makeCrates, makeLadder, makeSeat, type Sprite } from './props';
 import { Ambient } from './ambient';
 import type { CreateOrchardView, CreatePicker, Item, OrchardView, Picker, PickerIntent } from './partsApi';
+import { yieldTask } from '../../shared/yieldTask';
 
 export interface OrchardParts {
   createOrchardView: CreateOrchardView;
   createPicker: CreatePicker;
 }
 
-const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const tick = (): Promise<void> => yieldTask();
 
 /** the picker's round at 1x: rounds per second (about 8 s a round), times the playback speed */
 const PACE_1X = 0.12;

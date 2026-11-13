@@ -15,6 +15,7 @@ import { PIER, WORLD, farEdge, mooringY, nearEdge, type Camera, type Insets } fr
 import { flat, grain, inkLine, paintShape, smooth01, smoothPoly, wash, type Pt } from './ink';
 import { SoftLayer, applyTooth, archLine, blobPoly, bloom, brushBand, flowerDab, grassTuft, paintStone, paperTooth, strokePoly } from './paint';
 import type { TreeSprite } from './farTrees';
+import { yieldTask } from '../../shared/yieldTask';
 
 export interface DockLayer {
   cv: HTMLCanvasElement;
@@ -37,7 +38,7 @@ export interface StaticLayers {
   ymax: number;
 }
 
-const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+const tick = () => yieldTask();
 
 /** world x range covered by the canvas, with a margin */
 export function visibleX(c: Camera, margin = 60): { xmin: number; xmax: number; ymax: number } {

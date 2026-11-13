@@ -37,6 +37,7 @@ import { wind, type Sprite } from './art';
 import { Clippings, Drifting } from './fall';
 import { createGardener, SEAT_TOP } from './gardener';
 import type { Gardener, GardenerIntent } from './gardenerApi';
+import { yieldTask } from '../../shared/yieldTask';
 
 /** how close (world units) to the shears a branch must be to be the one a snip cuts */
 const SNIP_RADIUS = 30;
@@ -180,7 +181,7 @@ export function createVineScene(canvas: HTMLCanvasElement): VineSceneAPI {
     };
   }
 
-  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+  const tick = () => yieldTask();
 
   const layout = () => {
     if (size.w <= 0 || size.h <= 0) return;

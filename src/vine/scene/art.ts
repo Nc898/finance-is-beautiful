@@ -4,13 +4,14 @@
  */
 import { Rand, clamp } from '../../scene/prng';
 import { almond, deform, makeCanvas, rgba, tracePoly, xform } from '../../scene/watercolor';
+import { yieldTask } from '../../shared/yieldTask';
 
 export type Pt = [number, number];
 
 export const PAPER = '#FBF6EA';
 export const INK = '#3A2A20';
 
-export const tick = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+export const tick = (): Promise<void> => yieldTask();
 
 /** a lumpy closed blob (flat polygon) */
 export function blob(cx: number, cy: number, rx: number, ry: number, rnd: Rand, n = 14, jit = 0.2): number[] {

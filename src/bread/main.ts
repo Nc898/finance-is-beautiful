@@ -8,6 +8,7 @@ import '../styles/intro.css';
 import { createStore } from './app/store';
 import { createUI } from './app/ui';
 import { startLoop } from './app/loop';
+import { snapshot } from './engine';
 import { createStandInScene } from './app/standInScene';
 import { setupIntro } from '../shared/intro';
 import type { BreadSceneAPI } from './types';
@@ -35,6 +36,9 @@ void loadScene().then((scene) => {
     setInsets: (i) => scene.setInsets(i),
   });
   const loop = startLoop(store, scene, ui);
+  // Fill the labels before the first measure: the scene's bottom band is sized from them, and a build started while
+  // they were still empty was thrown away and painted again once they filled (about 1.5 s lost on every load).
+  ui.update(snapshot(store.state.basket, store.state.month));
 
   // Size the canvas to its container.
   let fitW = -1;
