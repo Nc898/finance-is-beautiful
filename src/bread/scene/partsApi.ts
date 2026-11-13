@@ -14,7 +14,8 @@ import type { BasketInputs, BoardContent } from '../types';
 
 /**
  * A split-flap price board in its wooden frame (BOARD in geom.ts), headed "This week's basket" (painted on the
- * frame's top rail, never flips). Below it: the year in four flap cells, then six rows (the item's name painted on a
+ * frame's top rail, never flips). Below it: the month in three letter cells ("JAN") and, after a space, the year
+ * in four flap cells, centred together; then six rows (the item's name painted on a
  * fixed enamel strip at the left; its price in flap cells at the right) and, under a painted rule, the total.
  *
  * Each price is right-aligned in a fixed row of cells wide enough for the longest it can be ("~$123.45"); unused

@@ -31,6 +31,7 @@ export function boardFor(row: MonthRow): BoardContent {
   const price = (f: MonthRow['prices'][keyof MonthRow['prices']]) => (f.estimated ? '~' : '') + formatCents(f.value);
   const anyEstimated = Object.values(row.prices).some((f) => f.estimated);
   return {
+    month: row.shortLabel.slice(0, 3).toUpperCase(),
     year: String(row.year),
     prices: {
       bread: price(row.prices.bread),

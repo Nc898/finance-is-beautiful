@@ -104,8 +104,11 @@ describe('every note is plain', () => {
 });
 
 describe('the board and the labels', () => {
-  it('the board says what the grocer chalks', () => {
+  it('the board says the month, the year, the prices and the total', () => {
+    expect(boardFor(monthRow(B, 0)).month).toBe('JAN');
+    expect(boardFor(monthRow(B, m(2025, 10))).month).toBe('OCT');
     expect(boardFor(monthRow(B, 0))).toEqual({
+      month: 'JAN',
       year: '1980',
       prices: { bread: '$0.50', eggs: '$0.88', coffee: '$3.21', bananas: '$0.32', chicken: '$0.70', flour: '$0.20' },
       total: '$9.16',

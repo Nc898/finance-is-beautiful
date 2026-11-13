@@ -127,10 +127,12 @@ export interface Landmarks {
 
 /* ---------------------------------------------------------------- scene contract */
 
-/** What the board should say for the shown month (the grocer works toward it; it is never set directly while he
- *  works). Prices are written as he writes them: "$0.51", "$4.25"; the year as "1980". A price the BLS did not
- *  publish that month is chalked "~$3.47" (about), and so is the total while any price is. */
+/** What the price board should say for the shown month (the same month as the labels): the month as three capital
+ *  letters ("JAN", as a flap board spells it) beside the year ("1980"); prices as "$0.51", "$4.25". A price the BLS
+ *  did not publish that month shows "~$3.47" (about), and so does the total while any price is. */
 export interface BoardContent {
+  /** "JAN" … "DEC" */
+  month: string;
   year: string;
   /** each item's price per unit, as text; an item not in the basket still has its price on the board */
   prices: Record<ItemKey, string>;

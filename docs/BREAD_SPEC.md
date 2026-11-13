@@ -101,7 +101,7 @@ stands in the shop facing the counter; it never zooms.
   but kept a value or two quieter than the counter so the eye goes to the basket and the board. Nothing cloned: vary
   every tin, label and gap.
 - **The price board** (BOARD, back wall right; the Board contract in partsApi.ts): a split-flap board in a wooden
-  frame, headed "This week's basket" on the top rail; the year in four flap cells; six rows, each the item's name on
+  frame, headed "This week's basket" on the top rail; the month in three letter cells ("JAN") beside the year in four flap cells; six rows, each the item's name on
   a painted enamel strip and its price in flap cells; a painted rule and the total. It shows the same month as the
   labels at every moment: when a figure changes its cells flip through their flaps to the new one (left to right, a
   ripple along the row), at the mechanism's own pace. Cream flaps with hand-painted numerals (not a font), ink under
