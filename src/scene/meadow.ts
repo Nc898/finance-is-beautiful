@@ -135,27 +135,48 @@ function bladePath(ctx: C2, x: number, y: number, L: number, w: number, ang: num
 const GRASS_PAL: RGB[] = [[40, 92, 52], [74, 130, 62], [118, 164, 70], [176, 202, 92], [214, 220, 118]];
 const GRASS_PAL_BACK: RGB[] = [[56, 108, 66], [92, 142, 74], [136, 172, 84], [184, 204, 110]];
 
+/** one blade as a tapered brush stroke: dark and saturated at the base, lighter toward the tip, with a soft wet rim */
+function paintBlade(ctx: C2, x: number, y: number, L: number, w: number, ang: number, bend: number, c: RGB, a: number, er: Rand, light: boolean): void {
+  const tx = x + Math.sin(ang) * L + bend * L * 0.35;
+  const ty = y - Math.cos(ang) * L;
+  const g = ctx.createLinearGradient(x, y, tx, ty);
+  g.addColorStop(0, col(lerpc(c, [26, 62, 40], 0.55), a));
+  g.addColorStop(0.5, col(c, a * 0.95));
+  g.addColorStop(1, col(lerpc(c, [200, 214, 112], light ? 0.45 : 0.14), a * 0.85));
+  ctx.fillStyle = g;
+  bladePath(ctx, x, y, L, w, ang, bend);
+  ctx.fill();
+  if (er.chance(0.5)) {
+    // pigment pooling at the wet edge: a fainter, wider rim of the same colour
+    ctx.strokeStyle = col(c, 0.2);
+    ctx.lineWidth = w * 0.8;
+    ctx.stroke();
+  }
+}
+
 function clump(ctx: C2, x: number, y: number, h: number, er: Rand, pal: RGB[], wscale: number, s: number, shade: number): void {
   // pooled shadow at the base, so the blades darken toward the roots
-  bloom(ctx, x, y + 0.2 * s, h * 0.5, Math.max(1.1 * s, h * 0.12), [30, 70, 44], 0.34 * shade);
-  const n = er.int(6, 19);
-  const lean = er.range(-0.35, 0.35);
+  bloom(ctx, x + er.range(-0.2, 0.2) * h, y + 0.2 * s, h * er.range(0.3, 0.65), Math.max(1.1 * s, h * 0.12), [30, 70, 44], 0.34 * shade);
+  // irregular: a few blades or a dense tuft, a narrow fan or a sprawl, some arching across their neighbours
+  const n = Math.max(3, Math.round(3 + Math.pow(er.next(), 1.4) * 17));
+  const lean = er.range(-0.5, 0.5);
+  const spread = er.range(0.25, 1.1);
+  const wide = er.range(0.1, 0.4);
   for (let k = 0; k < n; k++) {
-    const a = lean + er.range(-0.55, 0.55);
-    const L = h * er.range(0.42, 1) * (1 - Math.abs(a) * 0.25);
-    const bx = x + er.range(-1, 1) * h * 0.16;
-    const w = er.range(0.5, 1.0) * s * wscale;
-    let f = er.next();
-    if (a < 0) f = f * 0.6 + 0.4;
-    const c = ramp(pal, f);
-    ctx.fillStyle = col(c, er.range(0.8, 0.95));
-    const bend = er.range(-0.5, 0.5);
-    bladePath(ctx, bx, y, L, w, a, bend);
-    ctx.fill();
-    if (er.chance(0.32)) {
+    let a = clamp(lean + er.gauss() * spread * 0.5, -1.15, 1.15);
+    if (er.chance(0.18)) a = -a * er.range(0.6, 1.2);
+    const L = h * (er.chance(0.15) ? er.range(0.8, 1.15) : er.range(0.3, 0.85)) * (1 - Math.abs(a) * 0.2);
+    const bx = x + er.gauss() * h * wide;
+    const w = er.range(0.35, 1.0) * s * wscale;
+    // mostly mid and deep greens; light only catches a few tips
+    const light = er.chance(0.1);
+    const f = light ? er.range(0.75, 1) : clamp(Math.pow(er.next(), 1.5) * 0.75 + (a < 0 ? 0.08 : 0), 0, 1);
+    const bend = er.range(-0.9, 0.9) * (er.chance(0.3) ? 1.3 : 0.6);
+    paintBlade(ctx, bx, y, L, w, a, bend, ramp(pal, f), er.range(0.78, 0.94), er, light);
+    if (er.chance(0.16)) {
       // ink under the wash: a thin dark line down the shaded edge
-      ctx.strokeStyle = col([30, 58, 38], 0.42);
-      ctx.lineWidth = 0.32 * s;
+      ctx.strokeStyle = col([30, 58, 38], 0.38);
+      ctx.lineWidth = 0.3 * s;
       ctx.beginPath();
       ctx.moveTo(bx + w * 0.5, y);
       ctx.quadraticCurveTo(bx + Math.sin(a) * L * 0.35 + w * 0.3, y - L * 0.62, bx + Math.sin(a) * L + bend * L * 0.35, y - Math.cos(a) * L);
@@ -467,7 +488,7 @@ function paintGrassWash(ctx: C2, k: Ctx): void {
   const rnd = new Rand(k.seed + 211);
   const top = wavy(rnd, 1.6 * s, [220 * s, 70 * s, 24 * s]);
   const topY = (x: number) => gy - 8 * s + top(x);
-  const body = bandPoly(W, topY, (x) => k.edge(x) + 1.5 * s, 8 * s);
+  const body = bandPoly(W, topY, (x) => k.edge(x) + 1.5 * s, 3.5 * s);
   // base: opaque below, dissolving upward into the far meadow
   {
     const gr = ctx.createLinearGradient(0, gy - 10 * s, 0, gy + 19 * s);
@@ -536,8 +557,8 @@ function paintBladeCarpet(ctx: C2, k: Ctx): void {
     const L = er.range(2.2, 6.5) * s * (1.1 - d * 0.35);
     if (!k.seen(x - L, y - L, x + L, y + 1)) continue;
     const a = er.range(-0.5, 0.5);
-    const f = clamp(er.next() * 0.9 + (a < 0 ? 0.15 : 0) - d * 0.25, 0, 1);
-    ctx.fillStyle = col(ramp(GRASS_PAL, f), er.range(0.5, 0.85));
+    const f = er.chance(0.08) ? er.range(0.8, 1) : clamp(Math.pow(er.next(), 1.4) * 0.75 + (a < 0 ? 0.1 : 0) - d * 0.2, 0, 1);
+    ctx.fillStyle = col(lerpc(ramp(GRASS_PAL, f), [40, 84, 52], 0.15), er.range(0.5, 0.8));
     bladePath(ctx, x, y, L, er.range(0.4, 0.8) * s, a, er.range(-0.4, 0.4));
     ctx.fill();
   }
@@ -630,29 +651,80 @@ function paintFlowers(ctx: C2, k: Ctx): void {
 }
 
 /** blades overhanging the turf edge, and a fringe of pale roots where the turf is undercut */
+/** a clod of earth hanging at the turf edge, with a few pale grass roots on it */
+function clod(ctx: C2, x: number, y: number, r: number, er: Rand, s: number): void {
+  const flat = er.range(0.6, 0.9);
+  ctx.fillStyle = col([60, 36, 20], 0.26);
+  tracePoly(ctx, ellipsePoly(x + r * 0.25, y + r * 0.45 * flat, r * 1.05, r * flat * 0.85, 9));
+  ctx.fill();
+  const body = deform(ellipsePoly(x, y, r, r * flat, 9, er.range(-0.4, 0.4)), er, 2, 0.14);
+  ctx.fillStyle = col(jit([128, 86, 52], er, 8), 0.85);
+  tracePoly(ctx, body);
+  ctx.fill();
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35 * flat, 0, x - r * 0.1, y - r * 0.1, r * 1.15);
+  g.addColorStop(0, 'rgba(232,192,142,0.4)');
+  g.addColorStop(0.5, 'rgba(232,192,142,0)');
+  g.addColorStop(1, 'rgba(40,24,14,0.4)');
+  ctx.fillStyle = g;
+  tracePoly(ctx, body);
+  ctx.fill();
+  for (let i = 0; i < 4; i++) {
+    ctx.strokeStyle = col([226, 208, 152], er.range(0.4, 0.65));
+    ctx.lineWidth = 0.3 * s;
+    ctx.beginPath();
+    const px = x + er.range(-0.8, 0.8) * r;
+    ctx.moveTo(px, y - r * flat * 0.7);
+    ctx.lineTo(px + er.range(-1, 1) * s, y - r * flat * 0.7 - er.range(0.8, 2.2) * s);
+    ctx.stroke();
+  }
+}
+
+/** the turf edge: clods, hanging root tufts and arching blades, with gaps where the soil shows */
 function paintTurfEdge(ctx: C2, k: Ctx): void {
   const { W, s } = k.g;
   const rnd = new Rand(k.seed + 701);
   let i = 0;
-  for (let x = -4 * s; x < W + 4 * s; x += rnd.range(3, 8) * s) {
+  // clods of earth caught in the roots
+  for (let x = rnd.range(0, 20) * s; x < W; x += rnd.range(14, 40) * s) {
+    const er = new Rand(hashSeed(k.seed, 31, i++));
+    const y = k.edge(x) + er.range(0.5, 3) * s;
+    const r = er.range(1.0, 2.4) * s;
+    if (k.seen(x - r, y - r, x + r, y + r * 2)) clod(ctx, x, y, r, er, s);
+  }
+  // hanging root tufts: bunches of tan rootlets where the turf is undercut
+  for (let x = rnd.range(0, 30) * s; x < W; x += rnd.range(20, 55) * s) {
+    const er = new Rand(hashSeed(k.seed, 32, i++));
+    const y = k.edge(x) + er.range(0, 2) * s;
+    const len = er.range(6, 16) * s;
+    if (!k.seen(x - len, y, x + len, y + len * 1.3)) continue;
+    const n = er.int(4, 8);
+    for (let j = 0; j < n; j++) rootHair(ctx, x + er.range(-1.6, 1.6) * s, y, len * er.range(0.5, 1.1), er, er.range(0.4, 0.9) * s, jit([190, 156, 112], er, 8), er.range(0.32, 0.58));
+  }
+  for (let x = -4 * s; x < W + 4 * s; x += rnd.range(3, 9) * s) {
     const sd = hashSeed(k.seed, 30, i++);
     const y = k.edge(x) - rnd.range(1.5, 3.2) * s;
-    const L = rnd.range(4, 12) * s;
+    const L = rnd.range(3, 12) * s;
     if (!k.seen(x - L, y - 2 * s, x + L, y + L)) continue;
     const er = new Rand(sd);
-    const n = er.int(3, 6);
+    if (er.chance(0.22)) continue; // a gap: the soil shows up into the grass
+    const n = er.int(2, 6);
     const dirx = er.range(-1, 1);
     for (let j = 0; j < n; j++) {
-      const len = L * er.range(0.5, 1);
-      const w = er.range(0.55, 1) * s;
-      const side = dirx + er.range(-0.5, 0.5);
+      const len = L * er.range(0.4, 1);
+      const w = er.range(0.5, 1) * s;
+      const side = dirx + er.range(-0.6, 0.6);
       const sx = x + er.range(-1.5, 1.5) * s;
-      const c = ramp(GRASS_PAL, er.range(0, 0.55));
-      ctx.fillStyle = col(c, 0.92);
+      const c = ramp(GRASS_PAL, er.range(0, 0.5));
+      const ex = sx + side * len * 0.9;
+      const ey = y + len * 0.7;
+      const g = ctx.createLinearGradient(sx, y, ex, ey);
+      g.addColorStop(0, col(lerpc(c, [26, 62, 40], 0.45), 0.92));
+      g.addColorStop(1, col(c, 0.85));
+      ctx.fillStyle = g;
       // an arching blade that droops past the edge
       ctx.beginPath();
       ctx.moveTo(sx - w / 2, y);
-      ctx.quadraticCurveTo(sx + side * len * 0.5, y - len * 0.2, sx + side * len * 0.9, y + len * 0.7);
+      ctx.quadraticCurveTo(sx + side * len * 0.5, y - len * 0.2, ex, ey);
       ctx.quadraticCurveTo(sx + side * len * 0.55, y + len * 0.05 + w * 0.4, sx + w / 2, y);
       ctx.closePath();
       ctx.fill();
@@ -677,6 +749,7 @@ function paintSoil(ctx: C2, k: Ctx, tooth: Tooth | null): void {
   }
   // strata: wavy, gently tilted, some pinching out, each a wash with its own edge
   const bounds = [20, 34, 56, 86, 124].map((b) => b * s + k.g.gy);
+  const soft = W < 600 ? 0.6 : 1; // quieter bands behind the label on a phone
   const strata: Array<{ c: RGB; a: number }> = [
     { c: [108, 70, 40], a: 0.16 },
     { c: [150, 104, 62], a: 0.1 },
@@ -699,7 +772,7 @@ function paintSoil(ctx: C2, k: Ctx, tooth: Tooth | null): void {
     // a stratum thins and swells (a lens), so no band runs ruler-straight
     const pinch = wavy(rnd, 7 * s, [300 * s, 120 * s, 45 * s]);
     const body = bandPoly(W, a, (x) => Math.max(a(x) + 1.2 * s, b(x) + pinch(x)), 9 * s);
-    wash(ctx, body, strata[i]!.c, strata[i]!.a * 1.3, 3, rnd, 0.06);
+    wash(ctx, body, strata[i]!.c, strata[i]!.a * 1.3 * soft, 3, rnd, 0.06);
     // the pooled edge of the wash, and a pale lip beneath it
     if (i > 0) {
       ctx.strokeStyle = col([104, 68, 40], 0.06);
@@ -824,12 +897,24 @@ export function paintMeadowGround(ctx: C2, g: MeadowGeom, v: MeadowView, tooth: 
   const seed = g.seed ?? 31;
   const { W, gy, s } = g;
   const edgeRnd = new Rand(seed + 5);
-  const ew = wavy(edgeRnd, 3 * s, [150 * s, 52 * s, 19 * s]);
+  const ew = wavy(edgeRnd, 3.2 * s, [150 * s, 52 * s, 19 * s, 8 * s]);
+  const ew2 = wavy(edgeRnd, 2.4 * s, [420 * s, 240 * s]);
+  // places where the turf is eaten back and the soil shows up into the grass
+  const notches: Array<{ c: number; d: number; w: number }> = [];
+  for (let x = edgeRnd.range(0, 30) * s; x < W + 40 * s; x += edgeRnd.range(24, 66) * s) notches.push({ c: x, d: edgeRnd.range(2.2, 6.5) * s, w: edgeRnd.range(2.8, 8.5) * s });
+  const bump = (x: number): number => {
+    let b = 0;
+    for (const nn of notches) {
+      const u = (x - nn.c) / nn.w;
+      if (Math.abs(u) < 3) b += nn.d * Math.exp(-u * u);
+    }
+    return b;
+  };
   const k: Ctx = {
     g,
     v,
     seed,
-    edge: (x) => gy + 15 * s + ew(x),
+    edge: (x) => gy + 15 * s + ew(x) + ew2(x) - bump(x),
     seen: (x0, y0, x1, y1) => x1 >= v.x0 && x0 <= v.x1 && y1 >= v.y0 && y0 <= v.y1,
   };
   ctx.save();
@@ -876,7 +961,7 @@ export function paintMeadowGround(ctx: C2, g: MeadowGeom, v: MeadowView, tooth: 
 }
 
 /** Turn the paper tile into a pit-and-peak overlay (one readback of a small tile, once). */
-export function makeTooth(tile: CanvasImageSource, gain = 0.055): Tooth {
+export function makeTooth(tile: CanvasImageSource, gain = 0.07): Tooth {
   const size = 256;
   const src = document.createElement('canvas');
   src.width = size;
