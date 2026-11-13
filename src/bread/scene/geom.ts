@@ -12,7 +12,9 @@
  *   3. the counter (COUNTER), which hides his legs while he is behind it;
  *   4. the basket on the counter top (BASKET_SLOTS), the scale and the till, and whatever is in his hands when he
  *      reaches over the counter (drawn after the counter);
- *   5. the foreground: crates of produce at the bottom corners (CRATES) and the floor at the front.
+ *   5. the produce stands on the floor at each side of the counter (PRODUCE_STANDS), drawn with the room, behind the
+ *      grocer and the counter's ends;
+ *   6. the foreground: crates of produce at the bottom corners (CRATES) and the floor at the front.
  *
  * The light: warm pendant lamps over the counter, cool daylight from the window on the left. The house rule (light
  * from the upper left) holds: the window is the key light's side.
@@ -152,6 +154,25 @@ export const CRATES: { x: number; y: number; kind: 'apples' | 'potatoes' | 'gree
   { x: 118, y: 628, kind: 'apples' },
   { x: 900, y: 610, kind: 'greens' },
   { x: 968, y: 632, kind: 'apples' },
+];
+
+/**
+ * Stepped wooden produce stands on the floor at each side of the counter, in front of the back wall at about the
+ * counter's depth (x: centre, y: where the feet stand, w: width at the foot, h: height with the produce heaped on it,
+ * about chest high on the grocer). The left one stands clear of the window's glass (its top is below the sill) and the
+ * counter's end; the right one fills the floor between the counter and the greens crate, its top under the board's
+ * bottom frame (BOARD.y1 + BOARD_FRAME.side). The foreground crates stand in front of both.
+ */
+export interface ProduceStand {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  side: 'left' | 'right';
+}
+export const PRODUCE_STANDS: ProduceStand[] = [
+  { x: 37, y: 557, w: 118, h: 146, side: 'left' },
+  { x: 801, y: 577, w: 158, h: 146, side: 'right' },
 ];
 
 /** The view the camera fits (as Brick's layout.ts): the whole shop, never zoomed in. */

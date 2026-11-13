@@ -3,9 +3,9 @@
  *
  * An interior, so the layers are fixed (geom.ts), not depth-sorted. Painted once per size: the room (paper, plaster,
  * window and street, shelves and goods, lamps, floor, the light; shop.ts), the counter with the till, scale and bags
- * (counter.ts) and the foreground crates. Per frame, back to front: the room; the street's life and the rain on the
+ * (counter.ts), the produce stands at each side of it (produce.ts) and the foreground crates. Per frame, back to front: the room; the street's life and the rain on the
  * glass (street.ts, ambient.ts); the price board (board.ts: split flaps that click over to each month's prices with
- * the labels); the steam; the grocer; the counter; whatever lies or is held on it (the basket, the scale's pan and
+ * the labels); the steam; the produce stands; the grocer; the counter; whatever lies or is held on it (the basket, the scale's pan and
  * needle, the till's moving parts); the crates; the dust in the lamplight.
  */
 import type { BreadFrame, BreadLabel, BreadSceneAPI, BreadScreenPoint } from '../types';
@@ -13,6 +13,7 @@ import { ensurePaperTile } from '../../scene/sprites';
 import { fitCamera, type Camera, type Insets } from './layout';
 import { CUP, paintBack } from './shop';
 import { paintCounter, paintCrates, type Sprite } from './counter';
+import { paintProduce } from './produce';
 import { GlassRain } from './street';
 import { Ambient } from './ambient';
 import { createBoard } from './board';
@@ -32,6 +33,7 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
   let back: HTMLCanvasElement | null = null;
   let counter: Sprite | null = null;
   let crates: Sprite[] = [];
+  let stands: Sprite[] = [];
   let ambient: Ambient | null = null;
   const rain = new GlassRain();
   const board: Board = createBoard();
@@ -65,6 +67,8 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
       await tick();
       const cr = paintCrates(q);
       await tick();
+      const pr = paintProduce(q);
+      await tick();
       if (!alive()) return;
       await board.prepare(q, tick, alive);
       await grocer.prepare(q, tick, alive);
@@ -78,6 +82,7 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
       back = b.cv;
       counter = cn;
       crates = cr.sprites;
+      stands = pr.sprites;
       ambient = am;
       if (!readyDone) {
         readyDone = true;
@@ -136,6 +141,8 @@ export function createBreadScene(canvas: HTMLCanvasElement): BreadSceneAPI {
 
       board.draw(ctx);
       if (!reduced) ambient.drawRoom(ctx, tSec, CUP);
+      // the produce stands stand on the floor behind the grocer's counter, in front of the wall
+      for (const s of stands) ctx.drawImage(s.cv, s.x, s.y, s.w, s.h);
       grocer.drawFigure(ctx);
       ctx.drawImage(counter.cv, counter.x, counter.y, counter.w, counter.h);
       grocer.drawCounterTop(ctx);
